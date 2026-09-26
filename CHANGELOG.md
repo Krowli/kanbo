@@ -4,6 +4,16 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.1.2] — 2026-09-26
+
+### Added
+
+- `kanbo mcp` sends MCP server `instructions` in its initialize result: what kanbo is, to call `kanbo_prime` first and take work from `kanbo_ready`, the board's rules (move the card yourself, status lines, comments, subtasks, `kanbo_wait_approval`, never approve yourself), and where the full manifest is (`kanbo://capabilities.md`). An agent with only the MCP server connected knows how to work the board. Exported from `kanbo/mcp` as `KANBO_MCP_INSTRUCTIONS`.
+
+### Changed
+
+- The `kanbo init` instruction block, `kanbo prime`, the MCP instructions and the `kanbo_card_create` description read their rule sentences from one place. The init block now says each rule in the same words as `kanbo prime`, with the command beside it; rerun `kanbo init --instructions …` to refresh an existing block.
+
 ## [0.1.1] — 2026-09-26
 
 ### Changed
@@ -26,5 +36,6 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
+[0.1.2]: https://github.com/Krowli/kanbo/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Krowli/kanbo/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Krowli/kanbo/releases/tag/v0.1.0

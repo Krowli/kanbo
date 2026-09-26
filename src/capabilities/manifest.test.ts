@@ -6,9 +6,9 @@ import { registerKanboCommands } from '../cli/commands'
 import { CLI_EXIT_CODES } from '../cli/output'
 import { ENTRY_RULES } from '../domain/entry-rules'
 import { KANBO_TOOL_NAMES } from '../mcp/tool-names'
+import { BOARD_RULES } from '../ops/agent-rules'
 import { APPROVED_COMMENT } from '../ops/approval'
 import { RETURNED_STATUS_LINE_PREFIX } from '../ops/cards'
-import { BOARD_RULES } from '../ops/prime'
 import {
   LAUNCHED_STATUS_LINE_PREFIX,
   NO_REPORT_STATUS_LINE,

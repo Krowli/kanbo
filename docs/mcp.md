@@ -9,6 +9,17 @@ kanbo mcp --database-url "$URL" --workspace my-project
 
 Registering it with Claude Code, Codex or Cursor is covered in [agents](agents.md).
 
+## Server instructions
+
+When a client connects, the server sends `instructions` in its MCP initialize result — text a client hands its model before any tool is called, so an agent with nothing but this server connected knows how to work the board:
+
+- what kanbo is, and to call `kanbo_prime` at the start of a session (it returns the board's columns) and take work from `kanbo_ready`;
+- move the card yourself, write a status line at every step, put results and questions in comments, split into subtasks only when asked or when parts stand alone;
+- when a person is needed, `kanbo_wait_approval` and end the turn; never approve a card or take it out of waiting;
+- the full manifest is the resource `kanbo://capabilities.md`.
+
+The text is static (about 1.3k characters) and names no column, so it is valid before a board is resolved; the board's own columns come from `kanbo_prime`. Its rule sentences are the same ones `kanbo prime` and the `kanbo init` instruction block use. `kanbo/mcp` exports it as `KANBO_MCP_INSTRUCTIONS`; `createKanboMcpServer` sends it, `registerKanboTools` does not — a server of your own decides its own instructions.
+
 ## Resources
 
 | URI | Content |
@@ -51,5 +62,5 @@ The exact JSON Schema of each tool's input is in `kanbo capabilities --json` (`t
 
 The package also exports the tools for embedding in another MCP server:
 
-- `kanbo/mcp` exports `buildKanboTools`, `createKanboMcpServer`, `registerKanboTools`, `createHttpTransport` and the `KanboToolTransport` interface. `createHttpTransport` runs the tools against a server of the `/issues` routes (see [HTTP API](http-api.md)).
+- `kanbo/mcp` exports `buildKanboTools`, `createKanboMcpServer`, `registerKanboTools`, `createHttpTransport`, `KANBO_MCP_INSTRUCTIONS` and the `KanboToolTransport` interface. `createHttpTransport` runs the tools against a server of the `/issues` routes (see [HTTP API](http-api.md)).
 - `registerKanboTools(server, transport, { includeRunTools })` adds the tools to an existing server; pass `includeRunTools: false` when your app records runs for the agents it launches itself.

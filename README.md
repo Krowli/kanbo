@@ -14,6 +14,7 @@
 - **Status lines and runs.** Every card says what it is doing right now, and every launch of a card is recorded as a run with an attempt number.
 - **Subtasks, comments, pull request links, sprints** and **column entry rules** (`checklist_complete`, `pull_request_linked`, `ci_green`, `approved`).
 - **Storage you choose.** A board file in the project (`.kanbo/board.db`), or an external Postgres database such as Supabase shared by a team, with `kanban_person` / `kanban_agent` roles.
+- **MCP alone is enough to start.** `kanbo mcp` sends the board's basic rules as MCP server instructions when a client connects, so an agent needs no instruction file for the basics.
 - **One-command project setup.** `kanbo init` binds the project, writes an instruction block into `CLAUDE.md` or `AGENTS.md`, and registers the MCP server with Claude Code, Codex or Cursor.
 - **Board over HTTP.** `kanbo serve` answers a JSON API and serves a board page on `http://127.0.0.1:4318`, loopback-only and token-guarded.
 - **Machine-readable capabilities.** `kanbo capabilities --json` describes every tool, command, rule and limit for an orchestrator to read.

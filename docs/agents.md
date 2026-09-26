@@ -6,6 +6,8 @@ An agent needs three things to work a kanbo board:
 2. **A way to reach the board** — the `kanbo` command in its shell, or the `kanbo mcp` server as MCP tools.
 3. **To be known as an agent** — so it cannot approve its own work.
 
+An agent that only has the `kanbo mcp` server connected already gets the first one: the server sends the basic rules as its MCP [server instructions](mcp.md#server-instructions) when the client connects. An instruction file is still worth writing for anything beyond the basics — your orchestrator's policy, which agent takes which column, when to hand a card over — and for agents that reach the board through the `kanbo` command instead.
+
 You can set these up once for every agent you run, per project, or for one specific agent. The client configuration below was checked against each tool's documentation (links in [Sources](#sources)); if your client version differs, its own docs win.
 
 ## Agents and people
@@ -114,12 +116,13 @@ The block `kanbo init` writes:
 Work on this project is tracked on a kanbo board. Before starting a task run `kanbo prime` — it prints the board's columns and what each one means.
 
 - Take a card from `kanbo ready`.
-- Move the card yourself (`kanbo card move <id> <column>`) — a card in the wrong column is a lie.
-- Write a status line at every step (`kanbo card status-line <id> --text "..."`).
-- Create subtasks only when the person asks for them, or when a task has parts that can be done and checked separately (different stages, owners or pull requests); do not split small work you will finish in one go. When you do split a card, make the parts subtasks of it (the parent card's id), not separate top-level cards. (`kanbo card create --description "..." --parent <id>`).
-- Findings, decisions and questions go on the card (`kanbo card comment <id> --content "..."`).
-- When you need a person, run `kanbo card wait-approval <id>` and end your turn. Never approve your own work, and never take a card out of a column where it is waiting for a person.
-- Started the work yourself, not launched by an app that tracks the run? Pass your own session to `kanbo run start --session` — `claude:<session id>` from Claude Code, `codex:<session id>` from Codex (the session id Codex prints).
+- You move the card between columns yourself, at the moment its real state changes. The board never moves a card for you. (`kanbo card move <id> <column>`)
+- Write a status line at every step, including before and after anything long-running. One sentence, present tense, about what is happening right now. (`kanbo card status-line <id> --text "..."`)
+- Create subtasks only when the person asks for them, or when a task has parts that can be done and checked separately (different stages, owners or pull requests); do not split small work you will finish in one go. When you do split a card, make the parts subtasks of it (the parent card's id), not separate top-level cards. (`kanbo card create --description "..." --parent <id>`)
+- Findings, results, decisions and questions go on the card as comments. (`kanbo card comment <id> --content "..."`)
+- When you need a person, mark the card as waiting for approval and end your turn. You will be told when the answer comes. (`kanbo card wait-approval <id>`)
+- Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
+- Started the work yourself, not launched by an app that tracks the run for you? Say so when you start the run — `claude:<session id>` from Claude Code, `codex:<session id>` from Codex (the session id Codex prints) — so your own log of it can be found later. (`kanbo run start <id> --agent <name> --session <ref>`)
 - Run `kanbo capabilities` for the full list of tools, commands and rules.
 <!-- KANBO_END -->
 ```

@@ -6,6 +6,15 @@ import type { Command } from 'commander'
 import { DEFAULT_BOARD_FILE_PATH } from '../../default-board-file-path'
 import { maskDatabaseUrl } from '../../domain/database-url'
 import type { BoardWorkspaceIdentity } from '../../domain/numbering'
+import {
+  COMMENT_RULE,
+  MOVE_CARD_RULE,
+  OWN_SESSION_RULE,
+  PERSON_ONLY_RULE,
+  STATUS_LINE_RULE,
+  SUBTASK_RULE,
+  WAIT_FOR_PERSON_RULE,
+} from '../../ops/agent-rules'
 import { migrateBoardFile } from '../../sqlite/migrate'
 import type { BoardFileContents } from '../../sqlite/open-database'
 import { markBoardFileOwnedByKanbo, openBoardDatabase, readBoardFileContents } from '../../sqlite/open-database'
@@ -89,7 +98,8 @@ type McpClient = typeof MCP_CLIENTS[number]
  *
  * It says what to run and when, and nothing about how to do the work: the
  * method is the person's own instructions to their agent, and the board only
- * insists on the part that keeps the card honest.
+ * insists on the part that keeps the card honest. The rules are the sentences
+ * `ops/agent-rules.ts` holds for every surface, with the command beside each.
  */
 export const INSTRUCTION_BLOCK = [
   INSTRUCTION_START,
@@ -99,16 +109,13 @@ export const INSTRUCTION_BLOCK = [
   + ' it prints the board\'s columns and what each one means.',
   '',
   '- Take a card from `kanbo ready`.',
-  '- Move the card yourself (`kanbo card move <id> <column>`) — a card in the wrong column is a lie.',
-  '- Write a status line at every step (`kanbo card status-line <id> --text "..."`).',
-  '- Create subtasks only when the person asks for them, or when a task has parts that can be done and checked separately (different stages, owners or pull requests); do not split small work you will finish in one go. When you do split a card, make the parts subtasks of it (the parent card\'s id), not separate top-level cards.'
-  + ' (`kanbo card create --description "..." --parent <id>`).',
-  '- Findings, decisions and questions go on the card (`kanbo card comment <id> --content "..."`).',
-  '- When you need a person, run `kanbo card wait-approval <id>` and end your turn. Never approve your own'
-  + ' work, and never take a card out of a column where it is waiting for a person.',
-  '- Started the work yourself, not launched by an app that tracks the run? Pass your own session to'
-  + ' `kanbo run start --session` —'
-  + ' `claude:<session id>` from Claude Code, `codex:<session id>` from Codex (the session id Codex prints).',
+  `- ${MOVE_CARD_RULE} (\`kanbo card move <id> <column>\`)`,
+  `- ${STATUS_LINE_RULE} (\`kanbo card status-line <id> --text "..."\`)`,
+  `- ${SUBTASK_RULE} (\`kanbo card create --description "..." --parent <id>\`)`,
+  `- ${COMMENT_RULE} (\`kanbo card comment <id> --content "..."\`)`,
+  `- ${WAIT_FOR_PERSON_RULE} (\`kanbo card wait-approval <id>\`)`,
+  `- ${PERSON_ONLY_RULE}`,
+  `- ${OWN_SESSION_RULE} (\`kanbo run start <id> --agent <name> --session <ref>\`)`,
   '- Run `kanbo capabilities` for the full list of tools, commands and rules.',
   INSTRUCTION_END,
 ].join('\n')

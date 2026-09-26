@@ -9,6 +9,7 @@
  * needs it.
  */
 export { createHttpTransport, type KanboHttpRequest, type KanboHttpTransportInput } from './http-transport'
+export { KANBO_MCP_INSTRUCTIONS } from './instructions'
 export {
   KANBO_CAPABILITIES_MARKDOWN_RESOURCE_URI,
   KANBO_CAPABILITIES_RESOURCE_URI,

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 
 import { KANBO_PACKAGE_VERSION } from '../package-version'
+import { KANBO_MCP_INSTRUCTIONS } from './instructions'
 import { registerKanboCapabilitiesResources } from './resources'
 import type { KanboToolOptions } from './tools'
 import { buildKanboTools } from './tools'
@@ -40,6 +41,9 @@ export function registerKanboTools(
  * function: it documents its capabilities its own way, and adding a second
  * `kanbo://` resource namespace to an inventory that is not only the board's
  * is a decision for that server to make, not this one.
+ *
+ * For the same reason it alone sends `KANBO_MCP_INSTRUCTIONS` in the initialize
+ * result: the instructions of a server that is only the board.
  */
 export function createKanboMcpServer(
   transport: KanboToolTransport,
@@ -48,7 +52,7 @@ export function createKanboMcpServer(
   const server = new McpServer({
     name: KANBO_MCP_SERVER_NAME,
     version: KANBO_MCP_SERVER_VERSION,
-  })
+  }, { instructions: KANBO_MCP_INSTRUCTIONS })
   registerKanboTools(server, transport, options)
   registerKanboCapabilitiesResources(server)
   return server

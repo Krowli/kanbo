@@ -9,9 +9,9 @@ import { ENTRY_RULE_DESCRIPTIONS, ENTRY_RULES } from '../domain/entry-rules'
 import type { KanboToolCliEquivalent } from '../mcp/tool-names'
 import { KANBO_TOOL_CLI_EQUIVALENTS } from '../mcp/tool-names'
 import { KANBO_TOOLS } from '../mcp/tools'
+import { BOARD_RULES } from '../ops/agent-rules'
 import { APPROVED_COMMENT } from '../ops/approval'
 import { RETURNED_STATUS_LINE_PREFIX } from '../ops/cards'
-import { BOARD_RULES } from '../ops/prime'
 import {
   LAUNCHED_STATUS_LINE_PREFIX,
   NO_REPORT_STATUS_LINE,
