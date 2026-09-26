@@ -1,4 +1,5 @@
 import type { BoardActiveRun, BoardRunProjection } from '../board-store'
+import { cardDisplayTitle } from '../domain/card-display-title'
 import type { EntryRule } from '../domain/entry-rules'
 import { readEntryRules } from '../domain/entry-rules'
 import { toIssueView } from '../domain/issue-view'
@@ -216,7 +217,7 @@ export function projectRun(run: BoardRunView): RunView {
   }
 }
 
-/** One card per line: the key, the column it is in, and what it is called. */
+/** One card per line: the key, the column it is in, and what it is called (`cardDisplayTitle`). */
 export function describeCards(cards: CardView[]): string {
   if (cards.length === 0) {
     return 'No cards'
@@ -225,7 +226,7 @@ export function describeCards(cards: CardView[]): string {
   const keyWidth = Math.max(...cards.map(card => card.id.length))
   const columnWidth = Math.max(...cards.map(card => (card.column ?? '—').length))
   return cards
-    .map(card => `${card.id.padEnd(keyWidth)}  ${(card.column ?? '—').padEnd(columnWidth)}  ${card.title}`)
+    .map(card => `${card.id.padEnd(keyWidth)}  ${(card.column ?? '—').padEnd(columnWidth)}  ${cardDisplayTitle(card)}`)
     .join('\n')
 }
 
@@ -233,7 +234,7 @@ export function describeCards(cards: CardView[]): string {
 export function describeCard(card: CardView): string {
   const lines = [
     `${card.id}  ${card.column ?? '—'}  ${card.executionMode}`,
-    card.title,
+    cardDisplayTitle(card),
   ]
   if (card.description) {
     lines.push('', card.description)

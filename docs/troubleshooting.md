@@ -46,7 +46,7 @@ You are running from a checkout without a build. Run `npm run build`.
 Open the page by the address the server printed (`127.0.0.1` or `localhost` with its port). A page on another origin must be listed with `--cors-origin <origin>`.
 
 **Approve / Return on the board page are refused**
-The server needs a token, and the page must send it: paste `KANBO_SERVE_TOKEN` into the Token field. A server started from an agent's shell never acts for a person.
+The page must send the server's token: open it by the link `kanbo serve` printed, or paste the token (`KANBO_SERVE_TOKEN`, if you set one) into the Token field. A server started from an agent's shell never acts for a person.
 
 **The MCP tools do not show up**
 Check that `kanbo` is on the `PATH` the client uses (GUI apps often do not see your shell's `PATH`; use an absolute path as the `command`), and run `kanbo mcp` yourself in the project: it should wait silently for input. Then restart the client.

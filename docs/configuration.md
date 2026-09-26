@@ -11,7 +11,7 @@ kanbo has no configuration file of its own beyond the per-project binding. Every
 | `KANBO_WORKSPACE_ID` | every board command | The workspace to work on, when `--workspace` is not given. Beats the binding. |
 | `KANBO_ACTOR_ID` | every writing command, `kanbo mcp`, `kanbo serve` | The name writes are filed under. Defaults to the operating-system user name. |
 | `KANBO_ACTOR_KIND` | every command | Set to `agent` to mark the shell as an agent's: person-only commands exit `4`, column entry rules refuse instead of warning, and a Postgres binding's `agentDatabaseUrl` is used. Any other value, or none, is a person's shell. |
-| `KANBO_SERVE_TOKEN` | `kanbo serve` | Bearer token the HTTP server requires (same as `--token`, but not visible in `ps`). |
+| `KANBO_SERVE_TOKEN` | `kanbo serve` | Bearer token the HTTP server requires (same as `--token`, but not visible in `ps`). Unset on loopback, a token is generated for the run. |
 
 ## How a command finds its board
 

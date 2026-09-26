@@ -47,7 +47,7 @@ npm link            # puts `kanbo` on your PATH, pointing at this checkout
 kanbo --help
 ```
 
-`npm run build` writes `dist/cli.cjs` (the command), `dist/lib/` (the library, ESM and CJS with types) and `dist/page/` (the board page `kanbo serve` answers with). To make a tarball you can install elsewhere: `npm pack`, then `npm install -g ./kanbo-0.1.0.tgz better-sqlite3`.
+`npm run build` writes `dist/cli.cjs` (the command), `dist/lib/` (the library, ESM and CJS with types) and `dist/page/` (the board page `kanbo serve` answers with). To make a tarball you can install elsewhere: `npm pack`, then `npm install -g ./kanbo-cli-0.1.1.tgz better-sqlite3`.
 
 ## Upgrading
 

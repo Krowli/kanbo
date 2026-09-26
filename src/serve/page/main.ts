@@ -7,7 +7,7 @@ import type { BoardColumn } from './grouping'
 import { groupBoard } from './grouping'
 import type { CardDetail } from './panel'
 import { renderPanel } from './panel'
-import { readStoredToken, storeToken } from './token'
+import { adoptTokenFromLocation, readStoredToken, storeToken } from './token'
 
 /**
  * The board page: the served workspace's columns and cards, a card's side
@@ -22,6 +22,7 @@ import { readStoredToken, storeToken } from './token'
 /** How often the page asks whether the board changed, while the tab is visible. */
 const POLL_INTERVAL_MS = 2000
 
+adoptTokenFromLocation()
 let token = readStoredToken()
 const api: BoardApi = createBoardApi(() => token)
 

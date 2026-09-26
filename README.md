@@ -34,8 +34,7 @@ This creates `.kanbo/board.db`, binds the project to it in `.kanbo/binding.json`
 ```bash
 kanbo card create --column to_do --title "Add rate limiting" --description "60 requests per minute per client"
 kanbo ready
-export KANBO_SERVE_TOKEN="$(openssl rand -hex 16)"
-kanbo serve                     # open http://127.0.0.1:4318 and paste the token into the Token field
+kanbo serve                     # opens the board in your browser
 ```
 
 Now start your agent in the project. It reads the instruction block, runs `kanbo prime`, takes a card from `kanbo ready`, and works it. When it runs `kanbo card wait-approval`, you answer with `kanbo approve <card>` or `kanbo return <card> --comment "..."` — or with the buttons on the board page.

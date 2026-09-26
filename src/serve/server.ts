@@ -112,15 +112,12 @@ export async function startKanboServer(options: KanboServeOptions): Promise<Runn
 
 /**
  * Who may act for a person on this server, said once when it starts: only a
- * request presenting the token does, and a server with no token, or started
- * from an agent's shell, has nobody who may.
+ * request presenting the token does, and a server started from an agent's
+ * shell has nobody who may.
  */
-export function describePersonRights(actors: ServeActors, token: string | null | undefined): string {
+export function describePersonRights(actors: ServeActors): string {
   if (!actors.person) {
     return 'no request acts for a person (started from an agent\'s shell)'
-  }
-  if (!token) {
-    return 'no request acts for a person (no token; set KANBO_SERVE_TOKEN to allow it)'
   }
   return `a request with the token acts for ${actors.person.id}`
 }

@@ -101,6 +101,17 @@ describe('board commands', () => {
     expect(JSON.parse(printed)).toEqual([{ title: 'Card', column: 'To Do' }])
   })
 
+  it('names a card written as a description alone by that description, in every listing and on its own', async () => {
+    const card = await createCard(store, { workspace: WORKSPACE, statusName: 'To Do', description: '## Fix the race\nmore' }, USER)
+    expect(card.title).toBe(card.id)
+
+    for (const printed of [await run(['card', 'list']), await run(['ready'])]) {
+      expect(printed).toMatch(new RegExp(`^${card.id}\\s+To Do\\s+Fix the race$`))
+    }
+    expect((await run(['card', 'get', card.id])).split('\n')[1]).toBe('Fix the race')
+    expect(JSON.parse(await run(['card', 'list', '--json', 'title']))).toEqual([{ title: card.id }])
+  })
+
   it('warns on stderr about a field it does not have, and still prints the ones it does', async () => {
     const card = await createCardIn('Card', 'To Do')
     const errors: string[] = []

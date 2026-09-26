@@ -194,7 +194,8 @@ Serves all sixteen tools and the `kanbo://capabilities` resources over stdio. Th
 | `--db <path>` | Board database file to open. |
 | `--database-url <url>` | External Postgres board to serve instead of a board file. |
 | `--workspace <nameOrId>` | Workspace the server is about. |
-| `--token <token>` | Bearer token every request must carry (or set `KANBO_SERVE_TOKEN`). |
+| `--token <token>` | Bearer token every request must carry (or set `KANBO_SERVE_TOKEN`). On loopback without one, a token is generated for the run. |
 | `--cors-origin <origin>` | Let a browser call from this exact origin; repeat for more. |
+| `--no-open` | Print the board page link without opening it in the browser. |
 
 See [HTTP API](http-api.md).

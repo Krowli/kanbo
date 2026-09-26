@@ -1,8 +1,8 @@
 import type { Command } from 'commander'
 
+import { openInBrowser, presentServePage, resolveServeAccess } from '../../serve/access'
 import type { ServeActors } from '../../serve/actors'
 import {
-  assertServeBinding,
   DEFAULT_SERVE_HOST,
   DEFAULT_SERVE_PORT,
   describePersonRights,
@@ -33,6 +33,8 @@ interface ServeCommandOptions {
   workspace?: string
   token?: string
   corsOrigin: string[]
+  /** `false` under `--no-open`. */
+  open: boolean
 }
 
 export function registerServeCommand(program: Command): void {
@@ -44,14 +46,14 @@ export function registerServeCommand(program: Command): void {
     .option('--db <path>', 'board database file to open')
     .option('--database-url <url>', 'external Postgres board to serve instead of a board file')
     .option('--workspace <nameOrId>', 'workspace the server is about')
-    .option('--token <token>', 'bearer token every request must carry (or set KANBO_SERVE_TOKEN)')
+    .option('--token <token>', 'bearer token every request must carry (or set KANBO_SERVE_TOKEN); made up for the run on loopback when absent')
     .option('--cors-origin <origin>', 'let a browser call from this exact origin; repeat for more', collect, [])
+    .option('--no-open', 'print the board page link without opening it in the browser')
     .action(async (options: ServeCommandOptions) => {
       const port = parsePort(options.port)
-      const token = options.token?.trim() || process.env.KANBO_SERVE_TOKEN?.trim() || null
       // Refused before the board is opened: a server that would not be allowed
       // to start has no business connecting to anything first.
-      assertServeBinding(options.host, token)
+      const access = resolveServeAccess(options.host, options.token?.trim() || process.env.KANBO_SERVE_TOKEN?.trim() || null)
 
       const session = await openBoardSession(
         { db: options.db, databaseUrl: options.databaseUrl, workspace: options.workspace },
@@ -67,7 +69,7 @@ export function registerServeCommand(program: Command): void {
           actors,
           host: options.host,
           port,
-          token,
+          token: access.token,
           corsOrigins: options.corsOrigin,
         })
       }
@@ -76,8 +78,12 @@ export function registerServeCommand(program: Command): void {
         throw error
       }
 
-      console.error(`kanbo serve: ${server.url} — workspace ${session.workspace.id}${token ? ', bearer token required' : ''}`)
-      console.error(`kanbo serve: ${describePersonRights(actors, token)}`)
+      console.error(`kanbo serve: ${server.url} — workspace ${session.workspace.id}, bearer token required${access.generated ? ' (generated for this run)' : ''}`)
+      console.error(`kanbo serve: ${describePersonRights(actors)}`)
+      presentServePage(
+        { url: server.url, access, agentShell, terminal: process.stdout.isTTY === true, open: options.open },
+        { print: line => console.log(line), openInBrowser },
+      )
 
       let stopping = false
       const stop = async (): Promise<void> => {

@@ -29,3 +29,19 @@ export function storeToken(token: string | null): void {
     // Storage refused: the token lives in memory until the tab is reloaded.
   }
 }
+
+/**
+ * A token handed over in the page's link — `kanbo serve` opens
+ * `/#token=<token>` for the token it made up — kept like one typed in, and
+ * taken out of the address bar so it is not left in view, in the history, or in
+ * a link copied from there. A fragment never reached the server in the first
+ * place.
+ */
+export function adoptTokenFromLocation(): void {
+  const token = new URLSearchParams(location.hash.slice(1)).get('token')?.trim()
+  if (!token) {
+    return
+  }
+  storeToken(token)
+  history.replaceState(history.state, '', `${location.pathname}${location.search}`)
+}
