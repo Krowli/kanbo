@@ -1,0 +1,147 @@
+{
+  "name": "kanbo",
+  "version": "0.1.0",
+  "description": "A Kanban board your AI agents drive through a CLI and an MCP server, and you watch and approve.",
+  "keywords": [
+    "kanban",
+    "ai-agents",
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "codex",
+    "cursor",
+    "cli",
+    "task-management",
+    "orchestration",
+    "llm",
+    "agentic-workflows",
+    "sqlite",
+    "postgres",
+    "supabase"
+  ],
+  "homepage": "https://github.com/Krowli/kanbo#readme",
+  "bugs": {
+    "url": "https://github.com/Krowli/kanbo/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Krowli/kanbo.git"
+  },
+  "license": "MIT",
+  "author": "Krowli",
+  "type": "module",
+  "bin": {
+    "kanbo": "./dist/cli.cjs"
+  },
+  "main": "./dist/lib/index.cjs",
+  "module": "./dist/lib/index.mjs",
+  "types": "./dist/lib/index.d.mts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/lib/index.d.mts",
+        "default": "./dist/lib/index.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/index.d.cts",
+        "default": "./dist/lib/index.cjs"
+      }
+    },
+    "./sqlite": {
+      "import": {
+        "types": "./dist/lib/sqlite/index.d.mts",
+        "default": "./dist/lib/sqlite/index.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/sqlite/index.d.cts",
+        "default": "./dist/lib/sqlite/index.cjs"
+      }
+    },
+    "./sqlite/schema": {
+      "import": {
+        "types": "./dist/lib/sqlite/schema.d.mts",
+        "default": "./dist/lib/sqlite/schema.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/sqlite/schema.d.cts",
+        "default": "./dist/lib/sqlite/schema.cjs"
+      }
+    },
+    "./postgres": {
+      "import": {
+        "types": "./dist/lib/postgres/index.d.mts",
+        "default": "./dist/lib/postgres/index.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/postgres/index.d.cts",
+        "default": "./dist/lib/postgres/index.cjs"
+      }
+    },
+    "./mcp": {
+      "import": {
+        "types": "./dist/lib/mcp/index.d.mts",
+        "default": "./dist/lib/mcp/index.mjs"
+      },
+      "require": {
+        "types": "./dist/lib/mcp/index.d.cts",
+        "default": "./dist/lib/mcp/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "drizzle-sqlite",
+    "drizzle-postgres",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": "^22.19.0 || >=24.11.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown --config tsdown.cli.config.ts && tsdown --config tsdown.lib.config.ts && tsdown --config tsdown.page.config.ts && cp -R drizzle-postgres dist/drizzle-postgres && cp -R drizzle-sqlite dist/drizzle-sqlite && chmod +x dist/cli.cjs",
+    "test": "vitest run src",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src/serve/page/tsconfig.json",
+    "generate:postgres": "drizzle-kit generate --config drizzle.postgres.config.ts --name board",
+    "generate:sqlite": "drizzle-kit generate --config drizzle.sqlite.config.ts --name board",
+    "kanbo": "tsx src/cli/index.ts",
+    "prepack": "npm run build"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "commander": "^15.0.0",
+    "drizzle-orm": "^0.45.2",
+    "picocolors": "^1.1.1",
+    "postgres": "^3.4.9",
+    "zod": "^4.5.4"
+  },
+  "peerDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "better-sqlite3": "^13.0.3"
+  },
+  "peerDependenciesMeta": {
+    "@types/better-sqlite3": {
+      "optional": true
+    },
+    "better-sqlite3": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^22.20.1",
+    "better-sqlite3": "^13.0.3",
+    "drizzle-kit": "^0.31.10",
+    "jsdom": "^30.0.1",
+    "tsdown": "^0.22.14",
+    "tsx": "^4.23.13",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}

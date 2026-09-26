@@ -1,0 +1,14 @@
+{
+  // The board page runs in a browser, so it is checked with the DOM's types —
+  // which the rest of the package, running in Node, must not see.
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "declaration": false,
+    "noEmit": true,
+    "rootDir": "../..",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"]
+  },
+  "include": ["./**/*"],
+  "exclude": []
+}

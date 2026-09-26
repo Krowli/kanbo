@@ -1,0 +1,16 @@
+import { z } from 'zod'
+
+import { cardArgument, defineKanboTool } from './tool'
+
+/** Moving a card, which is how the board tells the truth about it. */
+export const cardMoveTool = defineKanboTool({
+  name: 'kanbo_card_move',
+  title: 'Move a card',
+  description: 'Move a card to another column the moment its real state changes. Read kanbo_columns first: a card in the wrong column is a lie, '
+    + 'and a column with entryRules refuses a card that does not meet them yet, listing what is missing.',
+  inputSchema: {
+    card: cardArgument,
+    column: z.string().min(1).describe('The column to move it to, by its slug or name: in_progress, "In Progress".'),
+  },
+  run: async (transport, input) => await transport.cardMove(input),
+})

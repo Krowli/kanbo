@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790170176198,
+      "tag": "0000_board",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790227027024,
+      "tag": "0001_issue_pull_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790244864688,
+      "tag": "0002_milestone_start_date",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790255381416,
+      "tag": "0003_status_entry_rules",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790266700022,
+      "tag": "0004_run_external_session_ref",
+      "breakpoints": true
+    }
+  ]
+}

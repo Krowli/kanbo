@@ -1,0 +1,1 @@
+ALTER TABLE `issue_runs` ADD `external_session_ref` text;

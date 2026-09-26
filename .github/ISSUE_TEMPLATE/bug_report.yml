@@ -1,0 +1,72 @@
+name: Bug report
+description: Something in kanbo does not work as documented.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do not paste connection strings, tokens or other secrets.
+        Security problems go to a private advisory instead: see SECURITY.md.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The command or tool call you ran, and what it printed (with the exit code).
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. kanbo init --file --identifier APP --yes
+        2. kanbo card create --title "…"
+        3. …
+    validations:
+      required: true
+  - type: dropdown
+    id: storage
+    attributes:
+      label: Board storage
+      options:
+        - Board file (kanbo init --file)
+        - External Postgres / Supabase
+        - A host app's database (KANBO_DB_PATH)
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where
+      multiple: true
+      options:
+        - CLI
+        - MCP (kanbo mcp)
+        - HTTP / board page (kanbo serve)
+        - Library (import from kanbo)
+  - type: input
+    id: version
+    attributes:
+      label: kanbo version
+      description: Output of `kanbo --version`.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Node.js version and operating system
+      placeholder: Node 22.19.0, macOS 15
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: Agent / MCP client, if any
+      placeholder: Claude Code 2.x, Codex, Cursor, …

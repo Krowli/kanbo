@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "target": "ESNext",
+    "rootDir": "./src",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "strict": true,
+    // `issues.parent_issue_id` points at its own table, and a self-referencing
+    // drizzle column cannot be annotated — the same relaxation the server makes.
+    "noImplicitAny": false,
+    "declaration": true,
+    "outDir": "./dist",
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*"],
+  // The board page is a browser's, checked with the DOM by its own config.
+  "exclude": ["src/serve/page/**"]
+}

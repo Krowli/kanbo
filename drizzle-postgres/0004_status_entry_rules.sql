@@ -1,0 +1,1 @@
+ALTER TABLE "issue_statuses" ADD COLUMN "entry_rules" text;
