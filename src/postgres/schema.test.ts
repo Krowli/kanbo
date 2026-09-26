@@ -100,6 +100,17 @@ describe('the board schema in Postgres', () => {
     expect((failure as BoardError).details).toEqual({ missingColumns: ['issue_milestones.start_date'] })
   })
 
+  it('turns away a board whose run table predates chat_session_id, naming the column rather than failing on it', async () => {
+    board = await createTestPostgresDatabase()
+    await board.client.exec('alter table "issue_runs" rename column "chat_session_id" to "session_id"')
+
+    const failure = await assertBoardSchema(board.database).then(() => undefined, (error: Error) => error)
+
+    expect(failure).toBeInstanceOf(BoardError)
+    expect((failure as BoardError).code).toBe('board_schema_outdated')
+    expect((failure as BoardError).details).toEqual({ missingColumns: ['issue_runs.chat_session_id'] })
+  })
+
   it('turns away a board that predates the entry rules a column carries', async () => {
     board = await createTestPostgresDatabase()
     await board.client.exec('alter table "issue_statuses" drop column "entry_rules"')

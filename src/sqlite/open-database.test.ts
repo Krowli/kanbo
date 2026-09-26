@@ -106,6 +106,30 @@ describe('assertBoardSchema', () => {
     }
   })
 
+  it('turns away a file whose run table predates chat_session_id, naming the column rather than failing on it', async () => {
+    const board = await openBoardDatabase(join(directory, 'board.db'))
+    try {
+      migrateBoardFile(board.database)
+      // A file made before the run column had this name: the stamp still says
+      // epoch 1, and the column is there under another one.
+      board.connection.exec('alter table issue_runs rename column chat_session_id to session_id')
+
+      let failure: unknown
+      try {
+        assertBoardSchema(board.database)
+      }
+      catch (error) {
+        failure = error
+      }
+      expect(failure).toBeInstanceOf(BoardError)
+      expect((failure as BoardError).code).toBe('board_schema_outdated')
+      expect((failure as BoardError).details).toEqual({ missingColumns: ['issue_runs.chat_session_id'] })
+    }
+    finally {
+      board.close()
+    }
+  })
+
   it('turns away a file whose columns predate their entry rules', async () => {
     const board = await openBoardDatabase(join(directory, 'board.db'))
     try {
