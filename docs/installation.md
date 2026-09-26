@@ -65,7 +65,7 @@ A newer build may add columns or tables to the board. When it does:
 ## Uninstalling
 
 ```bash
-npm uninstall -g kanbo better-sqlite3
+npm uninstall -g kanbo-cli better-sqlite3
 ```
 
 Your boards are not touched: a board file stays in the project's `.kanbo/`, and a Postgres board stays in its database.
