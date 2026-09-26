@@ -1,7 +1,7 @@
 # kanbo
 
 [![CI](https://github.com/Krowli/kanbo/actions/workflows/ci.yml/badge.svg)](https://github.com/Krowli/kanbo/actions/workflows/ci.yml)
-[![npm version](https://img.shields.io/npm/v/kanbo.svg)](https://www.npmjs.com/package/kanbo)
+[![npm version](https://img.shields.io/npm/v/kanbo-cli.svg)](https://www.npmjs.com/package/kanbo-cli)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%5E22.19%20%7C%7C%20%3E%3D24.11-brightgreen.svg)](docs/installation.md)
 
@@ -23,7 +23,7 @@
 Requires Node.js `^22.19.0` or `>=24.11.0`. See [installation](docs/installation.md) for other ways to install.
 
 ```bash
-npm install -g kanbo better-sqlite3
+npm install -g kanbo-cli better-sqlite3
 
 cd your-project
 kanbo init --file --identifier APP --instructions claude --mcp claude

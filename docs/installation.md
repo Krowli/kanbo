@@ -11,18 +11,18 @@
 ## npm, globally
 
 ```bash
-npm install -g kanbo better-sqlite3
+npm install -g kanbo-cli better-sqlite3
 kanbo --version
 ```
 
 Install `better-sqlite3` next to kanbo so the binary can find it. Leave it out if you only use Postgres boards.
 
-> Until the first npm release is published, use [a tarball or a checkout](#from-source) instead; the commands are the same once `kanbo` is on your `PATH`.
+> The npm package is named `kanbo-cli`; the command it installs is `kanbo`.
 
 ## npx, without installing
 
 ```bash
-npx -y -p kanbo -p better-sqlite3 kanbo --help
+npx -y -p kanbo-cli -p better-sqlite3 kanbo --help
 ```
 
 This works for one-off commands. For agents, a global install (or a project-local one) is better: MCP clients start `kanbo mcp` often, and each `npx` start resolves packages again.
@@ -30,7 +30,7 @@ This works for one-off commands. For agents, a global install (or a project-loca
 ## In a project
 
 ```bash
-npm install --save-dev kanbo better-sqlite3
+npm install --save-dev kanbo-cli better-sqlite3
 npx kanbo init --file
 ```
 
@@ -52,7 +52,7 @@ kanbo --help
 ## Upgrading
 
 ```bash
-npm install -g kanbo@latest
+npm install -g kanbo-cli@latest
 ```
 
 A newer build may add columns or tables to the board. When it does:

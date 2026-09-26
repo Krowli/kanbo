@@ -1,5 +1,5 @@
 {
-  "name": "kanbo",
+  "name": "kanbo-cli",
   "version": "0.1.0",
   "description": "A Kanban board your AI agents drive through a CLI and an MCP server, and you watch and approve.",
   "keywords": [
@@ -31,7 +31,7 @@
   "author": "Krowli",
   "type": "module",
   "bin": {
-    "kanbo": "./dist/cli.cjs"
+    "kanbo": "dist/cli.cjs"
   },
   "main": "./dist/lib/index.cjs",
   "module": "./dist/lib/index.mjs",
