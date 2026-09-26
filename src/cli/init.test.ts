@@ -10,7 +10,8 @@ import { assertBoardSchema, openBoardDatabase, readBoardFileOwner } from '../sql
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import { readBinding } from './binding'
-import { INSTRUCTION_BLOCK, registerInitCommand } from './commands/init'
+import { registerInitCommand } from './commands/init'
+import { INSTRUCTION_BLOCK } from './setup/instructions'
 
 /**
  * The one way to interrupt a migration half-way from outside it. Off for every

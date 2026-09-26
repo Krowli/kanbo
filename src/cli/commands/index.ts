@@ -4,6 +4,7 @@ import { registerApproveCommand } from './approve'
 import { registerCapabilitiesCommand } from './capabilities'
 import { registerCardCommands } from './card'
 import { registerColumnsCommands } from './columns'
+import { registerDoctorCommand } from './doctor'
 import { registerInitCommand } from './init'
 import { registerMcpCommand } from './mcp'
 import { registerMigrateCommand } from './migrate'
@@ -14,6 +15,7 @@ import { registerRolesCommands } from './roles'
 import { registerRunCommands } from './run'
 import { registerServeCommand } from './serve'
 import { registerSprintCommands } from './sprint'
+import { registerUninstallCommand } from './uninstall'
 
 /**
  * Every command the `kanbo` binary answers to, put on one program.
@@ -27,6 +29,8 @@ import { registerSprintCommands } from './sprint'
  */
 export function registerKanboCommands(program: Command): void {
   registerInitCommand(program)
+  registerDoctorCommand(program)
+  registerUninstallCommand(program)
   registerCapabilitiesCommand(program)
   registerPrimeCommand(program)
   registerReadyCommand(program)

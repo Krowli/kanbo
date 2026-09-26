@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { describe, expect, it } from 'vitest'
 
-import { INSTRUCTION_BLOCK } from '../cli/commands/init'
+import { INSTRUCTION_BLOCK } from '../cli/setup/instructions'
 import { BOARD_RULES, SUBTASK_RULE, WAIT_FOR_PERSON_RULE } from '../ops/agent-rules'
 import { KANBO_MCP_INSTRUCTIONS } from './instructions'
 import { createKanboMcpServer } from './server'

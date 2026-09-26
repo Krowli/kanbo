@@ -47,7 +47,7 @@ npm link            # puts `kanbo` on your PATH, pointing at this checkout
 kanbo --help
 ```
 
-`npm run build` writes `dist/cli.cjs` (the command), `dist/lib/` (the library, ESM and CJS with types) and `dist/page/` (the board page `kanbo serve` answers with). To make a tarball you can install elsewhere: `npm pack`, then `npm install -g ./kanbo-cli-0.1.1.tgz better-sqlite3`.
+`npm run build` writes `dist/cli.cjs` (the command), `dist/lib/` (the library, ESM and CJS with types) and `dist/page/` (the board page `kanbo serve` answers with). To make a tarball you can install elsewhere: `npm pack`, then `npm install -g ./kanbo-cli-0.1.3.tgz better-sqlite3`.
 
 ## Upgrading
 
@@ -64,8 +64,17 @@ A newer build may add columns or tables to the board. When it does:
 
 ## Uninstalling
 
+First take out what `kanbo init` wrote — the instruction blocks and the `kanbo` MCP entries, in the project and in your own files — while `kanbo` is still installed:
+
+```bash
+cd your-project
+kanbo uninstall            # shows what it will remove, then asks; --yes to skip the question
+```
+
+`--project` or `--global` limits it to one scope. Nothing else in those files is touched. Then remove the package:
+
 ```bash
 npm uninstall -g kanbo-cli better-sqlite3
 ```
 
-Your boards are not touched: a board file stays in the project's `.kanbo/`, and a Postgres board stays in its database.
+Your boards are not touched: a board file stays in the project's `.kanbo/`, and a Postgres board stays in its database. To remove a project's binding too, run `kanbo uninstall --purge`; it deletes the board file only if you confirm a question naming it in a terminal (`--yes` does not answer that one).

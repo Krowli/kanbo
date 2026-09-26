@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 
 import type { Command } from 'commander'
@@ -6,15 +6,6 @@ import type { Command } from 'commander'
 import { DEFAULT_BOARD_FILE_PATH } from '../../default-board-file-path'
 import { maskDatabaseUrl } from '../../domain/database-url'
 import type { BoardWorkspaceIdentity } from '../../domain/numbering'
-import {
-  COMMENT_RULE,
-  MOVE_CARD_RULE,
-  OWN_SESSION_RULE,
-  PERSON_ONLY_RULE,
-  STATUS_LINE_RULE,
-  SUBTASK_RULE,
-  WAIT_FOR_PERSON_RULE,
-} from '../../ops/agent-rules'
 import { migrateBoardFile } from '../../sqlite/migrate'
 import type { BoardFileContents } from '../../sqlite/open-database'
 import { markBoardFileOwnedByKanbo, openBoardDatabase, readBoardFileContents } from '../../sqlite/open-database'
@@ -27,7 +18,15 @@ import type { BoardTarget } from '../db-target'
 import { describeTarget, resolveDatabaseUrl, resolveDbTarget, resolveHostDbPath } from '../db-target'
 import type { CliResult } from '../output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
+import { isInteractive } from '../setup/confirm'
+import type { FileOutcome } from '../setup/file-change'
+import { applyFileChange } from '../setup/file-change'
+import { INSTRUCTION_BLOCK, planInstructionBlock } from '../setup/instructions'
+import { planCodexMcpServer, planJsonMcpServer } from '../setup/mcp-config'
+import type { McpClient, ProjectInstructionTarget } from '../setup/paths'
+import { MCP_CLIENTS, PROJECT_INSTRUCTION_FILES, projectMcpConfigPath } from '../setup/paths'
 import { resolveWorkspace } from '../workspace'
+import { initGlobal } from './init-global'
 
 /**
  * `kanbo init` — tying a project folder to a board, and telling the agents
@@ -40,19 +39,6 @@ import { resolveWorkspace } from '../workspace'
  * whichever tools the person actually uses. Nothing is written to a file the
  * person did not ask for, and nothing is written twice.
  */
-
-/** The markers that make the instruction block something this tool can find again. */
-const INSTRUCTION_START = '<!-- KANBO_START -->'
-const INSTRUCTION_END = '<!-- KANBO_END -->'
-
-/** The files an agent reads its standing instructions from. */
-const INSTRUCTION_FILES = { claude: 'CLAUDE.md', agents: 'AGENTS.md' } as const
-
-/** The tools that can be told about the board's MCP server. */
-const MCP_CLIENTS = ['claude', 'codex', 'cursor'] as const
-
-/** The name the board's MCP server is registered under, in every tool. */
-const MCP_SERVER_NAME = 'kanbo'
 
 /**
  * What a person is told when an external board is named and nothing says which
@@ -79,52 +65,16 @@ const AGENT_URL_MISSING_WARNING
     + 'Until you run "kanbo roles apply" and record the agent role\'s own string with --agent-url, an agent '
     + 'here can approve its own work.'
 
-/**
- * The Codex table this command writes, in every spelling TOML allows for the
- * key: bare, double-quoted and single-quoted all name the same server, and a
- * check that only knew the bare one would write a second table beside a
- * registration the person already has.
- */
-const CODEX_TABLE_PATTERN = new RegExp(
-  String.raw`^\s*\[\s*mcp_servers\s*\.\s*(?:${MCP_SERVER_NAME}|"${MCP_SERVER_NAME}"|'${MCP_SERVER_NAME}')\s*\]`,
-  'm',
-)
+type InstructionTarget = ProjectInstructionTarget | 'none'
 
-type InstructionTarget = keyof typeof INSTRUCTION_FILES | 'none'
-type McpClient = typeof MCP_CLIENTS[number]
-
-/**
- * What an agent working in this project is told about the board.
- *
- * It says what to run and when, and nothing about how to do the work: the
- * method is the person's own instructions to their agent, and the board only
- * insists on the part that keeps the card honest. The rules are the sentences
- * `ops/agent-rules.ts` holds for every surface, with the command beside each.
- */
-export const INSTRUCTION_BLOCK = [
-  INSTRUCTION_START,
-  '## Kanbo board',
-  '',
-  'Work on this project is tracked on a kanbo board. Before starting a task run `kanbo prime` —'
-  + ' it prints the board\'s columns and what each one means.',
-  '',
-  '- Take a card from `kanbo ready`.',
-  `- ${MOVE_CARD_RULE} (\`kanbo card move <id> <column>\`)`,
-  `- ${STATUS_LINE_RULE} (\`kanbo card status-line <id> --text "..."\`)`,
-  `- ${SUBTASK_RULE} (\`kanbo card create --description "..." --parent <id>\`)`,
-  `- ${COMMENT_RULE} (\`kanbo card comment <id> --content "..."\`)`,
-  `- ${WAIT_FOR_PERSON_RULE} (\`kanbo card wait-approval <id>\`)`,
-  `- ${PERSON_ONLY_RULE}`,
-  `- ${OWN_SESSION_RULE} (\`kanbo run start <id> --agent <name> --session <ref>\`)`,
-  '- Run `kanbo capabilities` for the full list of tools, commands and rules.',
-  INSTRUCTION_END,
-].join('\n')
-
-interface InitOptions extends BoardCommandOptions {
+export interface InitOptions extends BoardCommandOptions {
+  /** Set up this person's own agent tools for every project, instead of binding this one. */
+  global?: boolean
   board?: string
   identifier?: string
   agentUrl?: string
-  instructions?: InstructionTarget
+  /** Parsed per mode: one project file, or a list of the person's own files with `--global`. */
+  instructions?: string
   mcp?: McpClient[]
   yes?: boolean
   /**
@@ -133,13 +83,6 @@ interface InitOptions extends BoardCommandOptions {
    * project root.
    */
   file?: string | boolean
-}
-
-/** What happened to one file this command may write. */
-interface FileOutcome {
-  path: string
-  /** `written` when the file changed, `unchanged` when it already said this. */
-  state: 'written' | 'unchanged'
 }
 
 export function registerInitCommand(program: Command): void {
@@ -159,10 +102,20 @@ export function registerInitCommand(program: Command): void {
     .option('--board <id>', 'the board inside the workspace, when it has more than one')
     .option('--identifier <key>', 'what this workspace\'s card keys start with, for an external board')
     .option('--agent-url <url>', 'the connection string agents get, when it is not the one above')
-    .option('--instructions <file>', 'where to write the instruction block: claude, agents or none', parseInstructions)
+    .option('--instructions <file>', 'where to write the instruction block: claude, agents or none; with '
+    + '--global, a comma-separated list of claude, codex, gemini, or none')
     .option('--mcp <clients>', `register the board's MCP server with ${MCP_CLIENTS.join(', ')}`, parseMcpClients)
+    .option('--global', 'set up your own agent tools for every project instead of binding this one; binds no board')
     .option('--yes', 'take the defaults instead of asking')
     .action(async (options: InitOptions) => {
+      if (options.global) {
+        await initGlobal(options)
+        return
+      }
+      // Refused before anything is written, as a parse-time check would be.
+      if (options.instructions !== undefined) {
+        parseInstructions(options.instructions)
+      }
       const projectDir = process.cwd()
       if (options.file !== undefined) {
         await initOwnFile(projectDir, options)
@@ -553,11 +506,11 @@ function warnAboutOwnerAccess(target: BoardTarget, options: InitOptions): void {
  * instructions is the kind of thing a person says yes to.
  */
 async function writeInstructions(projectDir: string, options: InitOptions): Promise<FileOutcome | null> {
-  const target = options.instructions ?? await askInstructionTarget(options)
+  const target = options.instructions === undefined ? await askInstructionTarget(options) : parseInstructions(options.instructions)
   if (target === 'none') {
     return null
   }
-  return writeInstructionBlock(join(projectDir, INSTRUCTION_FILES[target]))
+  return applyFileChange(planInstructionBlock(join(projectDir, PROJECT_INSTRUCTION_FILES[target]), INSTRUCTION_BLOCK))
 }
 
 async function askInstructionTarget(options: InitOptions): Promise<InstructionTarget> {
@@ -587,38 +540,6 @@ function showBlock(options: InitOptions): void {
   if (!options.json && !options.format) {
     console.log(`${INSTRUCTION_BLOCK}\n`)
   }
-}
-
-/**
- * The block, in that file, once.
- *
- * A file that already carries the markers has its block replaced rather than
- * appended to, so running `init` again on a project whose block is current
- * changes nothing at all, and running it after an upgrade brings the block
- * forward. Everything outside the markers is the person's own writing and is
- * never touched.
- */
-function writeInstructionBlock(path: string): FileOutcome {
-  const existing = existsSync(path) ? readFileSync(path, 'utf8') : null
-  const next = buildInstructionFile(existing)
-  if (existing === next) {
-    return { path, state: 'unchanged' }
-  }
-  writeFileSync(path, next)
-  return { path, state: 'written' }
-}
-
-function buildInstructionFile(existing: string | null): string {
-  if (existing === null) {
-    return `${INSTRUCTION_BLOCK}\n`
-  }
-
-  const start = existing.indexOf(INSTRUCTION_START)
-  const end = existing.indexOf(INSTRUCTION_END)
-  if (start >= 0 && end > start) {
-    return existing.slice(0, start) + INSTRUCTION_BLOCK + existing.slice(end + INSTRUCTION_END.length)
-  }
-  return `${existing.replace(/\s*$/, '')}\n\n${INSTRUCTION_BLOCK}\n`
 }
 
 /**
@@ -653,84 +574,8 @@ async function askMcpClients(options: InitOptions): Promise<McpClient[]> {
 }
 
 function registerMcpServer(projectDir: string, client: McpClient): FileOutcome {
-  if (client === 'codex') {
-    return writeCodexMcpServer(join(projectDir, '.codex', 'config.toml'))
-  }
-  return writeJsonMcpServer(join(projectDir, ...(client === 'claude' ? ['.mcp.json'] : ['.cursor', 'mcp.json'])))
-}
-
-/**
- * The `mcpServers` map Claude Code and Cursor both read, merged rather than
- * replaced: the file is the project's, and it may already describe servers that
- * have nothing to do with this board.
- */
-function writeJsonMcpServer(path: string): FileOutcome {
-  const existing = readJsonFile(path)
-  if (existing.mcpServers && MCP_SERVER_NAME in existing.mcpServers) {
-    return { path, state: 'unchanged' }
-  }
-
-  const next = {
-    ...existing,
-    mcpServers: { ...existing.mcpServers, [MCP_SERVER_NAME]: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
-  }
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`)
-  return { path, state: 'written' }
-}
-
-/**
- * The tool's configuration file as an object to merge into — or a refusal.
- *
- * A file that is valid JSON but not an object (a list, a string, `null`) is
- * something this command has no idea how to merge into, and spreading it would
- * quietly throw the person's file away. The file is left exactly as it is and
- * they are told which one to look at.
- */
-function readJsonFile(path: string): { mcpServers?: Record<string, unknown> } {
-  if (!existsSync(path)) {
-    return {}
-  }
-
-  const parsed = parseJsonFile(path)
-  if (!isPlainObject(parsed)) {
-    throw new CliError(1, `${path} does not hold a JSON object. Fix or remove it, then run kanbo init again.`)
-  }
-  if (parsed.mcpServers !== undefined && !isPlainObject(parsed.mcpServers)) {
-    throw new CliError(1, `${path} has an "mcpServers" that is not an object. Fix it, then run kanbo init again.`)
-  }
-  return parsed as { mcpServers?: Record<string, unknown> }
-}
-
-function parseJsonFile(path: string): unknown {
-  try {
-    return JSON.parse(readFileSync(path, 'utf8'))
-  }
-  catch {
-    throw new CliError(1, `${path} is not valid JSON. Fix or remove it, then run kanbo init again.`)
-  }
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/** Codex keeps its servers in TOML tables, so the table is appended rather than merged. */
-function writeCodexMcpServer(path: string): FileOutcome {
-  const existing = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  const table = `[mcp_servers.${MCP_SERVER_NAME}]\ncommand = "kanbo"\nargs = ["mcp"]\n`
-  if (CODEX_TABLE_PATTERN.test(existing)) {
-    return { path, state: 'unchanged' }
-  }
-
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, existing.trim() ? `${existing.replace(/\s*$/, '')}\n\n${table}` : table)
-  return { path, state: 'written' }
-}
-
-/** Is there a person on the other end of this shell to ask? */
-function isInteractive(): boolean {
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY)
+  const path = projectMcpConfigPath(projectDir, client)
+  return applyFileChange(client === 'codex' ? planCodexMcpServer(path) : planJsonMcpServer(path))
 }
 
 function describeInit(

@@ -28,6 +28,7 @@ npm install -g kanbo-cli better-sqlite3
 
 cd your-project
 kanbo init --file --identifier APP --instructions claude --mcp claude
+kanbo doctor                    # checks the binding, board, instructions and MCP setup
 ```
 
 This creates `.kanbo/board.db`, binds the project to it in `.kanbo/binding.json` (kept out of git), adds a kanbo block to `CLAUDE.md`, and registers `kanbo mcp` in `.mcp.json`. Then add a card and look at the board:

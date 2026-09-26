@@ -4,6 +4,18 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.1.3] — 2026-09-26
+
+### Added
+
+- `kanbo init --global`: sets up your own agent tools for every project. Writes a global instruction block to `~/.claude/CLAUDE.md` and `$CODEX_HOME/AGENTS.md` (or `~/.codex/AGENTS.md`), and to `~/.gemini/GEMINI.md` when asked for (`--instructions claude,codex,gemini`); registers `kanbo mcp` with Claude Code (`claude mcp add --scope user kanbo -- kanbo mcp`, printed when `claude` is not on `PATH`), Codex (`[mcp_servers.kanbo]` in `$CODEX_HOME/config.toml`) and Cursor (`~/.cursor/mcp.json`). The global block binds no board and no board is created: it tells agents to use kanbo in projects that have `.kanbo/`. Shows a preview and asks unless `--yes`; reports `written` / `unchanged`.
+- `kanbo doctor [--json]`: checks the kanbo version, another `kanbo` earlier on `PATH`, `better-sqlite3`, the project binding, that the board opens with a current schema, that every instruction block is the one this version writes, that every `kanbo` MCP registration's command is on `PATH`, a real MCP `initialize` handshake with `kanbo mcp`, and `KANBO_ACTOR_KIND=agent` in your own shell. Each finding is `ok`, `warn` or `fail` with a fix; exits `1` on any `fail`.
+- `kanbo uninstall [--project|--global] [--purge] [--yes] [--json]`: removes the marked instruction blocks and the `kanbo` MCP entries (JSON and TOML), leaving everything else in those files; runs or prints `claude mcp remove kanbo --scope user`. Never touches boards unless `--purge`, which removes `.kanbo/binding.json` and deletes the project's board file only after a confirmation naming it (`--yes` does not answer it).
+
+### Changed
+
+- A stale instruction block is rewritten by running `kanbo init` again; `kanbo doctor` says which command. Blocks are not refreshed automatically.
+
 ## [0.1.2] — 2026-09-26
 
 ### Added
@@ -36,6 +48,7 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
+[0.1.3]: https://github.com/Krowli/kanbo/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Krowli/kanbo/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Krowli/kanbo/releases/tag/v0.1.1
 [0.1.0]: https://github.com/Krowli/kanbo/releases/tag/v0.1.0

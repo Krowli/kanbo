@@ -1,5 +1,35 @@
 # Troubleshooting
 
+Start with `kanbo doctor` in the project: it checks the install, the binding, the board, the instruction blocks and the MCP registrations, and prints a fix for each problem.
+
+## `kanbo doctor` findings
+
+**`path` warn: `… comes first on PATH and is not this kanbo`**
+Two installs; agents and MCP clients start the first one. Remove the other (`npm uninstall -g …`, or delete the old binary), or put this one first on `PATH`.
+
+**`binding` fail: `.kanbo has no binding.json` / `… is not a binding this build can read`**
+The project's binding is gone or damaged. Run `kanbo init --file` (or `kanbo init --database-url …` with the same flags as before) in the project root.
+
+**`sqlite` fail: `better-sqlite3 cannot be loaded`**
+See `Install better-sqlite3 to use a board file` below.
+
+**`board` fail: `Board file is older than this build. Run kanbo migrate.`**
+Run `kanbo migrate` in the project.
+
+**`instructions` fail: `block differs from the one this kanbo writes (stale)`**
+The block was written by another kanbo version, or edited by hand between the markers. Run the command in the fix (`kanbo init --instructions claude --yes` in the project, or `kanbo init --global --instructions <client>`). Blocks are not refreshed automatically.
+
+**`mcp:<client>` fail: `starts …, which is not on PATH`**
+The client cannot start the server. Install kanbo globally, or change `command` in the named file to an absolute path.
+
+**`mcp:handshake` fail: `… mcp did not answer initialize`**
+The `kanbo` a client would start fails before answering. The detail is its first line on stderr; run `kanbo mcp` in the project yourself to see all of it.
+
+**`actor` warn: `This shell says it belongs to an agent`**
+`KANBO_ACTOR_KIND=agent` is set. If this is your own terminal, remove it from your shell profile — otherwise you cannot approve.
+
+## Messages
+
 **`No board found. Run "kanbo init --file" in the project, pass --db or --database-url, or set KANBO_DB_PATH or KANBO_DATABASE_URL.` (exit 2)**
 No flag, environment variable or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo init --file` in the project root, or `cd` into the project. For an MCP client, check that it starts `kanbo mcp` in the project directory.
 

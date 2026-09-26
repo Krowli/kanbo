@@ -32,7 +32,9 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 
 | Command | What it does |
 | --- | --- |
-| `kanbo init` | Bind this project to a board, and tell its agents about it. |
+| `kanbo init` | Bind this project to a board, and tell its agents about it. With `--global`, set up your own agent tools for every project instead. |
+| `kanbo doctor` | Check this install, this project's binding and board, instruction blocks and MCP registrations. |
+| `kanbo uninstall` | Remove what `kanbo init` wrote: instruction blocks and `kanbo` MCP entries. Boards stay unless `--purge`. |
 | `kanbo capabilities` | The board's tools, commands, rules and limits — machine-readable, no board needed. |
 | `kanbo prime` | Print the columns of this board and the rules a card travels by. |
 | `kanbo ready` | Cards that are spelled out, unclaimed and nobody else's turn. |
@@ -81,14 +83,68 @@ Bind this project to a board, and tell its agents about it. Writes `.kanbo/bindi
 | `--identifier <key>` | What this workspace's card keys start with (`APP` in `APP-001`). With `--file`, defaults to the folder name. |
 | `--agent-url <url>` | The connection string agents get, when it is not the one above (see [storage](storage.md#roles)). |
 | `--board <id>` | The board inside the workspace, when it has more than one. |
-| `--instructions <file>` | Where to write the instruction block: `claude` (`CLAUDE.md`), `agents` (`AGENTS.md`) or `none`. |
+| `--instructions <file>` | Where to write the instruction block: `claude` (`CLAUDE.md`), `agents` (`AGENTS.md`) or `none`. With `--global`: a comma-separated list of `claude`, `codex`, `gemini`, or `none`. |
 | `--mcp <clients>` | Register the board's MCP server with `claude` (`.mcp.json`), `codex` (`.codex/config.toml`), `cursor` (`.cursor/mcp.json`); comma-separated. |
+| `--global` | Set up your own agent tools for every project instead of binding this one (see below). Binds no board. |
 | `--yes` | Take the defaults instead of asking. |
 | `--json <fields>`, `--format <format>` | Output, as everywhere. |
 
 Without `--instructions` or `--mcp`, `init` asks in an interactive terminal and does neither otherwise. The instruction block sits between `<!-- KANBO_START -->` and `<!-- KANBO_END -->` and is replaced in place on a later run. An MCP entry named `kanbo` that already exists is left alone.
 
 `--file` together with `--database-url` is refused (exit `1`).
+
+A block written by an older kanbo is not refreshed on its own: `kanbo doctor` reports it as stale, and running `kanbo init --instructions <file>` again (or `kanbo init --global` for your own files) rewrites it. No other command touches it.
+
+### `kanbo init --global`
+
+Writes, for every project on this machine:
+
+| What | Where |
+| --- | --- |
+| Instruction block (`--instructions`, default `claude,codex`) | `claude`: `~/.claude/CLAUDE.md` · `codex`: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) · `gemini`: `~/.gemini/GEMINI.md` (only when asked for) |
+| MCP registration (`--mcp`, default `claude,codex,cursor`) | `claude`: runs `claude mcp add --scope user kanbo -- kanbo mcp` (prints the line instead when `claude` is not on `PATH`) · `codex`: `[mcp_servers.kanbo]` in `$CODEX_HOME/config.toml` · `cursor`: `~/.cursor/mcp.json` |
+
+The global block binds no board and no board is created. It tells an agent to use kanbo in a project that has a `.kanbo/` directory, and to leave a project without one alone; a project gets a board with a plain `kanbo init`. It uses the same `<!-- KANBO_START -->` / `<!-- KANBO_END -->` markers, so a second run reports every file `unchanged`.
+
+Every change is shown first and nothing is written until you confirm, or pass `--yes`. In a shell with no terminal and without `--yes` it writes nothing and exits `1`. With `--json`/`--format`, the preview goes to stderr. `--file`, `--db`, `--database-url`, `--workspace`, `--board`, `--identifier` and `--agent-url` are refused with `--global` (exit `1`).
+
+Paths and formats follow each tool's docs: [Claude Code memory](https://code.claude.com/docs/en/memory), [Claude Code MCP](https://code.claude.com/docs/en/mcp), [Codex AGENTS.md](https://learn.chatgpt.com/docs/agent-configuration/agents-md), [Codex MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli), [Cursor MCP](https://cursor.com/docs/context/mcp), [Gemini CLI GEMINI.md](https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html).
+
+## `kanbo doctor`
+
+| Option | Meaning |
+| --- | --- |
+| `--json` | Print `{ version, findings: [{ check, status, detail, fix? }] }`. |
+
+Checks, each `ok`, `warn` or `fail`, with a `fix` on everything that is not `ok`:
+
+| Check | What it looks at |
+| --- | --- |
+| `version` | This kanbo's version and where it runs from. |
+| `path` | The first `kanbo` on `PATH` is this one (`warn` when another one shadows it, or none is on `PATH`). |
+| `binding` | The nearest `.kanbo/` at or above this folder has a readable `binding.json` (`fail` when it does not; `warn` outside any project). |
+| `sqlite` | `better-sqlite3` loads (a board-file project only). |
+| `board` | The board opens and its schema is current (`fail` with `kanbo migrate` as the fix). A Postgres board gets 5 seconds. |
+| `instructions` | Every kanbo block in the project's `CLAUDE.md`/`AGENTS.md` and your own files is the block this version writes (`fail` when stale). `warn` when there is no block anywhere. |
+| `mcp:<client>` | Every `kanbo` registration in `.mcp.json`, `~/.claude.json`, `.codex/config.toml`, `$CODEX_HOME/config.toml`, `.cursor/mcp.json`, `~/.cursor/mcp.json`: its `command` is on `PATH`. `warn` when there is none. |
+| `mcp:handshake` | Starts `kanbo mcp` in the project (the command a registration names), sends `initialize`, and expects server name `kanbo` with instructions, within 10 seconds. |
+| `actor` | `warn` when `KANBO_ACTOR_KIND=agent` is set in this shell. |
+
+Exits `1` when any check fails; warnings alone exit `0`. Nothing is written.
+
+## `kanbo uninstall`
+
+| Option | Meaning |
+| --- | --- |
+| `--project` | Only this project's files. |
+| `--global` | Only your own user-level files. Neither flag: both. |
+| `--purge` | Also delete this project's `.kanbo/binding.json`, and its board file after a confirmation that names it. |
+| `--yes` | Do it without asking. Never deletes a board file. |
+| `--json` | Print `{ actions: [{ path, action, note? }] }`. |
+
+Removes the marked instruction block from `CLAUDE.md`/`AGENTS.md` (project) and `~/.claude/CLAUDE.md`, `$CODEX_HOME/AGENTS.md`, `~/.gemini/GEMINI.md` (global), and the `kanbo` entry from `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `~/.cursor/mcp.json` and `$CODEX_HOME/config.toml`. Everything else in those files — your own text, other MCP servers, other TOML tables — stays. Files stay even when nothing is left in them: kanbo does not record which files it created. Claude Code's user-scope registration is removed with `claude mcp remove kanbo --scope user`, or the line is printed when `claude` is not on `PATH`.
+
+Boards are never touched without `--purge`. With it, only the binding and a board file of the project's own (`kanbo init --file`) are candidates, and the board file is deleted only when you answer yes in a terminal to a question naming it — not with `--yes`, and never from a shell with no terminal. A host app's database and a Postgres board are never deleted. Same preview and confirmation as `kanbo init --global`.
 
 ## `kanbo capabilities`
 

@@ -25,27 +25,55 @@ A board file cannot enforce anything beyond kanbo's own commands: an agent that 
 
 ## 1. Globally, for all your agents
 
-### Instructions
+One command sets up your own agent tools for every project:
 
-Put the rules in your user-level instructions so every project gets them. Paste the block `kanbo init --instructions …` writes (shown under [per project](#2-per-project)) into:
+```bash
+kanbo init --global                                  # shows what it will write, then asks
+kanbo init --global --instructions claude,codex,gemini --mcp claude,codex --yes
+```
 
-| Client | User-level instructions |
-| --- | --- |
-| Claude Code | `~/.claude/CLAUDE.md` |
-| Codex | `~/.codex/AGENTS.md` (or `$CODEX_HOME/AGENTS.md`) |
-| Cursor | Cursor Settings → Rules → User Rules |
+It binds no board and creates none. What it writes:
 
-A shorter global version, which leaves the per-project details to the project's own block:
+| Client | Instructions (`--instructions`, default `claude,codex`) | MCP server (`--mcp`, default `claude,codex,cursor`) |
+| --- | --- | --- |
+| Claude Code | `~/.claude/CLAUDE.md` | runs `claude mcp add --scope user kanbo -- kanbo mcp` (stored in `~/.claude.json`); printed for you to run when `claude` is not on `PATH` |
+| Codex | `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) | `[mcp_servers.kanbo]` in `$CODEX_HOME/config.toml` |
+| Gemini CLI | `~/.gemini/GEMINI.md` — only when you name `gemini` | — |
+| Cursor | Cursor Settings → Rules → User Rules (not a file; paste the block yourself) | `~/.cursor/mcp.json` |
+
+The global block is a shorter version of the project one, and binds nothing:
 
 ```markdown
+<!-- KANBO_START -->
 ## Kanbo boards
 
-When a project has a `.kanbo/` directory, its work is tracked on a kanbo board.
-- Run `kanbo prime` (or the `kanbo_prime` tool) before starting, and take work from `kanbo ready`.
-- Move your card yourself the moment its state changes, and write a status line at every step.
-- Put findings, decisions and questions on the card as comments.
-- When you need a person, run `kanbo card wait-approval <card>` and end your turn. Never approve your own work.
-- `kanbo capabilities` lists every tool, command and rule.
+A project with a `.kanbo/` directory tracks its work on a kanbo board. In such a project, before starting a task run `kanbo prime` (or call the `kanbo_prime` tool) — it prints the board's columns and what each one means. A project without `.kanbo/` has no board: ignore this section there, and do not create one — a person sets a board up with `kanbo init`.
+
+- Take a card from `kanbo ready`.
+- …the same rules as the project block…
+<!-- KANBO_END -->
+```
+
+`kanbo mcp` resolves the board from the directory the client starts it in, so one global registration serves every project that has run `kanbo init`. In a folder that is not bound to a board, the tools fail with the "No board found" message; run `kanbo init` there first.
+
+Run `kanbo doctor` afterwards to check it. `kanbo uninstall --global` takes it all out again. After upgrading kanbo, `kanbo doctor` reports a block written by the old version as stale; run `kanbo init --global` again to rewrite it.
+
+To register by hand instead, the entries `kanbo init --global` writes are:
+
+```toml
+# $CODEX_HOME/config.toml (or: codex mcp add kanbo -- kanbo mcp)
+[mcp_servers.kanbo]
+command = "kanbo"
+args = ["mcp"]
+```
+
+```json
+// ~/.cursor/mcp.json
+{
+  "mcpServers": {
+    "kanbo": { "type": "stdio", "command": "kanbo", "args": ["mcp"] }
+  }
+}
 ```
 
 ### Mark every agent shell as an agent's
@@ -57,38 +85,6 @@ When a project has a `.kanbo/` directory, its work is tracked on a kanbo board.
 | Cursor | Rely on the MCP server (always an agent); if Cursor's agent also runs `kanbo` in a terminal, start Cursor from a shell where `KANBO_ACTOR_KIND=agent` is exported |
 
 Do **not** export `KANBO_ACTOR_KIND=agent` in your own shell profile — then you could not approve anything yourself.
-
-### Register the MCP server for every project
-
-`kanbo mcp` resolves the board from the directory the client starts it in, so one global registration serves every project that has run `kanbo init`.
-
-**Claude Code** (stored in `~/.claude.json`):
-
-```bash
-claude mcp add --scope user kanbo -- kanbo mcp
-```
-
-**Codex** — `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.kanbo]
-command = "kanbo"
-args = ["mcp"]
-```
-
-or `codex mcp add kanbo -- kanbo mcp`.
-
-**Cursor** — `~/.cursor/mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "kanbo": { "type": "stdio", "command": "kanbo", "args": ["mcp"] }
-  }
-}
-```
-
-In a folder that is not bound to a board, the tools fail with the "No board found" message; run `kanbo init` there first.
 
 ## 2. Per project
 
@@ -190,3 +186,4 @@ Everything it runs through `kanbo` is then filed under `nightly-triage`, and it 
 - Codex profiles and `shell_environment_policy`: https://learn.chatgpt.com/docs/config-file/config-advanced
 - Cursor MCP: https://cursor.com/docs/context/mcp
 - Cursor rules and AGENTS.md: https://cursor.com/docs/context/rules
+- Gemini CLI GEMINI.md: https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html
