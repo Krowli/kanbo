@@ -38,7 +38,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo init` | Set up a board for this project and connect its agents — a wizard in a terminal, defaults with `--yes`. With `--global`, set up your own agent tools for every project instead. |
 | `kanbo connect [agents...]` | Connect your agents (`claude`, `codex`, `cursor`, `gemini`, or `all`) to kanbo: the kanbo section in their instructions and the board's MCP server. `--check` shows what is connected, `--remove` takes it out. Alias `kanbo setup`. |
 | `kanbo instructions [kind]` | Print the text to give an agent: `agent` (default, the full rules), `short`, `global`, `orchestrator`, `mcp` or `board`. `--copy` also puts it on the clipboard. No board needed except for `board`. |
-| `kanbo doctor` | Check that kanbo, this project's board and your agents' setup work: the install, `.kanbo/binding.json`, the board, instruction blocks and MCP registrations. |
+| `kanbo doctor [--fix [--yes]]` | Check that kanbo, this project's board and your agents' setup work: the install, `.kanbo/binding.json`, the board, instruction blocks and MCP registrations. `--fix` repairs what is kanbo's own after one confirmation, and never deletes anything. |
 | `kanbo uninstall` | Remove what `kanbo init` wrote: instruction blocks and `kanbo` MCP entries. Boards stay unless `--purge`. |
 | `kanbo capabilities` | List what kanbo offers agents: tools, commands, rules and limits — machine-readable, no board needed. |
 | `kanbo prime` | Print the board's columns and rules for an agent to read first. |
@@ -244,23 +244,48 @@ When a `kanbo` entry in Claude Code's user settings is rewritten, kanbo runs `cl
 
 | Option | Meaning |
 | --- | --- |
-| `--json [fields]` | Print `{ version, findings: [{ check, status, detail, fix? }] }`; with fields, only those (`--json findings`). |
+| `--fix` | After the checks, fix every finding kanbo can fix (see below): show the plan, ask once (default Yes), apply, then run the checks again and print them. |
+| `--yes` | With `--fix`: apply without asking. |
+| `--json [fields]` | Print `{ version, findings: [{ check, status, detail, fix?, fixable }] }`; with fields, only those (`--json findings`). `fixable` is `true` when `--fix` would fix it. With `--fix`, the plan and what was done go to stderr and the JSON is the findings after the fixes. |
 
-Checks, each `ok`, `warn` or `fail`, with a `fix` on everything that is not `ok`:
+Checks, each `ok`, `info`, `warn` or `fail`, with a `fix` on everything that is not `ok`:
 
 | Check | What it looks at |
 | --- | --- |
 | `version` | This kanbo's version and where it runs from. |
+| `update` | `info` when npm has a newer kanbo (the [update check](configuration.md#update-check), with its skips — none with `--json`); the fix is `npm install -g kanbo-cli@latest`. Only shown when there is one. |
+| `install` | `warn` when this kanbo runs from npx's cache: agents cannot start it. Install it globally (`npm install -g kanbo-cli`). Only shown then. |
 | `path` | The first `kanbo` on `PATH` is this one (`warn` when another one shadows it, or none is on `PATH`). |
 | `binding` | The nearest `.kanbo/` at or above this folder has a readable `binding.json` (`fail` when it does not; `warn` outside any project). |
 | `sqlite` | `better-sqlite3` loads (a board-file project only). |
 | `board` | The board opens and its schema is current (`fail` with `kanbo migrate` as the fix). A Postgres board gets 5 seconds. |
+| `columns` | `warn` when the board (a board file of the project's own, or a Postgres board) has no columns — boards from kanbo 0.1–0.2 got them only with the first card. Only shown then. |
 | `instructions` | Every kanbo block in the project's `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` and your own files is the block this version writes. `warn` when a block was written by an older kanbo, when you edited one, or when there is no block anywhere; `ok` for a text you chose (`--markers`) or a block a newer kanbo wrote (with a note to update); `fail` when a file's markers do not pair up. |
 | `mcp:<client>` | Every `kanbo` registration in the files `kanbo connect` writes (and `~/.claude.json`): its `command` is on `PATH`, or its full paths exist (`fail` otherwise, fixed by `kanbo connect <agent>`). On Windows a Codex registration that starts a `.cmd` is a `warn`. `warn` when there is none. |
 | `mcp:handshake` | Starts `kanbo mcp` in the project (the command a registration names), sends `initialize`, and expects server name `kanbo` with instructions, within 10 seconds. |
 | `actor` | `warn` when this shell is an agent's: `KANBO_ACTOR_KIND=agent`, or an agent tool's mark (named in the detail). |
 
-Exits `1` when any check fails; warnings alone exit `0`. Nothing is written.
+Exits `1` when any check fails; warnings alone exit `0`. Without `--fix`, nothing is written.
+
+**`--fix`** fixes only these, and only what is kanbo's own by the same rules `kanbo connect` follows:
+
+| Finding | What `--fix` does |
+| --- | --- |
+| `instructions`: a block written by an older kanbo (including the 0.1–0.2 block) | Rewrites that block with the current one, as `kanbo connect <agent> --no-mcp --yes` would. A block you edited, a text you chose, a block from a newer kanbo and a file whose markers do not pair up are left alone (the finding says why). |
+| `mcp:<client>`: kanbo's own registration that no longer starts — its Node or script moved (the Windows form), or on Windows a bare `kanbo` in Codex's own settings | Rewrites the entry as `kanbo connect <agent>` would in that scope (for Claude Code's own settings: `claude mcp remove`, then `claude mcp add`). An entry of your own is never changed. |
+| `columns`: a board with no columns | Adds the Standard columns (Backlog, To Do, In Progress, In Review, Done, Canceled). |
+| `board`: a board file of the project's own that a newer kanbo's migration has not reached yet | Runs `kanbo migrate` on it; the plan names the file. A host app's database, a file of another epoch and a Postgres board are not migrated. |
+
+The plan looks like this:
+
+```text
+kanbo doctor --fix will:
+  write  CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs kanbo prime before a task)
+  add    the Standard columns to the board: Backlog, To Do, In Progress, In Review, Done, Canceled
+Nothing is deleted, and nothing else is changed.
+```
+
+Nothing is ever deleted. With nobody to ask (no terminal, CI, an agent's shell) and no `--yes`, it prints the plan and `Run kanbo doctor --fix --yes to apply.`, changes nothing, and exits `1` if a check failed. Every other finding keeps its `fix` text; where `--fix` covers it, that text names `kanbo doctor --fix` first.
 
 ## `kanbo uninstall`
 

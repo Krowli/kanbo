@@ -21,6 +21,7 @@ import { describe, expect, it } from 'vitest'
 
 import { HUMAN_ONLY_ACTIONS } from '../cli/actor'
 import { registerKanboCommands } from '../cli/commands'
+import { DOCTOR_FIX_YES_HINT } from '../cli/commands/doctor'
 import { NO_BOARD_AGENT_FIRST_LINE, NO_BOARD_HINT } from '../cli/home'
 import { ORCHESTRATOR_GUIDE } from '../cli/setup/orchestrator-guide'
 import { KANBO_TOOL_NAMES } from './tool-names'
@@ -131,6 +132,23 @@ describe('the reference docs', () => {
     const row = cli.split('\n').find(line => line.startsWith('| `kanbo` |'))!
     expect(row).toContain('Exits `0` after the hint, and when you leave the home screen (Exit, or Ctrl-C at the menu)')
     expect(row).toContain('in the wizard, Ctrl-C at any question or No at the last one ("Write these changes?") exits `1`')
+  })
+})
+
+describe('the kanbo doctor section of docs/cli.md', () => {
+  const cli = readFileSync(join(DOCS_DIRECTORY, 'cli.md'), 'utf8').replace(/\r\n/g, '\n')
+  const section = cli.slice(cli.indexOf('## `kanbo doctor`'), cli.indexOf('\n## ', cli.indexOf('## `kanbo doctor`') + 1))
+
+  it('documents every option, the fixable field and the line printed when nobody can be asked', () => {
+    const program = new Command()
+    registerKanboCommands(program)
+    const doctor = program.commands.find(command => command.name() === 'doctor')!
+    for (const option of doctor.options) {
+      expect(section, option.long).toContain(`| \`${option.flags}\` |`)
+    }
+    expect(section).toContain('fixable')
+    expect(section).toContain(DOCTOR_FIX_YES_HINT)
+    expect(section).toContain('Nothing is deleted, and nothing else is changed.')
   })
 })
 

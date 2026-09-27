@@ -1,6 +1,6 @@
 # Troubleshooting
 
-Start with `kanbo doctor` in the project: it checks the install, the binding, the board, the instruction blocks and the MCP registrations, and prints a fix for each problem.
+Start with `kanbo doctor` in the project: it checks the install, the binding, the board, the instruction blocks and the MCP registrations, and prints a fix for each problem. Then `kanbo doctor --fix` fixes what it can — an old instruction block, kanbo's own MCP entry whose Node moved, a board with no columns, a board file a migration behind — after showing the plan and asking once (`--yes` to skip the question). It never deletes anything, and never changes a block you edited or an MCP entry of your own.
 
 ## `kanbo doctor` findings
 
@@ -14,10 +14,19 @@ The project's binding is gone or damaged. Run `kanbo init --file` (or `kanbo ini
 See `Could not load better-sqlite3 …` below.
 
 **`board` fail: `This board file was made by an older kanbo. Run kanbo migrate.`**
-Run `kanbo migrate` in the project.
+Run `kanbo doctor --fix` (or `kanbo migrate`) in the project.
+
+**`columns` warn: `This board has no columns`**
+Boards from kanbo 0.1–0.2 got their columns only with the first card, so `kanbo prime` shows agents none. Run `kanbo doctor --fix` to add the Standard columns, or pick a set yourself: `kanbo columns template simple`.
+
+**`install` warn: `kanbo runs from npx's cache`**
+A kanbo run with `npx` is gone once that command ends, so agents cannot start `kanbo mcp`. Install it: `npm install -g kanbo-cli`.
+
+**`update` info: `kanbo X is available`**
+Update with `npm install -g kanbo-cli@latest`. See [Update check](configuration.md#update-check) to turn the check off.
 
 **`instructions` warn: `block was written by an older kanbo`**
-Run the command in the fix (`kanbo connect claude --project --no-mcp --yes` in the project, or `kanbo connect <agent> --global --no-mcp --yes`). `kanbo init` and `kanbo connect` also refresh it whenever they write that file.
+Run `kanbo doctor --fix`, or the command in the fix (`kanbo connect claude --project --no-mcp --yes` in the project, or `kanbo connect <agent> --global --no-mcp --yes`). `kanbo init` and `kanbo connect` also refresh it whenever they write that file.
 
 **`instructions` warn: `you edited the kanbo block`**
 The text between the markers no longer matches what kanbo wrote. kanbo leaves it alone; to replace it, run `kanbo connect claude --project --no-mcp` in a terminal and answer yes.
@@ -30,6 +39,9 @@ A newer kanbo wrote this block; this one leaves it alone. Update kanbo: `npm ins
 
 **`mcp:<client>`: `your own kanbo entry (…) — left as is`**
 The `kanbo` entry is not in a shape kanbo writes (it starts kanbo another way, or has an `env`), so kanbo never changes it. It is a warning only when it cannot start here.
+
+**`mcp:<client>` fail: `starts …, but … does not exist`**
+kanbo's own registration names a Node and a kanbo script by full path (the Windows form), and one of them has moved — a Node upgrade, or kanbo reinstalled elsewhere. Run `kanbo doctor --fix` (or `kanbo connect <agent>` in the same scope) to point it at this kanbo.
 
 **`mcp:<client>` fail: `starts …, which is not on PATH`**
 The client cannot start the server. Install kanbo globally, or change `command` in the named file to an absolute path.

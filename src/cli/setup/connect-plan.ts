@@ -346,18 +346,17 @@ export function explainItem(item: ConnectItem, removal = false): string {
 
 /** The plan as a person reads it before saying yes. */
 export function describeConnectPlan(plan: ConnectPlan, title: string, removal = false): string {
-  const lines = [title]
-  for (const item of pendingItems(plan)) {
+  return [title, ...describeConnectItems(plan, removal), ...plan.notes.map(note => `Note: ${note}`), 'Nothing else is changed.'].join('\n')
+}
+
+/** One line per change the plan makes: `  write  CLAUDE.md (what it is for)`. */
+export function describeConnectItems(plan: ConnectPlan, removal = false): string[] {
+  return pendingItems(plan).map((item) => {
     const verb = item.kind === 'claude-cli' ? 'run  ' : removal ? 'edit ' : 'write'
-    lines.push(item.kind === 'claude-cli'
+    return item.kind === 'claude-cli'
       ? `  ${verb}  ${explainItem(item, removal)}`
-      : `  ${verb}  ${displayPath(plan, itemPath(item))} (${explainItem(item, removal)})`)
-  }
-  for (const note of plan.notes) {
-    lines.push(`Note: ${note}`)
-  }
-  lines.push('Nothing else is changed.')
-  return lines.join('\n')
+      : `  ${verb}  ${displayPath(plan, itemPath(item))} (${explainItem(item, removal)})`
+  })
 }
 
 export function displayPath(plan: Pick<ConnectPlan, 'projectDir'>, path: string): string {
