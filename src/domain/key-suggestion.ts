@@ -2,6 +2,11 @@
  * The card key a new board is offered, read off the project folder's name:
  * `todo-list` → `TLI`, `react-native-shop` → `RNS`, `kanbo` → `KAN`.
  *
+ * Letters are brought down to plain Latin first: accents dropped (`café` →
+ * `cafe`), ligatures split (`ﬁle` → `file`), and the letters no decomposition
+ * reaches spelled out (`straße` → `strasse`, `Æ` → `AE`, `ø` → `o`), so
+ * `ÆØÅ` reads as the one word `AEOA` and gives `AEO`.
+ *
  * The name is split into words at `-`, `_`, spaces, dots and camelCase humps.
  * Words that say nothing about the project — `app`, `the`, `project` — are
  * dropped, unless nothing else is left. Three words or more give their first
@@ -34,9 +39,42 @@ export function isValidCardKey(key: string): boolean {
   return CARD_KEY_PATTERN.test(key.trim())
 }
 
+/**
+ * Latin letters that no Unicode decomposition turns into plain ones, spelled
+ * the way they are written without them: `straße` → `strasse`, `Æble` →
+ * `AEble`, `Øl` → `Ol`. Ligatures (`ﬁ`, `ﬂ`, …) and full-width letters need no
+ * entry: the compatibility decomposition (NFKD) already splits them.
+ */
+const LETTER_SPELLINGS: Record<string, string> = {
+  'ß': 'ss',
+  'ẞ': 'SS',
+  'æ': 'ae',
+  'Æ': 'AE',
+  'œ': 'oe',
+  'Œ': 'OE',
+  'ø': 'o',
+  'Ø': 'O',
+  'đ': 'd',
+  'Đ': 'D',
+  'ð': 'd',
+  'Ð': 'D',
+  'ł': 'l',
+  'Ł': 'L',
+  'þ': 'th',
+  'Þ': 'TH',
+  'ħ': 'h',
+  'Ħ': 'H',
+  'ı': 'i',
+}
+
+const SPELLED_LETTER = new RegExp(`[${Object.keys(LETTER_SPELLINGS).join('')}]`, 'g')
+
 function splitWords(name: string): string[] {
   return name
-    .normalize('NFD')
+    .replace(SPELLED_LETTER, letter => LETTER_SPELLINGS[letter]!)
+    // Compatibility decomposition: accents come apart from their letters
+    // (removed next), and ligatures and full-width forms become plain letters.
+    .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     // `myApp` → `my App`, `APIServer` → `API Server`.
     .replace(/([a-z0-9])([A-Z])/g, '$1 $2')

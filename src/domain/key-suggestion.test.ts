@@ -26,6 +26,15 @@ describe('suggestCardKey', () => {
     ['top-10-list', 'TLI'],
     ['café-crème', 'CCR'],
     ['v2', 'V2X'],
+    ['straße', 'STR'],
+    ['groß-projekt', 'GPR'],
+    ['ﬁle', 'FIL'],
+    ['ﬂow-ﬁx', 'FFI'],
+    ['ÆØÅ', 'AEO'],
+    ['øl-bryggeri', 'OBR'],
+    ['œuvre', 'OEU'],
+    ['łódź', 'LOD'],
+    ['ｋａｎｂｏ', 'KAN'],
   ])('%s → %s, which readIssuePrefix numbers cards with unchanged', (folder, key) => {
     const suggested = suggestCardKey(folder)
     expect(suggested).toBe(key)
