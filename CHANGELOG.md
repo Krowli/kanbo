@@ -4,7 +4,7 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
-## [0.3.0] — 2026-09-27
+## [0.2.1] — 2026-09-27
 
 ### Changed
 
@@ -66,7 +66,7 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
-[0.3.0]: https://github.com/Krowli/kanbo/releases/tag/v0.3.0
+[0.2.1]: https://github.com/Krowli/kanbo/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Krowli/kanbo/releases/tag/v0.2.0
 [0.1.3]: https://github.com/Krowli/kanbo/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Krowli/kanbo/releases/tag/v0.1.2
