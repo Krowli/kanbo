@@ -1,5 +1,7 @@
 import { CliError } from '../output'
 import type { FileChange } from './file-change'
+import type { McpLaunch } from './mcp-launch'
+import { PORTABLE_MCP_LAUNCH } from './mcp-launch'
 import { findOnPath, globalMcpConfigPath } from './paths'
 import { spawnCommandSync } from './process'
 import { planTextFile, readTextFile } from './text-file'
@@ -15,12 +17,14 @@ import { planTextFile, readTextFile } from './text-file'
 /** The name the board's MCP server is registered under, in every tool. */
 export const MCP_SERVER_NAME = 'kanbo'
 
-/** How every registration kanbo writes starts the server. */
-export const MCP_COMMAND = 'kanbo'
-export const MCP_ARGS = ['mcp'] as const
+/** The portable way a registration starts the server; see `mcp-launch.ts` for the one Windows needs. */
+export const MCP_COMMAND = PORTABLE_MCP_LAUNCH.command
+export const MCP_ARGS = PORTABLE_MCP_LAUNCH.args
 
 /** The line that registers the server with Claude Code for every project of this user. */
-export const CLAUDE_USER_ADD = ['claude', 'mcp', 'add', '--scope', 'user', MCP_SERVER_NAME, '--', MCP_COMMAND, ...MCP_ARGS]
+export function claudeUserAddArgv(launch: McpLaunch): string[] {
+  return ['claude', 'mcp', 'add', '--scope', 'user', MCP_SERVER_NAME, '--', launch.command, ...launch.args]
+}
 /** The line that takes that registration out again. */
 export const CLAUDE_USER_REMOVE = ['claude', 'mcp', 'remove', MCP_SERVER_NAME, '--scope', 'user']
 
@@ -39,7 +43,13 @@ const CODEX_HEADER_PATTERN = new RegExp(
 const TOML_HEADER_PATTERN = /^\s*\[/
 
 /** A `command = "..."` line, either string spelling. */
-const TOML_COMMAND_PATTERN = /^\s*command\s*=\s*(?:"([^"]*)"|'([^']*)')/m
+const TOML_COMMAND_PATTERN = /^\s*command\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*')/m
+
+/** A one-line `args = [...]` array. */
+const TOML_ARGS_PATTERN = /^\s*args\s*=\s*\[(.*)\]\s*$/m
+
+/** One string in a TOML array, either spelling. */
+const TOML_STRING_PATTERN = /"(?:[^"\\]|\\.)*"|'[^']*'/g
 
 /**
  * The `mcpServers` map, merged rather than replaced: the file may already
@@ -47,7 +57,7 @@ const TOML_COMMAND_PATTERN = /^\s*command\s*=\s*(?:"([^"]*)"|'([^']*)')/m
  * that is already there belongs to the person — it may point at a different
  * binary or carry arguments of its own — and is left as it is.
  */
-export function planJsonMcpServer(path: string): FileChange {
+export function planJsonMcpServer(path: string, launch: McpLaunch = PORTABLE_MCP_LAUNCH): FileChange {
   return planTextFile(path, (text) => {
     const existing = readJsonConfig(path, text)
     if (existing.mcpServers && MCP_SERVER_NAME in existing.mcpServers) {
@@ -55,7 +65,7 @@ export function planJsonMcpServer(path: string): FileChange {
     }
     const next = {
       ...existing,
-      mcpServers: { ...existing.mcpServers, [MCP_SERVER_NAME]: { type: 'stdio', command: MCP_COMMAND, args: [...MCP_ARGS] } },
+      mcpServers: { ...existing.mcpServers, [MCP_SERVER_NAME]: { type: 'stdio', command: launch.command, args: [...launch.args] } },
     }
     return `${JSON.stringify(next, null, 2)}\n`
   })
@@ -84,23 +94,42 @@ export function planJsonMcpServerRemoval(path: string): FileChange {
  * (a URL server, say).
  */
 export function readJsonMcpCommand(path: string): string | null | undefined {
+  const entry = readJsonMcpEntry(path)
+  return entry === undefined ? undefined : entry.command
+}
+
+/** What a registration starts: its command (`null` when it names none) and its arguments. */
+export interface McpEntry {
+  command: string | null
+  args: string[]
+}
+
+/** The JSON registration's command and arguments, `undefined` when the file registers no `kanbo` server. */
+export function readJsonMcpEntry(path: string): McpEntry | undefined {
   const existing = parseJsonObject(readTextFile(path)?.text ?? null)
   const servers = existing?.mcpServers
   if (!isPlainObject(servers) || !isPlainObject(servers[MCP_SERVER_NAME])) {
     return undefined
   }
-  const command = servers[MCP_SERVER_NAME].command
-  return typeof command === 'string' && command.trim() ? command.trim() : null
+  const { command, args } = servers[MCP_SERVER_NAME]
+  return {
+    command: typeof command === 'string' && command.trim() ? command.trim() : null,
+    args: Array.isArray(args) ? args.filter((arg): arg is string => typeof arg === 'string') : [],
+  }
 }
 
-/** Codex keeps its servers in TOML tables, so the table is appended rather than merged. */
-export function planCodexMcpServer(path: string): FileChange {
+/**
+ * Codex keeps its servers in TOML tables, so the table is appended rather than
+ * merged. A Windows path is written as a TOML literal string (`'…'`), which
+ * takes its backslashes as they are.
+ */
+export function planCodexMcpServer(path: string, launch: McpLaunch = PORTABLE_MCP_LAUNCH): FileChange {
   return planTextFile(path, (text) => {
     const existing = text ?? ''
     if (findCodexSections(existing).length > 0) {
       return null
     }
-    const table = `[mcp_servers.${MCP_SERVER_NAME}]\ncommand = "${MCP_COMMAND}"\nargs = ${JSON.stringify(MCP_ARGS)}\n`
+    const table = `[mcp_servers.${MCP_SERVER_NAME}]\ncommand = ${tomlString(launch.command)}\nargs = [${launch.args.map(tomlString).join(', ')}]\n`
     return existing.trim() ? `${existing.replace(/\s*$/, '')}\n\n${table}` : table
   })
 }
@@ -126,6 +155,12 @@ export function planCodexMcpServerRemoval(path: string): FileChange {
 
 /** The command the Codex table starts the server with, with the same `undefined`/`null` meaning as the JSON one. */
 export function readCodexMcpCommand(path: string): string | null | undefined {
+  const entry = readCodexMcpEntry(path)
+  return entry === undefined ? undefined : entry.command
+}
+
+/** The Codex table's command and arguments, `undefined` when there is no `kanbo` table. */
+export function readCodexMcpEntry(path: string): McpEntry | undefined {
   const text = readTextFile(path)?.text
   if (text === undefined) {
     return undefined
@@ -135,8 +170,33 @@ export function readCodexMcpCommand(path: string): string | null | undefined {
     return undefined
   }
   const body = text.split('\n').slice(main.start, main.end).join('\n')
-  const match = TOML_COMMAND_PATTERN.exec(body)
-  return match ? (match[1] ?? match[2] ?? null) : null
+  const command = TOML_COMMAND_PATTERN.exec(body)?.[1]
+  const args = TOML_ARGS_PATTERN.exec(body)?.[1]
+  return {
+    command: command === undefined ? null : readTomlString(command),
+    args: args === undefined ? [] : (args.match(TOML_STRING_PATTERN) ?? []).map(readTomlString),
+  }
+}
+
+/**
+ * A basic string (`"…"`, JSON's escapes are TOML's), except for a value with a
+ * backslash in it — a Windows path — which is written as a literal string so
+ * it reads as it is, when it can be one.
+ */
+function tomlString(value: string): string {
+  return value.includes('\\') && !/['\n\r]/.test(value) ? `'${value}'` : JSON.stringify(value)
+}
+
+function readTomlString(quoted: string): string {
+  if (quoted.startsWith('\'')) {
+    return quoted.slice(1, -1)
+  }
+  try {
+    return JSON.parse(quoted) as string
+  }
+  catch {
+    return quoted.slice(1, -1)
+  }
 }
 
 /** Is the server registered with Claude Code for every project of this user (`~/.claude.json`, read only)? */
@@ -159,7 +219,7 @@ export interface ClaudeCliOutcome {
  * `~/.claude.json` is Claude Code's own state file and is never edited by hand.
  */
 export function runClaudeMcp(argv: readonly string[]): ClaudeCliOutcome {
-  const command = argv.join(' ')
+  const command = displayCommand(argv)
   const executable = findOnPath(argv[0]!)
   if (!executable) {
     return { state: 'manual', command, reason: `${argv[0]} is not on PATH` }
@@ -174,6 +234,15 @@ export function runClaudeMcp(argv: readonly string[]): ClaudeCliOutcome {
     command,
     reason: result.error ? result.error.message : `${argv[0]} exited ${result.status ?? 'on a signal'}${said ? `: ${said}` : ''}`,
   }
+}
+
+/**
+ * The line as a person would type it: a path with a space in it
+ * (`C:\\Program Files\\…`) in double quotes. An argument that has quotes of
+ * its own is shown as it is, since shells disagree on how to escape them.
+ */
+export function displayCommand(argv: readonly string[]): string {
+  return argv.map(arg => (/\s/.test(arg) && !arg.includes('"') ? `"${arg}"` : arg)).join(' ')
 }
 
 /** The line ranges (`end` exclusive) of the `kanbo` table and its subtables. */

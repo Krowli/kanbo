@@ -23,6 +23,7 @@ import { applyFileChange } from '../setup/file-change'
 import { renameWithRetry } from '../setup/fs-retry'
 import { INSTRUCTION_BLOCK, planInstructionBlock } from '../setup/instructions'
 import { planCodexMcpServer, planJsonMcpServer } from '../setup/mcp-config'
+import { mcpLaunchSpec } from '../setup/mcp-launch'
 import type { McpClient, ProjectInstructionTarget } from '../setup/paths'
 import { MCP_CLIENTS, PROJECT_INSTRUCTION_FILES, projectMcpConfigPath } from '../setup/paths'
 import { canPrompt } from '../ui/environment'
@@ -571,9 +572,11 @@ async function askMcpClients(options: InitOptions): Promise<McpClient[]> {
   })
 }
 
+/** A project file is shared across machines, so it gets the portable form on every system. */
 function registerMcpServer(projectDir: string, client: McpClient): FileOutcome {
   const path = projectMcpConfigPath(projectDir, client)
-  return applyFileChange(client === 'codex' ? planCodexMcpServer(path) : planJsonMcpServer(path))
+  const launch = mcpLaunchSpec({ scope: 'project' })
+  return applyFileChange(client === 'codex' ? planCodexMcpServer(path, launch) : planJsonMcpServer(path, launch))
 }
 
 function describeInit(
@@ -595,6 +598,10 @@ function describeInit(
   }
   for (const outcome of mcp) {
     lines.push(`MCP: ${outcome.path} (${outcome.state})`)
+  }
+  const warning = mcp.length > 0 ? mcpLaunchSpec({ scope: 'project' }).warning : undefined
+  if (warning) {
+    lines.push(`Note: ${warning}`)
   }
   return lines.join('\n')
 }

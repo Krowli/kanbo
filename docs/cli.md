@@ -101,8 +101,8 @@ Writes, for every project on this machine:
 
 | What | Where |
 | --- | --- |
-| Instruction block (`--instructions`, default `claude,codex`) | `claude`: `~/.claude/CLAUDE.md` · `codex`: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) · `gemini`: `~/.gemini/GEMINI.md` (only when asked for) |
-| MCP registration (`--mcp`, default `claude,codex,cursor`) | `claude`: runs `claude mcp add --scope user kanbo -- kanbo mcp` (prints the line instead when `claude` is not on `PATH`) · `codex`: `[mcp_servers.kanbo]` in `$CODEX_HOME/config.toml` · `cursor`: `~/.cursor/mcp.json` |
+| Instruction block (`--instructions`, default `claude,codex`) | `claude`: `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`) · `codex`: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) · `gemini`: `$GEMINI_CLI_HOME/.gemini/GEMINI.md` (default `~/.gemini/GEMINI.md`, only when asked for) |
+| MCP registration (`--mcp`, default `claude,codex,cursor`) | `claude`: runs `claude mcp add --scope user kanbo -- kanbo mcp` (prints the line instead when `claude` is not on `PATH`) · `codex`: `[mcp_servers.kanbo]` in `$CODEX_HOME/config.toml` · `cursor`: `~/.cursor/mcp.json`. On Windows each starts `node.exe <kanbo's cli.cjs> mcp` (see [agents](agents.md)) |
 
 The global block binds no board and no board is created. It tells an agent to use kanbo in a project that has a `.kanbo/` directory, and to leave a project without one alone; a project gets a board with a plain `kanbo init`. It uses the same `<!-- KANBO_START -->` / `<!-- KANBO_END -->` markers, so a second run reports every file `unchanged`.
 

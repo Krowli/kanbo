@@ -2,9 +2,9 @@ import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:f
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { findAllOnPath } from './paths'
+import { findAllOnPath, globalInstructionPath } from './paths'
 
 describe('findAllOnPath', () => {
   let root: string
@@ -47,5 +47,21 @@ describe('findAllOnPath', () => {
     const env = { PATH: `${first}:${second}` }
 
     expect(findAllOnPath('kanbo', { platform: 'linux', env })).toEqual([join(first, 'kanbo')])
+  })
+})
+
+describe('where the tools keep their user instruction files', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('follows CLAUDE_CONFIG_DIR for Claude Code\'s CLAUDE.md', () => {
+    vi.stubEnv('CLAUDE_CONFIG_DIR', join('/', 'srv', 'claude-work'))
+    expect(globalInstructionPath('claude')).toBe(join('/', 'srv', 'claude-work', 'CLAUDE.md'))
+  })
+
+  it('puts Gemini\'s .gemini folder in GEMINI_CLI_HOME', () => {
+    vi.stubEnv('GEMINI_CLI_HOME', join('/', 'srv', 'gemini'))
+    expect(globalInstructionPath('gemini')).toBe(join('/', 'srv', 'gemini', '.gemini', 'GEMINI.md'))
   })
 })

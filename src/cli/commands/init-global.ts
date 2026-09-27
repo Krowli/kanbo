@@ -5,12 +5,14 @@ import type { FileChange } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
 import { GLOBAL_INSTRUCTION_BLOCK, planInstructionBlock } from '../setup/instructions'
 import {
-  CLAUDE_USER_ADD,
+  claudeUserAddArgv,
+  displayCommand,
   planCodexMcpServer,
   planJsonMcpServer,
   readClaudeUserMcpCommand,
   runClaudeMcp,
 } from '../setup/mcp-config'
+import { mcpLaunchSpec } from '../setup/mcp-launch'
 import type { GlobalInstructionClient, McpClient } from '../setup/paths'
 import { GLOBAL_INSTRUCTION_CLIENTS, globalInstructionPath, globalMcpConfigPath, MCP_CLIENTS } from '../setup/paths'
 import type { InitOptions } from './init'
@@ -21,8 +23,9 @@ import type { InitOptions } from './init'
  *
  * It binds no board and creates none: the block it writes says "a project with
  * `.kanbo/` is on a board", and a project becomes one with a plain `kanbo init`.
- * The MCP registrations are the same `kanbo mcp` every project registration
- * starts, which resolves the board from the folder the client starts it in.
+ * The MCP registrations start the same `kanbo mcp` every project registration
+ * starts, which resolves the board from the folder the client starts it in —
+ * on Windows spelled as this Node and this kanbo's script (`mcp-launch.ts`).
  *
  * Every change is worked out first and shown; nothing is written until the
  * person says yes (or said `--yes`), and a file that already says it is
@@ -110,9 +113,15 @@ export async function initGlobal(options: InitOptions): Promise<void> {
   printResult(describeResult(instructions, mcp), options)
 }
 
+/** The line `claude mcp add` gets for this person's own registration. */
+function claudeUserAdd(): string[] {
+  return claudeUserAddArgv(mcpLaunchSpec({ scope: 'user' }))
+}
+
 function planGlobalMcpFile(client: Exclude<McpClient, 'claude'>): FileChange {
   const path = globalMcpConfigPath(client)
-  return client === 'codex' ? planCodexMcpServer(path) : planJsonMcpServer(path)
+  const launch = mcpLaunchSpec({ scope: 'user' })
+  return client === 'codex' ? planCodexMcpServer(path, launch) : planJsonMcpServer(path, launch)
 }
 
 /** Claude Code's user-scope registration goes through its own command, never an edit of `~/.claude.json`. */
@@ -121,7 +130,7 @@ function registerWithClaude(needed: boolean): GlobalMcpOutcome {
   if (!needed) {
     return { client: 'claude', path, state: 'unchanged' }
   }
-  const outcome = runClaudeMcp(CLAUDE_USER_ADD)
+  const outcome = runClaudeMcp(claudeUserAdd())
   return outcome.state === 'ran'
     ? { client: 'claude', path, state: 'written', command: outcome.command }
     : { client: 'claude', path, state: 'manual', command: outcome.command, reason: outcome.reason }
@@ -133,7 +142,7 @@ function describePlan(changes: FileChange[], claudeNeeded: boolean): string {
     lines.push(`  write  ${change.path}`)
   }
   if (claudeNeeded) {
-    lines.push(`  run    ${CLAUDE_USER_ADD.join(' ')}`)
+    lines.push(`  run    ${displayCommand(claudeUserAdd())}`)
   }
   lines.push('No board is created. Narrow this with --instructions and --mcp.')
   return lines.join('\n')

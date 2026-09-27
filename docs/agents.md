@@ -36,10 +36,12 @@ It binds no board and creates none. What it writes:
 
 | Client | Instructions (`--instructions`, default `claude,codex`) | MCP server (`--mcp`, default `claude,codex,cursor`) |
 | --- | --- | --- |
-| Claude Code | `~/.claude/CLAUDE.md` | runs `claude mcp add --scope user kanbo -- kanbo mcp` (stored in `~/.claude.json`); printed for you to run when `claude` is not on `PATH` |
+| Claude Code | `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`) | runs `claude mcp add --scope user kanbo -- kanbo mcp` (stored in `~/.claude.json`); printed for you to run when `claude` is not on `PATH` |
 | Codex | `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) | `[mcp_servers.kanbo]` in `$CODEX_HOME/config.toml` |
-| Gemini CLI | `~/.gemini/GEMINI.md` — only when you name `gemini` | — |
+| Gemini CLI | `$GEMINI_CLI_HOME/.gemini/GEMINI.md` (default `~/.gemini/GEMINI.md`) — only when you name `gemini` | — |
 | Cursor | Cursor Settings → Rules → User Rules (not a file; paste the block yourself) | `~/.cursor/mcp.json` |
+
+On Windows, `kanbo` is npm's `kanbo.cmd`, which clients that start programs without a shell (Codex) cannot run. So these registrations name the Node that runs kanbo and kanbo's own script instead — `node.exe C:\…\kanbo-cli\dist\cli.cjs mcp` — which every client can start. A project's files (`kanbo init --mcp`) are shared with other machines and keep the portable `kanbo mcp`; `kanbo init` says so when it writes them on Windows. `kanbo doctor` fails a registration whose Node or script is gone (after a Node upgrade, say).
 
 The global block is a shorter version of the project one, and binds nothing:
 

@@ -148,6 +148,30 @@ describe('kanbo doctor', () => {
     expect(finding(await doctor(), 'mcp:codex').status).toBe('ok')
   })
 
+  it('checks both the Node and the script of a registration that names them by full path', async () => {
+    installKanbo('process.exit(1)')
+    const script = join(root, 'kanbo-dist', 'cli.cjs')
+    const path = join(projectDir, '.cursor', 'mcp.json')
+    const register = (command: string) => writeFileSync(path, JSON.stringify({
+      mcpServers: { kanbo: { type: 'stdio', command, args: [script, 'mcp'] } },
+    }))
+
+    register(process.execPath)
+    const missingScript = finding(await doctor(), 'mcp:cursor')
+    expect(missingScript.status).toBe('fail')
+    expect(missingScript.detail).toContain(script)
+    expect(missingScript.fix).toBe('Run kanbo doctor --fix to point it at this kanbo.')
+
+    mkdirSync(dirname(script), { recursive: true })
+    writeFileSync(script, '')
+    expect(finding(await doctor(), 'mcp:cursor').status).toBe('ok')
+
+    register(join(root, 'old-node', 'node.exe'))
+    const missingNode = finding(await doctor(), 'mcp:cursor')
+    expect(missingNode.status).toBe('fail')
+    expect(missingNode.detail).toContain(join(root, 'old-node', 'node.exe'))
+  })
+
   it('fails a board file older than this build and points at kanbo migrate', async () => {
     installKanbo('process.exit(1)')
     const database = new SqliteDriver(join(projectDir, '.kanbo', 'board.db'))

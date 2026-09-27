@@ -28,12 +28,26 @@ export function codexHome(): string {
   return process.env.CODEX_HOME?.trim() || join(homedir(), '.codex')
 }
 
+/**
+ * Where Claude Code keeps its user files: `$CLAUDE_CONFIG_DIR`, else
+ * `~/.claude`. Its documentation says every `~/.claude` path moves there; it
+ * does not say `~/.claude.json` does, so that one is not moved here.
+ */
+export function claudeConfigDir(): string {
+  return process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude')
+}
+
+/** Gemini CLI makes its `.gemini` folder in `$GEMINI_CLI_HOME`, else in the home directory. */
+export function geminiDir(): string {
+  return join(process.env.GEMINI_CLI_HOME?.trim() || homedir(), '.gemini')
+}
+
 /** The user-level instruction file of each tool. */
 export function globalInstructionPath(client: GlobalInstructionClient): string {
   switch (client) {
-    case 'claude': return join(homedir(), '.claude', 'CLAUDE.md')
+    case 'claude': return join(claudeConfigDir(), 'CLAUDE.md')
     case 'codex': return join(codexHome(), 'AGENTS.md')
-    case 'gemini': return join(homedir(), '.gemini', 'GEMINI.md')
+    case 'gemini': return join(geminiDir(), 'GEMINI.md')
   }
 }
 
