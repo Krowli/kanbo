@@ -51,6 +51,13 @@ export type {
   IssueCommentAuthorView,
 } from './domain/activity-types'
 export { cardDisplayTitle } from './domain/card-display-title'
+export {
+  COLUMN_CATALOGUE,
+  COLUMN_TEMPLATE_IDS,
+  COLUMN_TEMPLATES,
+  type ColumnSpec,
+  type ColumnTemplateId,
+} from './domain/column-templates'
 export { maskDatabaseUrl, maskDatabaseUrls } from './domain/database-url'
 export {
   ENTRY_RULE_DESCRIPTIONS,
@@ -90,6 +97,7 @@ export {
   normalizeCommentAuthorKind,
   toIssueView,
 } from './domain/issue-view'
+export { CARD_KEY_PATTERN, isValidCardKey, suggestCardKey } from './domain/key-suggestion'
 export {
   type BoardWorkspaceIdentity,
   formatIssueId,
@@ -119,7 +127,7 @@ export type {
   UpdateCardInput,
 } from './ops/cards'
 export { type BoardWriteScope, readChangeSeq, runBoardWrite } from './ops/change-seq'
-export type { BoardColumnInput, BoardColumnPatch } from './ops/columns'
+export type { ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch } from './ops/columns'
 export type { MigrateCardsInput, MigrateCardsResult } from './ops/migrate'
 export type { BoardPullRequestStanding } from './ops/pull-requests'
 export type { CreateRelationInput, IssueRelationCounterpart, IssueRelationView } from './ops/relations'

@@ -439,7 +439,7 @@ describe('the board\'s tools over a real board', () => {
     expect(columns.find(column => column.slug === 'in_review')?.entryRules).toEqual(['pull_request_linked', 'approved'])
     expect(columns.find(column => column.slug === 'done')?.entryRules).toEqual([])
     const prime = (await tools.kanbo_prime!.run(transport, {})).content[0]?.text
-    expect(prime).toContain('- In Review (`in_review`) — Work done; being checked or waiting for you Requires: pull_request_linked (')
+    expect(prime).toContain('- In Review (`in_review`) — Work done; being checked, or waiting for a person Requires: pull_request_linked (')
     expect(prime).toContain('A column that lists requirements refuses a card')
   })
 

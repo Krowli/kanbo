@@ -5,6 +5,8 @@ import { DEFAULT_STATUSES } from '../domain/status-name'
 import type { TestBoardStore } from '../testing/board-stores'
 import { BOARD_STORE_FACTORIES } from '../testing/board-stores'
 import { readChangeSeq } from './change-seq'
+import { COLUMN_TEMPLATE_IDS, COLUMN_TEMPLATES } from '../domain/column-templates'
+import { createBoardOps } from '.'
 import { addStandardColumns, ensureDefaultColumns, listColumns } from './columns'
 
 describe.each(BOARD_STORE_FACTORIES)('board columns on $name', (factory) => {
@@ -70,5 +72,24 @@ describe.each(BOARD_STORE_FACTORIES)('board columns on $name', (factory) => {
     expect(result.added).toEqual([])
     expect(result.statuses).toEqual(before)
     expect(await readChangeSeq(store)).toBe(afterFirst)
+  })
+
+  it.each(COLUMN_TEMPLATE_IDS)('seeds the %s template into an empty board: exactly its columns, in order, with descriptions', async (id) => {
+    const result = await createBoardOps(store).applyColumnTemplate('workspace', COLUMN_TEMPLATES[id], { mode: 'seed' })
+
+    const columns = await listColumns(store, 'workspace')
+    const expected = COLUMN_TEMPLATES[id]
+    expect(result.added).toEqual(expected.map(column => column.name))
+    expect(columns.map(({ name, description, category, color }) => ({ name, description, category, color }))).toEqual(expected)
+    expect(columns.map(column => column.order)).toEqual(expected.map((_, index) => index))
+  })
+
+  it('seeds no template into a board that already has columns', async () => {
+    await store.statuses.create({ id: 'mine', workspaceId: 'workspace', name: 'Mine', order: 0 })
+
+    const result = await createBoardOps(store).applyColumnTemplate('workspace', COLUMN_TEMPLATES.simple, { mode: 'seed' })
+
+    expect(result.added).toEqual([])
+    expect((await listColumns(store, 'workspace')).map(column => column.name)).toEqual(['Mine'])
   })
 })

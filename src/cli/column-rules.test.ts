@@ -59,7 +59,7 @@ describe('column entry rules from a terminal', () => {
 
     printed = []
     await run(['columns', 'list'])
-    expect(printed.join('\n')).toContain('In Review — Work done; being checked or waiting for you [requires: pull_request_linked, ci_green]')
+    expect(printed.join('\n')).toContain('In Review — Work done; being checked, or waiting for a person [requires: pull_request_linked, ci_green]')
 
     await run(['columns', 'rules', 'in_review', '--clear'])
     expect((await requireColumn(store, WORKSPACE.id, 'in-review')).entryRules).toBeNull()

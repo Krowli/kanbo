@@ -1,4 +1,5 @@
 import type { BoardStore } from '../board-store'
+import type { ColumnSpec } from '../domain/column-templates'
 import type { IssueActivityResolver } from './activity'
 import { listActivity, listFieldChanges } from './activity'
 import { readApproval } from './approval'
@@ -23,9 +24,10 @@ import {
   waitApproval,
 } from './cards'
 import type { BoardWriteScope } from './change-seq'
-import type { BoardColumnInput, BoardColumnPatch } from './columns'
+import type { ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch } from './columns'
 import {
   addStandardColumns,
+  applyColumnTemplate,
   createColumn,
   deleteColumn,
   describeColumn,
@@ -168,6 +170,8 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
     reorderColumns: async (workspaceId: string, orderedIds: string[], scope?: Scope) =>
       await reorderColumns(store, workspaceId, orderedIds, scope),
     addStandardColumns: async (workspaceId: string, scope?: Scope) => await addStandardColumns(store, workspaceId, scope),
+    applyColumnTemplate: async (workspaceId: string, columns: readonly ColumnSpec[], options: ApplyColumnTemplateOptions, scope?: Scope) =>
+      await applyColumnTemplate(store, workspaceId, columns, options, scope),
 
     // Runs
     startRun: async (issueId: string, input: StartRunInput, actor: BoardActor, scope?: Scope) =>

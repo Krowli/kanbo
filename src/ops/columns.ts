@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import type { BoardStore } from '../board-store'
+import type { ColumnSpec } from '../domain/column-templates'
 import { serializeEntryRules } from '../domain/entry-rules'
 import { BoardError } from '../domain/errors'
 import { DEFAULT_STATUSES, normalizeStatusName } from '../domain/status-name'
@@ -78,8 +79,30 @@ export async function ensureDefaultColumns<TStore extends BoardStore>(
   workspaceId: string,
   scope?: BoardWriteScope<TStore>,
 ): Promise<IssueStatus[]> {
+  return (await applyColumnTemplate(store, workspaceId, DEFAULT_STATUSES, { mode: 'seed' }, scope)).statuses
+}
+
+/** How `applyColumnTemplate` treats a board: `seed` fills an empty board and leaves any other alone. */
+export interface ApplyColumnTemplateOptions {
+  mode: 'seed'
+}
+
+/**
+ * Put a set of columns — a template from `domain/column-templates.ts`, or one a
+ * person put together — on a workspace's board, in the order given.
+ *
+ * `seed` writes only to a board with no columns yet, and reports what it added;
+ * a board that has columns keeps them, untouched, and nothing is added.
+ */
+export async function applyColumnTemplate<TStore extends BoardStore>(
+  store: TStore,
+  workspaceId: string,
+  columns: readonly ColumnSpec[],
+  _options: ApplyColumnTemplateOptions,
+  scope?: BoardWriteScope<TStore>,
+): Promise<{ statuses: IssueStatus[], added: string[] }> {
   if (await store.statuses.countByWorkspace(workspaceId) > 0) {
-    return await listColumns(store, workspaceId)
+    return { statuses: await listColumns(store, workspaceId), added: [] }
   }
 
   return await runBoardWrite(store, async ({ tx }) => {
@@ -87,12 +110,12 @@ export async function ensureDefaultColumns<TStore extends BoardStore>(
     // and this transaction; the unique index on `(workspace_id, name)` would
     // then refuse the insert, so the count is taken again under the write lock.
     if (await tx.statuses.countByWorkspace(workspaceId) > 0) {
-      return await listColumns(tx, workspaceId)
+      return { statuses: await listColumns(tx, workspaceId), added: [] }
     }
-    for (const [order, status] of DEFAULT_STATUSES.entries()) {
-      await insertColumn(tx, { workspaceId, ...status }, order)
+    for (const [order, column] of columns.entries()) {
+      await insertColumn(tx, { workspaceId, ...column }, order)
     }
-    return await listColumns(tx, workspaceId)
+    return { statuses: await listColumns(tx, workspaceId), added: columns.map(column => column.name) }
   }, scope)
 }
 
