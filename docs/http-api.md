@@ -14,7 +14,7 @@ kanbo serve --host 0.0.0.0 --cors-origin https://board.example.com   # needs the
 
 On start it prints two lines on stderr: the address, the workspace and that a bearer token is required (`generated for this run` when it was); then who may act for a person (`a request with the token acts for <user>`, or `no request acts for a person` when started from an agent's shell). Then, on stdout, the board page link:
 
-- In a person's terminal, `kanbo serve: board page http://127.0.0.1:4318/#token=<token>` for a generated token, and the link is opened in the default browser (`open`, `xdg-open` or `start`) unless `--no-open` is given. The token is in the fragment, so the browser never sends it to the server and it never appears in a request log. A token you gave yourself is not printed: the link is just `http://127.0.0.1:4318/`.
+- In a person's terminal, `kanbo serve: board page http://127.0.0.1:4318/#token=<token>` for a generated token, and the link is opened in the default browser (`open` on macOS, `rundll32 url.dll,FileProtocolHandler` on Windows, `wslview` or else `cmd.exe /c start` under WSL, `xdg-open` on a Linux desktop) unless `--no-open` is given. On Linux without `DISPLAY` or `WAYLAND_DISPLAY` (over SSH, say) no browser is tried; the printed link is it. The token is in the fragment, so the browser never sends it to the server and it never appears in a request log. A token you gave yourself is not printed: the link is just `http://127.0.0.1:4318/`.
 - In an agent's shell (`KANBO_ACTOR_KIND=agent`), or when stdout is not a terminal, the token is never printed and no browser is opened; a generated token is announced as `a token was generated for this run and is not shown here; set KANBO_SERVE_TOKEN to choose your own`.
 
 Stop it with Ctrl-C.

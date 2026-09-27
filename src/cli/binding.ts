@@ -1,9 +1,10 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 
 import { z } from 'zod'
 
 import { renameWithRetry } from './setup/fs-retry'
+import { parseText } from './setup/text-file'
 
 /**
  * What ties a project folder to a board.
@@ -128,13 +129,17 @@ export function readProjectBinding(projectDir: string): KanboBinding | null {
   return readBinding(join(projectDir, BINDING_FILE_PATH))
 }
 
-/** The binding in that exact file, or `null` when there is none to read. */
+/**
+ * The binding in that exact file, or `null` when there is none to read. A
+ * byte order mark an editor put at its start (Notepad does) is not part of the
+ * JSON.
+ */
 export function readBinding(path: string): KanboBinding | null {
   if (!existsSync(path)) {
     return null
   }
   try {
-    return BindingSchema.parse(JSON.parse(readFileSync(path, 'utf8')))
+    return BindingSchema.parse(JSON.parse(parseText(readFileSync(path, 'utf8')).text))
   }
   catch {
     return null
@@ -215,7 +220,9 @@ export function ignoreBoardFile(projectDir: string, absoluteDbPath: string): voi
   }
 
   mkdirSync(directory, { recursive: true })
-  const wanted = [relativeToDirectory, ...SQLITE_SIDE_FILES.map(suffix => `${relativeToDirectory}${suffix}`)]
+  // `.gitignore` patterns separate folders with `/` on every system.
+  const pattern = relativeToDirectory.split(sep).join('/')
+  const wanted = [pattern, ...SQLITE_SIDE_FILES.map(suffix => `${pattern}${suffix}`)]
   const path = join(directory, '.gitignore')
   const existing = existsSync(path) ? readFileSync(path, 'utf8') : null
   const already = new Set((existing ?? '').split('\n').map(line => line.trim()))

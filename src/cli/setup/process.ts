@@ -17,3 +17,18 @@ export function spawnCommandSync(
 ): SpawnSyncReturns<string> {
   return crossSpawn.sync(command, [...args], { ...options, encoding: 'utf8' })
 }
+
+/**
+ * Start another program and let it run on its own — a browser, say — without
+ * waiting for it and without failing when it cannot be started.
+ */
+export function spawnDetached(command: string, args: readonly string[]): void {
+  try {
+    const child = crossSpawn(command, [...args], { detached: true, stdio: 'ignore' })
+    child.on('error', () => {})
+    child.unref()
+  }
+  catch {
+    // Nothing to start it with: the caller has already shown what it would have opened.
+  }
+}

@@ -432,6 +432,23 @@ describe('kanbo init', () => {
       expect(lines).toEqual(expect.arrayContaining(['binding.json', 'board.db', 'board.db-wal', 'board.db-shm']))
     })
 
+    it('writes .kanbo/.gitignore lines with forward slashes on every system', async () => {
+      await runFile([join('.kanbo', 'boards', 'main.db')])
+
+      const lines = read('.kanbo', '.gitignore').split('\n')
+      expect(lines).toEqual(expect.arrayContaining(['boards/main.db', 'boards/main.db-wal', 'boards/main.db-shm']))
+    })
+
+    it('reads a binding an editor saved with a byte order mark', async () => {
+      await runFile([])
+      const path = join(projectDir, '.kanbo', 'binding.json')
+      const binding = readBinding(path)
+      writeFileSync(path, `\uFEFF${readFileSync(path, 'utf8')}`)
+
+      expect(binding).not.toBeNull()
+      expect(readBinding(path)).toEqual(binding)
+    })
+
     it('is idempotent: running it again leaves the file, the binding and the ignore file unchanged', async () => {
       await runFile([])
       const firstBinding = readBinding(join(projectDir, '.kanbo', 'binding.json'))

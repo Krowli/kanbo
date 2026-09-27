@@ -1,6 +1,8 @@
-import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 
+import { findOnPath } from '../cli/setup/paths'
+import { spawnDetached } from '../cli/setup/process'
 import { assertServeBinding } from './server'
 
 /**
@@ -67,19 +69,68 @@ export function presentServePage(presentation: ServePagePresentation, output: Se
   }
 }
 
+/** What choosing a browser looks at; each defaults to this machine's. */
+export interface BrowserEnvironment {
+  platform?: NodeJS.Platform
+  env?: NodeJS.ProcessEnv
+  /** A file's text, or `null` when it cannot be read (`/proc/version`, to tell WSL apart). */
+  readFile?: (path: string) => string | null
+  /** The program a command names on `PATH`, or `null`. */
+  findOnPath?: (command: string) => string | null
+}
+
+/** A program that opens a link, with its arguments. */
+export interface BrowserLauncher {
+  command: string
+  args: string[]
+}
+
+/**
+ * How to open a link in the default browser here, or `null` when there is no
+ * browser to open — a Linux machine without a display, over SSH say — and the
+ * printed link is all the person gets.
+ *
+ * Windows gets `rundll32 url.dll,FileProtocolHandler`, which takes the link as
+ * one argument: `cmd /c start` would read the `&` and `^` in it as its own.
+ * WSL is Linux with Windows' browser: `wslview` when it is installed, else
+ * Windows' own `cmd.exe`.
+ */
+export function chooseBrowserLauncher(url: string, environment: BrowserEnvironment = {}): BrowserLauncher | null {
+  const platform = environment.platform ?? process.platform
+  const env = environment.env ?? process.env
+  const readFile = environment.readFile ?? readTextOrNull
+  const onPath = environment.findOnPath ?? (command => findOnPath(command))
+
+  if (platform === 'darwin') {
+    return { command: 'open', args: [url] }
+  }
+  if (platform === 'win32') {
+    return { command: 'rundll32', args: ['url.dll,FileProtocolHandler', url] }
+  }
+  if (/microsoft/i.test(readFile('/proc/version') ?? '')) {
+    return onPath('wslview')
+      ? { command: 'wslview', args: [url] }
+      : { command: 'cmd.exe', args: ['/c', 'start', '""', url] }
+  }
+  if (!env.DISPLAY && !env.WAYLAND_DISPLAY) {
+    return null
+  }
+  return { command: 'xdg-open', args: [url] }
+}
+
 /** Open a link in the default browser, without waiting for it and without failing when there is none. */
-export function openInBrowser(url: string): void {
-  const [command, args] = process.platform === 'darwin'
-    ? ['open', [url]]
-    : process.platform === 'win32'
-      ? ['cmd', ['/c', 'start', '""', url]]
-      : ['xdg-open', [url]]
+export function openInBrowser(url: string, environment: BrowserEnvironment = {}): void {
+  const launcher = chooseBrowserLauncher(url, environment)
+  if (launcher) {
+    spawnDetached(launcher.command, launcher.args)
+  }
+}
+
+function readTextOrNull(path: string): string | null {
   try {
-    const child = spawn(command, args, { detached: true, stdio: 'ignore', windowsVerbatimArguments: process.platform === 'win32' })
-    child.on('error', () => {})
-    child.unref()
+    return readFileSync(path, 'utf8')
   }
   catch {
-    // No browser to open: the link printed above is enough.
+    return null
   }
 }
