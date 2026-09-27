@@ -105,7 +105,10 @@ describe('kanbo doctor', () => {
 
     const findings = await doctor(30_000)
 
-    expect(findings.filter(entry => entry.status !== 'ok')).toEqual([])
+    // On Windows the project's portable `kanbo` is npm's kanbo.cmd, which Codex cannot start.
+    expect(findings.filter(entry => entry.status !== 'ok')).toEqual(
+      process.platform === 'win32' ? [expect.objectContaining({ check: 'mcp:codex', status: 'warn' })] : [],
+    )
     expect(findings.map(entry => entry.check)).toEqual([
       'version',
       'path',
@@ -165,7 +168,7 @@ describe('kanbo doctor', () => {
     expect(claude.status).toBe('fail')
     expect(claude.detail).toContain('kanbo-nowhere')
     expect(claude.fix).toBeDefined()
-    expect(finding(await doctor(), 'mcp:codex').status).toBe('ok')
+    expect(finding(await doctor(), 'mcp:codex').status).toBe(process.platform === 'win32' ? 'warn' : 'ok')
   })
 
   it('checks both the Node and the script of a registration that names them by full path', async () => {
