@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
@@ -39,12 +39,18 @@ async function removeTree(path: string): Promise<void> {
     }
     catch (error) {
       if (process.platform !== 'win32' || waited >= 3_000) {
-        const holders = process.platform === 'win32' ? describeProcesses() : ''
+        const holders = process.platform === 'win32' ? `${describeLeftovers(path)}\n${describeProcesses()}` : ''
         throw new Error(`${(error as Error).message}${holders ? `\nprocesses now:\n${holders}` : ''}`, { cause: error })
       }
       await new Promise(resolve => setTimeout(resolve, 250))
     }
   }
+}
+
+/** What is left of the folder, and what this process still holds. */
+function describeLeftovers(path: string): string {
+  const left = readdirSync(path, { recursive: true }).map(String)
+  return `left: ${left.join(', ') || '(nothing)'}\nactive here: ${process.getActiveResourcesInfo().join(', ')}`
 }
 
 function describeProcesses(): string {
