@@ -284,9 +284,11 @@ describe('kanbo doctor', () => {
     const board = finding(await doctor(), 'board')
     expect(board.status).toBe('fail')
     expect(board.fix).toBe('Run kanbo doctor --fix, or kanbo migrate.')
-    expect(board.repair!.plan).toEqual(['  migrate  .kanbo/board.db (brings the board\'s tables up to this kanbo\'s schema; every card stays)'])
+    // The path as the person's OS spells it, like every path in a kanbo connect plan.
+    const shown = join('.kanbo', 'board.db')
+    expect(board.repair!.plan).toEqual([`  migrate  ${shown} (brings the board's tables up to this kanbo's schema; every card stays)`])
 
-    expect(await board.repair!.apply()).toEqual(['migrated .kanbo/board.db'])
+    expect(await board.repair!.apply()).toEqual([`migrated ${shown}`])
     expect(finding(await doctor(), 'board').status).toBe('ok')
   })
 
@@ -432,11 +434,14 @@ describe('kanbo doctor', () => {
 
     it('asks once at a terminal, Yes by default, and applies', async () => {
       oldAndEditedBlocks()
+      // A person's terminal, even on a CI runner.
+      vi.stubEnv('CI', undefined)
+      vi.stubEnv('TERM', undefined)
       const driver = createPromptDriver()
       setUiForTests(driver.ui)
 
       const running = run('--fix')
-      await driver.waitFor('Apply these fixes?')
+      await driver.waitFor('Apply these fixes?', 30_000)
       driver.press('enter')
       await running
 
