@@ -80,7 +80,9 @@ describe('kanbo doctor', () => {
   }
 
   async function doctor(timeoutMs = 2_000): Promise<DoctorFinding[]> {
-    return await collectDoctorFindings({ cwd: projectDir, self: kanbo, handshakeTimeoutMs: timeoutMs })
+    // The script this kanbo runs from: on Windows, the one the `.cmd` shim starts.
+    const self = process.platform === 'win32' ? join(bin, 'kanbo.js') : kanbo
+    return await collectDoctorFindings({ cwd: projectDir, self, handshakeTimeoutMs: timeoutMs })
   }
 
   function finding(findings: DoctorFinding[], check: string): DoctorFinding {

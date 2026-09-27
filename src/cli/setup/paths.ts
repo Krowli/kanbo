@@ -1,6 +1,6 @@
 import { accessSync, constants, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { delimiter, isAbsolute, join } from 'node:path'
+import { isAbsolute, join } from 'node:path'
 
 /**
  * Where each agent tool keeps the files kanbo writes into, for one project and
@@ -59,22 +59,41 @@ export function projectMcpConfigPath(projectDir: string, client: McpClient): str
   }
 }
 
+/** What a `PATH` lookup reads: the OS it follows the rules of, and the environment. Both default to this process's. */
+export interface PathLookup {
+  platform?: NodeJS.Platform
+  env?: NodeJS.ProcessEnv
+}
+
+/** What Windows tries when `PATHEXT` is not set. */
+const DEFAULT_PATHEXT = '.COM;.EXE;.BAT;.CMD'
+
 /**
  * Every executable of that name on `PATH`, in the order a shell would find
  * them. A path with a separator in it is looked at directly, as a shell does.
+ *
+ * On Windows a name is tried with each `PATHEXT` extension, compared without
+ * regard to case, and the bare name only when it already ends in one of them:
+ * npm puts an extensionless `sh` script beside every `.cmd` shim, and that
+ * script is not something Windows can start. Windows has no executable bit, so
+ * there a file is enough.
  */
-export function findAllOnPath(command: string): string[] {
-  if (isAbsolute(command) || command.includes('/')) {
-    return isExecutableFile(command) ? [command] : []
+export function findAllOnPath(command: string, lookup: PathLookup = {}): string[] {
+  const platform = lookup.platform ?? process.platform
+  const env = lookup.env ?? process.env
+  const windows = platform === 'win32'
+  const extensions = windows ? windowsCandidateExtensions(command, env) : ['']
+  const isRunnable = windows ? isFile : isExecutableFile
+
+  if (isAbsolute(command) || command.includes('/') || (windows && command.includes('\\'))) {
+    return extensions.map(extension => command + extension).filter(isRunnable).slice(0, 1)
   }
-  const extensions = process.platform === 'win32'
-    ? ['', ...(process.env.PATHEXT ?? '.EXE;.CMD;.BAT').split(';')]
-    : ['']
   const found: string[] = []
-  for (const directory of (process.env.PATH ?? '').split(delimiter).filter(Boolean)) {
+  const pathValue = env.PATH ?? (windows ? env.Path : undefined) ?? ''
+  for (const directory of pathValue.split(windows ? ';' : ':').filter(Boolean)) {
     for (const extension of extensions) {
       const candidate = join(directory, command + extension)
-      if (isExecutableFile(candidate) && !found.includes(candidate)) {
+      if (isRunnable(candidate) && !found.includes(candidate)) {
         found.push(candidate)
       }
     }
@@ -82,9 +101,25 @@ export function findAllOnPath(command: string): string[] {
   return found
 }
 
+/** The endings Windows tries on a name: the name as it is only when it already has a `PATHEXT` one. */
+function windowsCandidateExtensions(command: string, env: NodeJS.ProcessEnv): string[] {
+  const pathext = (env.PATHEXT ?? DEFAULT_PATHEXT).split(';').map(extension => extension.trim().toLowerCase()).filter(Boolean)
+  const lower = command.toLowerCase()
+  return pathext.some(extension => lower.endsWith(extension)) ? [''] : pathext
+}
+
 /** The executable a shell would start for that command, or `null` when there is none. */
-export function findOnPath(command: string): string | null {
-  return findAllOnPath(command)[0] ?? null
+export function findOnPath(command: string, lookup: PathLookup = {}): string | null {
+  return findAllOnPath(command, lookup)[0] ?? null
+}
+
+function isFile(path: string): boolean {
+  try {
+    return statSync(path).isFile()
+  }
+  catch {
+    return false
+  }
 }
 
 function isExecutableFile(path: string): boolean {

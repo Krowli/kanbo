@@ -1,8 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import { writeFakeBin, writeRecordingBin } from '../../testing/fake-bin'
 
 import { planInstructionBlock, planInstructionBlockRemoval } from './instructions'
 import {
@@ -10,6 +12,7 @@ import {
   planCodexMcpServerRemoval,
   planJsonMcpServerRemoval,
   readCodexMcpCommand,
+  runClaudeMcp,
 } from './mcp-config'
 
 describe('taking kanbo back out of a configuration file', () => {
@@ -89,5 +92,42 @@ describe('taking kanbo back out of a configuration file', () => {
     writeFileSync(path, `${withBlock}\nafter\n`)
 
     expect(planInstructionBlockRemoval(path).next).toBe('# Mine\n\nbefore\n\nafter\n')
+  })
+})
+
+/**
+ * `claude mcp …` started the way every other program is: on Windows the fake
+ * is a `.cmd` shim, which Node alone refuses to start.
+ */
+describe('running claude mcp', () => {
+  let bin: string
+
+  beforeEach(() => {
+    bin = mkdtempSync(join(tmpdir(), 'kanbo-claude-bin-'))
+    vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    rmSync(bin, { force: true, recursive: true })
+  })
+
+  it('runs it with its arguments as given, spaces and quotes included', () => {
+    const calls = join(bin, 'calls')
+    writeRecordingBin(bin, 'claude', calls)
+
+    expect(runClaudeMcp(['claude', 'mcp', 'add', 'a "quoted" name', '--', 'kanbo', 'mcp']))
+      .toEqual({ state: 'ran', command: 'claude mcp add a "quoted" name -- kanbo mcp' })
+    expect(readFileSync(calls, 'utf8')).toBe('mcp add a "quoted" name -- kanbo mcp\n')
+  })
+
+  it('hands the line to the person with the first thing a failing claude said', () => {
+    writeFakeBin(bin, 'claude', 'process.stderr.write("already registered\\n"); process.exit(2)')
+
+    expect(runClaudeMcp(['claude', 'mcp', 'add', 'kanbo'])).toEqual({
+      state: 'manual',
+      command: 'claude mcp add kanbo',
+      reason: 'claude exited 2: already registered',
+    })
   })
 })

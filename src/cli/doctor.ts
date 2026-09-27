@@ -18,6 +18,7 @@ import { openPostgresBoard } from './postgres-board'
 import { assertInstalledBoard, FILE_SCHEMA_OUTDATED_MESSAGE, SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
 import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, readInstructionBlock } from './setup/instructions'
 import { MCP_COMMAND, readCodexMcpCommand, readJsonMcpCommand } from './setup/mcp-config'
+import { resolveShimTarget } from './setup/npm-shim'
 import type { McpClient } from './setup/paths'
 import {
   findAllOnPath,
@@ -116,7 +117,9 @@ function checkPath(self: string | null): DoctorFinding {
     }
   }
   const first = all[0]!
-  if (self && realPath(first) !== realPath(self)) {
+  // On Windows the first match is npm's `.cmd` shim; the script it starts is what `self` is.
+  const started = resolveShimTarget(first) ?? first
+  if (self && realPath(started) !== realPath(self)) {
     return {
       check: 'path',
       status: 'warn',

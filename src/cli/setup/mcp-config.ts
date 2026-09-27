@@ -1,9 +1,9 @@
-import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 
 import { CliError } from '../output'
 import type { FileChange } from './file-change'
 import { findOnPath, globalMcpConfigPath } from './paths'
+import { spawnCommandSync } from './process'
 
 /**
  * The board's MCP server entry, in the two formats the tools keep it in: the
@@ -161,7 +161,7 @@ export function runClaudeMcp(argv: readonly string[]): ClaudeCliOutcome {
   if (!executable) {
     return { state: 'manual', command, reason: `${argv[0]} is not on PATH` }
   }
-  const result = spawnSync(executable, argv.slice(1), { encoding: 'utf8', timeout: 60_000 })
+  const result = spawnCommandSync(executable, argv.slice(1), { timeout: 60_000 })
   if (result.status === 0) {
     return { state: 'ran', command }
   }
