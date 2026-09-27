@@ -6,7 +6,12 @@
  */
 export type BoardErrorCode
   = | 'board_approval_requires_user'
+    | 'board_column_name_taken'
+    | 'board_column_not_empty'
+    | 'board_column_ready_protected'
+    | 'board_column_remove_target_invalid'
     | 'board_column_rules_requires_user'
+    | 'board_column_structure_requires_user'
     | 'board_column_rules_unmet'
     | 'board_entry_rule_invalid'
     | 'board_execution_mode_locked'

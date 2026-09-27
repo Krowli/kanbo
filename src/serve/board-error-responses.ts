@@ -33,8 +33,13 @@ export interface BoardErrorResponse {
  */
 export const BOARD_ERROR_RESPONSES: Record<BoardErrorCode, BoardErrorResponse> = {
   board_approval_requires_user: { status: 403, message: 'Only a person can approve a card', code: 'issue_approval_requires_user' },
+  board_column_name_taken: { status: 400, message: 'Another column already has that name' },
+  board_column_not_empty: { status: 400, message: 'The column still holds cards: say which column they move to' },
+  board_column_ready_protected: { status: 400, message: 'To Do is where agents take work from: it cannot be renamed or removed' },
+  board_column_remove_target_invalid: { status: 400, message: 'Cards cannot move into the column being removed' },
   board_column_rules_requires_user: { status: 403, message: 'Only a person can set what a column asks of a card', code: 'issue_column_rules_requires_user' },
   board_column_rules_unmet: { status: 409, message: 'The card does not meet what that column asks for yet', code: 'issue_column_rules_unmet' },
+  board_column_structure_requires_user: { status: 403, message: 'Only a person can change the columns of a board', code: 'issue_column_structure_requires_user' },
   board_entry_rule_invalid: { status: 400, message: 'Unknown column entry rule' },
   board_execution_mode_locked: { status: 400, message: 'Execution mode cannot change once the card has been launched' },
   board_pull_request_invalid: { status: 400, message: 'Not a GitHub pull request: give its URL or owner/repo#number' },

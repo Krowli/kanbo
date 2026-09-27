@@ -24,7 +24,7 @@ import {
   waitApproval,
 } from './cards'
 import type { BoardWriteScope } from './change-seq'
-import type { ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch } from './columns'
+import type { ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch, ColumnPosition, RemoveColumnOptions } from './columns'
 import {
   addStandardColumns,
   applyColumnTemplate,
@@ -34,6 +34,9 @@ import {
   ensureDefaultColumns,
   findColumn,
   listColumns,
+  moveColumn,
+  removeColumn,
+  renameColumn,
   reorderColumns,
   requireColumn,
   setColumnEntryRules,
@@ -172,6 +175,12 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
     addStandardColumns: async (workspaceId: string, scope?: Scope) => await addStandardColumns(store, workspaceId, scope),
     applyColumnTemplate: async (workspaceId: string, columns: readonly ColumnSpec[], options: ApplyColumnTemplateOptions, scope?: Scope) =>
       await applyColumnTemplate(store, workspaceId, columns, options, scope),
+    renameColumn: async (workspaceId: string, nameOrId: string, newName: string, actor: BoardActor, scope?: Scope) =>
+      await renameColumn(store, workspaceId, nameOrId, newName, actor, scope),
+    moveColumn: async (workspaceId: string, nameOrId: string, position: ColumnPosition, actor: BoardActor, scope?: Scope) =>
+      await moveColumn(store, workspaceId, nameOrId, position, actor, scope),
+    removeColumn: async (workspaceId: string, nameOrId: string, options: RemoveColumnOptions, actor: BoardActor, scope?: Scope) =>
+      await removeColumn(store, workspaceId, nameOrId, options, actor, scope),
 
     // Runs
     startRun: async (issueId: string, input: StartRunInput, actor: BoardActor, scope?: Scope) =>
