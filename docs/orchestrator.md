@@ -43,7 +43,7 @@ Split a card into subtasks only when the person asked for it, or when it has par
 - Returned: the reason is the newest comment. The card is back in an earlier column; start a new run and address the reason first.
 
 ## Never
-- Never run `kanbo approve`, `kanbo return`, `kanbo sprint close` or `kanbo columns rules`. They will fail in your shell anyway.
+- Never run `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo run clear-session`, or anything that changes the columns: `kanbo columns add`, `kanbo columns rename`, `kanbo columns move`, `kanbo columns remove`, `kanbo columns template`, `kanbo columns add-standard`, `kanbo columns rules`. They are for a person and will fail in your shell anyway.
 - Never delete or edit the board's database directly.
 ```
 

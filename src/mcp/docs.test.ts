@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url'
 import { Command } from 'commander'
 import { describe, expect, it } from 'vitest'
 
+import { HUMAN_ONLY_ACTIONS } from '../cli/actor'
 import { registerKanboCommands } from '../cli/commands'
 import { NO_BOARD_AGENT_FIRST_LINE, NO_BOARD_HINT } from '../cli/home'
 import { ORCHESTRATOR_GUIDE } from '../cli/setup/orchestrator-guide'
@@ -133,5 +134,11 @@ describe('docs/orchestrator.md', () => {
   it('shows the orchestrator instruction file word for word, as `kanbo instructions orchestrator` prints it', () => {
     const doc = readFileSync(join(DOCS_DIRECTORY, 'orchestrator.md'), 'utf8').replace(/\r\n/g, '\n')
     expect(doc).toContain(`\`\`\`markdown\n${ORCHESTRATOR_GUIDE}\n\`\`\`\n`)
+  })
+
+  it('names every command only a person may run, so an orchestrator never tries one', () => {
+    for (const action of HUMAN_ONLY_ACTIONS) {
+      expect(ORCHESTRATOR_GUIDE, action).toContain(`\`kanbo ${action}\``)
+    }
   })
 })
