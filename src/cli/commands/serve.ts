@@ -25,7 +25,7 @@ import { CliError } from '../output'
  */
 
 /** What `kanbo serve` is told. */
-interface ServeCommandOptions {
+export interface ServeCommandOptions {
   port: string
   host: string
   db?: string
@@ -50,60 +50,106 @@ export function registerServeCommand(program: Command): void {
     .option('--cors-origin <origin>', 'let a browser call from this exact origin; repeat for more', collect, [])
     .option('--no-open', 'print the board page link without opening it in the browser')
     .action(async (options: ServeCommandOptions) => {
-      const port = parsePort(options.port)
-      // Refused before the board is opened: a server that would not be allowed
-      // to start has no business connecting to anything first.
-      const access = resolveServeAccess(options.host, options.token?.trim() || process.env.KANBO_SERVE_TOKEN?.trim() || null)
-
-      const session = await openBoardSession(
-        { db: options.db, databaseUrl: options.databaseUrl, workspace: options.workspace },
-        'read',
-      )
-      const agentShell = isAgentShell()
-      const actors: ServeActors = { writer: createCliActor(), person: agentShell ? null : createPersonActor() }
-
-      let server: Awaited<ReturnType<typeof startKanboServer>>
+      const running = await startServe(options, { status: line => console.error(line), page: line => console.log(line) })
+      await waitForInterrupt()
       try {
-        server = await startKanboServer({
-          session,
-          actors,
-          host: options.host,
-          port,
-          token: access.token,
-          corsOrigins: options.corsOrigin,
-        })
+        await running.close()
+        process.exit(0)
       }
       catch (error) {
-        await session.close()
-        throw error
+        console.error(describeFailure(error).message)
+        process.exit(1)
       }
-
-      console.error(`kanbo serve: ${server.url} — workspace ${session.workspace.id}, bearer token required${access.generated ? ' (generated for this run)' : ''}`)
-      console.error(`kanbo serve: ${describePersonRights(actors)}`)
-      presentServePage(
-        { url: server.url, access, agentShell, terminal: process.stdout.isTTY === true, open: options.open },
-        { print: line => console.log(line), openInBrowser },
-      )
-
-      let stopping = false
-      const stop = async (): Promise<void> => {
-        if (stopping) {
-          return
-        }
-        stopping = true
-        try {
-          await server.close()
-          await session.close()
-          process.exit(0)
-        }
-        catch (error) {
-          console.error(describeFailure(error).message)
-          process.exit(1)
-        }
-      }
-      process.once('SIGINT', () => void stop())
-      process.once('SIGTERM', () => void stop())
     })
+}
+
+/** A board page being served, and how to stop it. */
+export interface RunningServe {
+  /** The board page's link — with this run's token in it, when the token was made up for the run. */
+  link: string
+  /** Stop listening, then close the board. */
+  close: () => Promise<void>
+}
+
+/** Where `startServe` says what it started: status lines, and the board page's own line. */
+export interface ServeOutput {
+  status: (line: string) => void
+  page: (line: string) => void
+}
+
+/**
+ * Open the board and serve it — everything `kanbo serve` does but wait. The
+ * command waits for Ctrl-C and ends the process; the home menu waits for
+ * Ctrl-C and comes back to its menu.
+ */
+export async function startServe(options: ServeCommandOptions, output: ServeOutput): Promise<RunningServe> {
+  const port = parsePort(options.port)
+  // Refused before the board is opened: a server that would not be allowed
+  // to start has no business connecting to anything first.
+  const access = resolveServeAccess(options.host, options.token?.trim() || process.env.KANBO_SERVE_TOKEN?.trim() || null)
+
+  const session = await openBoardSession(
+    { db: options.db, databaseUrl: options.databaseUrl, workspace: options.workspace },
+    'read',
+  )
+  const agentShell = isAgentShell()
+  const actors: ServeActors = { writer: createCliActor(), person: agentShell ? null : createPersonActor() }
+
+  let server: Awaited<ReturnType<typeof startKanboServer>>
+  try {
+    server = await startKanboServer({
+      session,
+      actors,
+      host: options.host,
+      port,
+      token: access.token,
+      corsOrigins: options.corsOrigin,
+    })
+  }
+  catch (error) {
+    await session.close()
+    throw error
+  }
+
+  output.status(`kanbo serve: ${server.url} — workspace ${session.workspace.id}, bearer token required${access.generated ? ' (generated for this run)' : ''}`)
+  output.status(`kanbo serve: ${describePersonRights(actors)}`)
+  presentServePage(
+    { url: server.url, access, agentShell, terminal: process.stdout.isTTY === true, open: options.open },
+    { print: output.page, openInBrowser },
+  )
+
+  return {
+    link: access.generated ? `${server.url}/#token=${access.token}` : `${server.url}/`,
+    close: async () => {
+      try {
+        await server.close()
+      }
+      finally {
+        await session.close()
+      }
+    },
+  }
+}
+
+/** What `kanbo serve` with no options is told — the home menu serves the board this way. */
+export const DEFAULT_SERVE_OPTIONS: ServeCommandOptions = {
+  port: String(DEFAULT_SERVE_PORT),
+  host: DEFAULT_SERVE_HOST,
+  corsOrigin: [],
+  open: true,
+}
+
+/** Settles on the first Ctrl-C (SIGINT) or SIGTERM, and stops listening for both. */
+export function waitForInterrupt(): Promise<void> {
+  return new Promise((resolve) => {
+    const stop = (): void => {
+      process.off('SIGINT', stop)
+      process.off('SIGTERM', stop)
+      resolve()
+    }
+    process.on('SIGINT', stop)
+    process.on('SIGTERM', stop)
+  })
 }
 
 function collect(value: string, previous: string[]): string[] {

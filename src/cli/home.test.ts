@@ -333,6 +333,33 @@ describe('kanbo with no words', () => {
     expect(printed.join('')).toContain('error: missing required argument \'which\'')
   })
 
+  it('serves the board page in the foreground until Ctrl-C, then closes it and brings the menu back', async () => {
+    await createBoard()
+    let stop = (): void => {}
+    const close = vi.fn(async () => {})
+    const start = vi.fn(async () => ({ link: 'http://127.0.0.1:4318/#token=t', close }))
+    const waitForStop = vi.fn(() => new Promise<void>((resolve) => {
+      stop = resolve
+    }))
+
+    const running = runKanbo([], program, { boardPage: { start, waitForStop } }).then(() => null, (error: unknown) => error)
+    await driver.waitFor('What next?')
+    driver.press('down', 'enter') // Open the board in your browser
+    await driver.waitFor('Board open at http://127.0.0.1:4318/#token=t — press Ctrl-C to stop and return to the menu')
+    // Still serving: no menu, nothing closed.
+    await new Promise(resolve => setTimeout(resolve, 50))
+    expect(driver.transcript().split('Board open at')[1]).not.toContain('What next?')
+    expect(close).not.toHaveBeenCalled()
+
+    stop()
+    await driver.waitFor('What next?')
+    expect(close).toHaveBeenCalledTimes(1)
+    exitMenu(driver)
+
+    expect(await running).toBeNull()
+    expect(start).toHaveBeenCalledTimes(1)
+  })
+
   it('leaves quietly with exit 0 on Ctrl-C at the menu', async () => {
     await createBoard()
 

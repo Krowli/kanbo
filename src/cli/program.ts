@@ -2,6 +2,7 @@ import { Command } from 'commander'
 
 import { KANBO_PACKAGE_VERSION } from '../package-version'
 import { registerKanboCommands } from './commands'
+import type { BareKanboContext } from './home'
 import { runBareKanbo } from './home'
 import { canPrompt } from './ui/environment'
 import { getUi } from './ui/ui'
@@ -29,13 +30,18 @@ export function createKanboProgram(): Command {
  * Anything else is commander's, so an unknown word keeps its "unknown command"
  * error and suggestion, and `--help` its help.
  */
-export async function runKanbo(args: string[], program: () => Command = createKanboProgram): Promise<void> {
+export async function runKanbo(
+  args: string[],
+  program: () => Command = createKanboProgram,
+  home: Pick<BareKanboContext, 'boardPage'> = {},
+): Promise<void> {
   if (args.length === 0) {
     await runBareKanbo({
       ui: getUi(),
       interactive: canPrompt(),
       createProgram: () => throwInsteadOfExiting(program()),
       updateNotice: null,
+      ...home,
     })
     return
   }

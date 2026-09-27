@@ -12,6 +12,8 @@ import type { IssueStatus } from '../sqlite/schema'
 import { isAgentShell, requireHumanActor } from './actor'
 import { openBoardSession } from './command'
 import { checkAgent } from './commands/connect'
+import type { RunningServe } from './commands/serve'
+import { DEFAULT_SERVE_OPTIONS, startServe, waitForInterrupt } from './commands/serve'
 import type { BoardTarget } from './db-target'
 import { BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE, resolveDbTarget } from './db-target'
 import { findKanboProject } from './doctor'
@@ -45,6 +47,19 @@ export interface BareKanboContext {
   createProgram: () => Command
   /** "A newer kanbo is out" — shown under the header when there is one (the update check fills it in). */
   updateNotice: string | null
+  /** How "Open the board in your browser" serves the board and waits; `kanbo serve`'s own unless a test says otherwise. */
+  boardPage?: BoardPageRunner
+}
+
+/** Serving the board page from the menu: start it, then wait for the person to stop it. */
+export interface BoardPageRunner {
+  start: () => Promise<RunningServe>
+  waitForStop: () => Promise<void>
+}
+
+const SERVE_FROM_MENU: BoardPageRunner = {
+  start: () => startServe(DEFAULT_SERVE_OPTIONS, { status: line => console.error(line), page: () => {} }),
+  waitForStop: waitForInterrupt,
 }
 
 /** What the home screen shows about the board. */
@@ -174,6 +189,9 @@ async function act(context: BareKanboContext, choice: Exclude<MenuChoice, 'exit'
     case 'card':
       await addCard(context)
       return
+    case 'serve':
+      await serveUntilStopped(context)
+      return
     default:
       await runCommand(context, [choice])
   }
@@ -182,6 +200,23 @@ async function act(context: BareKanboContext, choice: Exclude<MenuChoice, 'exit'
 /** Run `kanbo <args>` in this process, as if it had been typed. */
 async function runCommand(context: BareKanboContext, args: string[]): Promise<void> {
   await context.createProgram().parseAsync(args, { from: 'user' })
+}
+
+/**
+ * `kanbo serve` in the foreground: the board page stays up until Ctrl-C, then
+ * the server and the board are closed and the menu is back — one server at a
+ * time, and nothing left running when the person picks Exit.
+ */
+async function serveUntilStopped(context: BareKanboContext): Promise<void> {
+  const { start, waitForStop } = context.boardPage ?? SERVE_FROM_MENU
+  const running = await start()
+  try {
+    say(context.ui, `Board open at ${running.link} — press Ctrl-C to stop and return to the menu`)
+    await waitForStop()
+  }
+  finally {
+    await running.close()
+  }
 }
 
 /** A card from one line of description, into To Do — `kanbo card create`. */

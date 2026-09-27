@@ -88,7 +88,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 - **A person at a terminal, a board here:** the home screen. A header (`kanbo · weather-station (WST) · .kanbo/board.db`), one line with the number of cards in each column (Canceled only when it has cards), `N cards waiting for you` when any are, and your agents — those found on this machine or already connected — with how each is connected (`Claude Code ✓ instructions + MCP · Codex ✓ MCP only · Cursor — not connected`, from the same check as `kanbo connect --check`). Then **What next?**, where every item shows the command it runs:
   - *Review the cards waiting for you* (only when there are any) — one card at a time: its key, title, column, status line and last comment, then *Approve*, *Send back with a comment* (asks for it; the agent reads it first), *Skip* or *Stop reviewing*. The same as `kanbo approve` and `kanbo return`.
   - *Show the board here* — `kanbo board` (below).
-  - *Open the board in your browser* — `kanbo serve`.
+  - *Open the board in your browser* — `kanbo serve`, in the foreground: it prints `Board open at <url> — press Ctrl-C to stop and return to the menu`, and Ctrl-C stops the server and brings the menu back.
   - *Add a card* — asks what it is about and puts it in To Do (`kanbo card create`).
   - *Connect an agent* — `kanbo connect`. *Get the agent instructions* — `kanbo instructions`.
   - *Change columns* — `kanbo columns`: its menu (below).
