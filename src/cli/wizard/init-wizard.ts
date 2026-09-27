@@ -1,5 +1,4 @@
 import { existsSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { basename, relative, resolve } from 'node:path'
 
 import { DEFAULT_BOARD_FILE_PATH } from '../../default-board-file-path'
@@ -29,6 +28,7 @@ import { findGitRoot } from '../setup/git-root'
 import type { AppliedInitPlan, InitPlan } from '../setup/init-plan'
 import { describeInitPlan } from '../setup/init-plan'
 import { INSTRUCTION_BLOCK } from '../setup/instructions'
+import { tildify } from '../tildify'
 import type { Ui } from '../ui/ui'
 
 /**
@@ -397,11 +397,4 @@ export function printInitOutro(ui: Ui, result: InitWizardResult, applied: Applie
   lines.push('See the board: kanbo board · in your browser: kanbo serve')
   lines.push('Run kanbo any time to come back here.')
   say(ui, lines.join('\n'))
-}
-
-/** A path under the person's home folder, as `~/…`. */
-function tildify(path: string): string {
-  const home = homedir()
-  const inside = relative(home, path)
-  return inside && !inside.startsWith('..') && !/^[a-z]:/i.test(inside) ? `~/${inside.replaceAll('\\', '/')}` : path.replaceAll('\\', '/')
 }

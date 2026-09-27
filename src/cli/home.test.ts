@@ -221,6 +221,17 @@ describe('kanbo with no words', () => {
         'More: kanbo --help',
       ].join('\n'))
     })
+
+    it('names a board file outside home by its whole path, even when it starts like the home folder', async () => {
+      // HOME is <root>/home; the board is at <root>/homebase/board.db.
+      expect(await kanbo('init', '--yes', '--file', '../homebase/board.db')).toBeNull()
+      printed = []
+      withoutTerminal()
+
+      expect(await kanbo()).toBeNull()
+
+      expect(printed[0]!.split('\n')[0]).toBe(`kanbo · weather-station (WST) · ${join(root, 'homebase', 'board.db').replaceAll('\\', '/')}`)
+    })
   })
 
   it('opens the init wizard in a folder with no board, and Ctrl-C leaves it as it was', async () => {

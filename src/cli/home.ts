@@ -1,4 +1,3 @@
-import { homedir } from 'node:os'
 import { isAbsolute, relative } from 'node:path'
 
 import type { Command } from 'commander'
@@ -18,6 +17,7 @@ import { BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE, resolveDbTarget }
 import { findKanboProject } from './doctor'
 import { describeFailure } from './failure'
 import { AGENT_IDS, AGENTS, detectAgents } from './setup/agents'
+import { tildify } from './tildify'
 import type { Ui } from './ui/ui'
 import { CancelledError } from './ui/ui'
 import type { CardView } from './view'
@@ -297,8 +297,7 @@ function describeLocation(target: BoardTarget): string {
   if (fromHere && !fromHere.startsWith('..') && !isAbsolute(fromHere)) {
     return fromHere.replaceAll('\\', '/')
   }
-  const home = homedir()
-  return target.path.startsWith(home) ? `~${target.path.slice(home.length).replaceAll('\\', '/')}` : target.path
+  return tildify(target.path)
 }
 
 /** The header and the lines under it: columns, what waits, the agents. */
