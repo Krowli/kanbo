@@ -1,7 +1,9 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { z } from 'zod'
+
+import { renameWithRetry } from './setup/fs-retry'
 
 /**
  * What ties a project folder to a board.
@@ -168,7 +170,7 @@ export function writeBinding(projectDir: string, binding: KanboBinding): string 
   try {
     writeFileSync(temporaryPath, `${JSON.stringify(BindingSchema.parse(binding), null, 2)}\n`, { mode: BINDING_FILE_MODE })
     chmodSync(temporaryPath, BINDING_FILE_MODE)
-    renameSync(temporaryPath, path)
+    renameWithRetry(temporaryPath, path)
   }
   catch (error) {
     rmSync(temporaryPath, { force: true })

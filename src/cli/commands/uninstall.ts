@@ -1,4 +1,4 @@
-import { existsSync, rmSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 import type { Command } from 'commander'
@@ -9,6 +9,7 @@ import { CliError } from '../output'
 import { confirmPlan } from '../setup/confirm'
 import type { FileChange } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
+import { removeWithRetry } from '../setup/fs-retry'
 import { planInstructionBlockRemoval } from '../setup/instructions'
 import {
   CLAUDE_USER_REMOVE,
@@ -117,7 +118,7 @@ async function uninstall(options: UninstallOptions): Promise<void> {
       actions.push({ path: globalMcpConfigPath('claude'), action: outcome.state, note: outcome.state === 'ran' ? outcome.command : `run this yourself: ${outcome.command} (${outcome.reason})` })
     }
     if (purgeBinding) {
-      rmSync(bindingPath)
+      removeWithRetry(bindingPath)
       actions.push({ path: bindingPath, action: 'deleted', note: 'project binding' })
     }
     if (boardFile) {
@@ -192,7 +193,7 @@ async function purgeBoardFile(path: string): Promise<UninstallAction> {
     return { path, action: 'kept', note: 'board file' }
   }
   for (const file of [path, `${path}-wal`, `${path}-shm`]) {
-    rmSync(file, { force: true })
+    removeWithRetry(file, { force: true })
   }
   return { path, action: 'deleted', note: 'board file' }
 }

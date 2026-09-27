@@ -63,7 +63,7 @@ const HUMAN_ONLY_MESSAGES: Record<HumanOnlyAction, string> = {
 export function createCliActor(): BoardActor {
   return {
     kind: 'external',
-    id: process.env.KANBO_ACTOR_ID?.trim() || userInfo().username,
+    id: process.env.KANBO_ACTOR_ID?.trim() || safeUsername(),
     name: hostname(),
   }
 }
@@ -103,7 +103,34 @@ export function createPlacementActor(): BoardActor {
  * command, `kanbo serve` once when it starts.
  */
 export function createPersonActor(): BoardActor {
-  return { kind: 'user', id: userInfo().username }
+  return { kind: 'user', id: safeUsername() }
+}
+
+/**
+ * The account name this shell runs under, never a crash.
+ *
+ * `os.userInfo()` throws where the account has no entry in the system's user
+ * database — a container started with an arbitrary uid, some Windows service
+ * and domain setups — and a board write should not fail over a name. The
+ * environment's own idea of the user comes next, then `unknown`.
+ */
+export function safeUsername(): string {
+  try {
+    const name = userInfo().username.trim()
+    if (name) {
+      return name
+    }
+  }
+  catch {
+    // No entry for this account; the environment may still know.
+  }
+  for (const variable of ['USER', 'USERNAME', 'LOGNAME']) {
+    const name = process.env[variable]?.trim()
+    if (name) {
+      return name
+    }
+  }
+  return 'unknown'
 }
 
 /**

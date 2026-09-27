@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync } from 'node:fs'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 
 import type { Command } from 'commander'
@@ -20,6 +20,7 @@ import type { CliResult } from '../output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
 import type { FileOutcome } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
+import { renameWithRetry } from '../setup/fs-retry'
 import { INSTRUCTION_BLOCK, planInstructionBlock } from '../setup/instructions'
 import { planCodexMcpServer, planJsonMcpServer } from '../setup/mcp-config'
 import type { McpClient, ProjectInstructionTarget } from '../setup/paths'
@@ -236,7 +237,7 @@ async function createOwnBoardFile(absolutePath: string): Promise<void> {
   const temporaryPath = `${absolutePath}.${process.pid}.tmp`
   try {
     await migrateBoardFileAt(temporaryPath)
-    renameSync(temporaryPath, absolutePath)
+    renameWithRetry(temporaryPath, absolutePath)
   }
   catch (error) {
     // Its WAL siblings too: SQLite removes them on a clean close, and a close

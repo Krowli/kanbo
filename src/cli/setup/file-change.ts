@@ -1,6 +1,8 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 
+import { withFsRetry } from './fs-retry'
+
 /**
  * One file kanbo may write, worked out before anything is written.
  *
@@ -28,6 +30,7 @@ export function applyFileChange(change: FileChange): FileOutcome {
     return { path: change.path, state: 'unchanged' }
   }
   mkdirSync(dirname(change.path), { recursive: true })
-  writeFileSync(change.path, change.next)
+  const next = change.next
+  withFsRetry(() => writeFileSync(change.path, next))
   return { path: change.path, state: 'written' }
 }
