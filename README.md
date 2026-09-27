@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Krowli/kanbo/actions/workflows/ci.yml/badge.svg)](https://github.com/Krowli/kanbo/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/kanbo-cli.svg)](https://www.npmjs.com/package/kanbo-cli)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: PolyForm Noncommercial](https://img.shields.io/badge/license-PolyForm%20Noncommercial-orange.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%5E22.19%20%7C%7C%20%3E%3D24.11-brightgreen.svg)](docs/installation.md)
 
 **A Kanban board your AI agents drive, and you watch.** kanbo is a board that lives next to your code — a SQLite file in the project, or a shared Postgres/Supabase database — with a command line and an MCP server made for coding agents. Agents take cards, move them, write a one-line status at every step, split work into subtasks and link their pull requests; when they need you, they hand the card over and stop. Only a person approves or sends a card back, and kanbo enforces that rather than asking nicely. You follow along in a terminal or on a small board page in your browser.
@@ -77,4 +77,6 @@ Every entry point — the CLI, the MCP server, the HTTP server — calls the sam
 
 ## License
 
-[MIT](LICENSE)
+[PolyForm Noncommercial 1.0.0](LICENSE) — free for personal, research, educational and other noncommercial use. Commercial use — selling it, or building it into a paid product or service — needs a separate license: write to lionmause999@gmail.com.
+
+Versions up to and including 0.2.0 were released under MIT and stay under MIT.
