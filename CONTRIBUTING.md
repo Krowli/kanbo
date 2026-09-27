@@ -50,6 +50,20 @@ The schema is declared twice, once per dialect (`src/sqlite/schema.ts`, `src/pos
 3. Add the new table or column to what `assertBoardSchema` expects if needed, and describe the migration in `drizzle-sqlite/README.md` / `drizzle-postgres/README.md`.
 4. Add an entry to `CHANGELOG.md` saying that users must run `kanbo migrate` (and `kanbo roles apply` for Postgres).
 
+## Releasing
+
+Releases are published by `.github/workflows/release.yml` through npm trusted publishing (OIDC): there is no npm token in the repository or its secrets.
+
+1. Move the `Unreleased` entries of `CHANGELOG.md` under a new `## [x.y.z] — YYYY-MM-DD` heading.
+2. Set `"version"` in `package.json` to the same `x.y.z` and run `npm install --package-lock-only`.
+3. `npm run build && npm run typecheck && npm test`, commit, push `main`, and wait for CI to pass.
+4. Optional rehearsal: run the `release` workflow by hand (Actions → release → Run workflow). A manual run is always a dry run: it checks the version against the changelog, builds, tests, packs and runs `npm publish --dry-run`.
+5. Tag and push: `git tag vx.y.z && git push origin vx.y.z`.
+
+On the tag the workflow checks that the tag, `package.json` and a `CHANGELOG.md` section all name the same version, builds, typechecks, tests, checks the tarball, runs `npm publish --provenance --access public`, and creates (or updates) the GitHub release with that changelog section as its notes and the tarball attached. A version already on the registry is skipped, so a failed run can be re-run.
+
+The trusted publisher is configured once on npmjs.com (package `kanbo-cli` → Settings → Trusted Publisher): GitHub Actions, organization or user `Krowli`, repository `kanbo`, workflow filename `release.yml`, no environment.
+
 ## Pull requests
 
 - Keep a pull request to one change, with tests for new behavior.

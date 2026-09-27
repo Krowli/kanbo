@@ -1,0 +1,151 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  # A published npm version can never be reused, even after an unpublish. A
+  # manual run is always a dry run: the whole path short of `npm publish`,
+  # rehearsable before a tag exists.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: the tag, package.json and the changelog agree
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: check
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          echo "package.json=$version"
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            tag="${GITHUB_REF_NAME#v}"
+            echo "tag=$tag"
+            test "$tag" = "$version" || { echo "::error::tag $tag != package.json $version"; exit 1; }
+          fi
+          grep -q "^## \[$version\]" CHANGELOG.md || { echo "::error::CHANGELOG.md has no [$version] section"; exit 1; }
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Extract the changelog section for this version
+        run: |
+          awk -v v="${{ steps.check.outputs.version }}" '
+            index($0, "## [" v "]") == 1 {f=1; next}
+            f && /^## \[/ {exit}
+            f {print}
+          ' CHANGELOG.md > RELEASE_BODY.md
+          test -s RELEASE_BODY.md || { echo "::error::the changelog section is empty"; exit 1; }
+          cat RELEASE_BODY.md
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: release-body
+          path: RELEASE_BODY.md
+
+  build:
+    name: build, test and pack
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test
+
+      # The tarball is what users install. Look inside it before anything is published.
+      - name: Pack and check the tarball
+        run: |
+          set -euo pipefail
+          npm pack
+          tarball=$(ls kanbo-cli-*.tgz)
+          tar -tzf "$tarball" > contents.txt
+          for f in package/dist/cli.cjs package/dist/lib/index.mjs package/dist/lib/index.d.mts \
+                   package/drizzle-sqlite/meta/_journal.json package/drizzle-postgres/meta/_journal.json; do
+            grep -qx "$f" contents.txt || { echo "::error::$tarball is missing $f"; exit 1; }
+          done
+          test "$(node -p "require('./package.json').bin.kanbo")" = "dist/cli.cjs"
+          wc -l contents.txt
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: tarball
+          path: kanbo-cli-*.tgz
+
+  npm:
+    name: publish to npm
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write          # trusted publishing (OIDC) and provenance: no token anywhere
+    steps:
+      - uses: actions/checkout@v7
+      # Node 24: trusted publishing needs npm >= 11.5.1.
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+      - run: npm ci
+
+      # Published from the directory with no argument, which builds through `prepack`.
+      - name: Publish
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          set -euo pipefail
+          version="${{ needs.verify.outputs.version }}"
+          if npm view "kanbo-cli@$version" version >/dev/null 2>&1; then
+            echo "kanbo-cli@$version is already on the registry; nothing to do"
+            exit 0
+          fi
+          npm publish --provenance --access public
+          # The registry answers before the version is readable; wait for it.
+          for _ in $(seq 1 30); do
+            npm view "kanbo-cli@$version" version >/dev/null 2>&1 && exit 0
+            sleep 10
+          done
+          echo "::warning::published but not yet visible on the registry after five minutes"
+
+      - name: Dry run
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: npm publish --dry-run --access public
+
+  github-release:
+    name: publish the GitHub release
+    needs: [verify, build, npm]
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: release-body
+      - uses: actions/download-artifact@v8
+        with:
+          name: tarball
+          path: .
+      # Create or update, so a re-run after a partial failure still succeeds.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" --notes-file RELEASE_BODY.md
+            gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber kanbo-cli-*.tgz
+          else
+            gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+              --title "$GITHUB_REF_NAME" --notes-file RELEASE_BODY.md kanbo-cli-*.tgz
+          fi
