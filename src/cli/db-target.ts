@@ -45,10 +45,43 @@ export const DATABASE_NOT_FOUND_AGENT_MESSAGE = 'This folder has no kanbo board 
  * `kanbo`) asks by type rather than by the words of the message.
  */
 export class BoardNotFoundError extends CliError {
-  constructor() {
-    super(EXIT_NOT_RESOLVED, isAgentShell() ? DATABASE_NOT_FOUND_AGENT_MESSAGE : DATABASE_NOT_FOUND_MESSAGE)
+  constructor(message = isAgentShell() ? DATABASE_NOT_FOUND_AGENT_MESSAGE : DATABASE_NOT_FOUND_MESSAGE) {
+    super(EXIT_NOT_RESOLVED, message)
     this.name = 'BoardNotFoundError'
   }
+}
+
+/** What a person is told when the board file this project is bound to (or `KANBO_DB_PATH` names) is not there. */
+export function describeMissingBoardFile(path: string): string {
+  return `This project's board file is missing: ${path}. Create a new empty board here: kanbo init --file `
+    + '(the old cards are gone), or restore the file.'
+}
+
+/**
+ * The board file the binding or `KANBO_DB_PATH` names is gone — not a folder
+ * that never had a board. Still "no board here" to a caller that only needs to
+ * know that (the MCP server); bare `kanbo` and `kanbo init` tell the two apart,
+ * because "run kanbo to set one up" is the wrong advice for a board that was
+ * set up and then lost.
+ */
+export class BoardFileMissingError extends BoardNotFoundError {
+  constructor(readonly path: string) {
+    super(describeMissingBoardFile(path))
+    this.name = 'BoardFileMissingError'
+  }
+}
+
+/**
+ * The board file this folder would open with no flag — the one it is bound to,
+ * or else the one `KANBO_DB_PATH` names — when that file is not there; `null`
+ * when it is there, or when a connection string names the board first.
+ */
+export function findMissingBoardFile(cwd: string): string | null {
+  if (resolveDatabaseUrl({ cwd, asAgent: false })) {
+    return null
+  }
+  const path = readBoundDbPath({ cwd }) || readEnvironmentDbPath()
+  return path && !existsSync(path) ? path : null
 }
 
 /** What a caller is told when they name both kinds of board at once. */
@@ -167,7 +200,15 @@ function readBoundDatabaseUrl(input: BoardTargetInput): string | null {
  * invitation to fall back to the real board and write to it by mistake.
  */
 function resolveDbPath(input: BoardTargetInput = {}): string {
-  return requireExisting(input.explicitPath?.trim() || readBoundDbPath(input) || readEnvironmentDbPath())
+  const explicitPath = input.explicitPath?.trim()
+  if (explicitPath) {
+    return requireExisting(explicitPath)
+  }
+  const path = readBoundDbPath(input) || readEnvironmentDbPath()
+  if (path && !existsSync(path)) {
+    throw new BoardFileMissingError(path)
+  }
+  return requireExisting(path)
 }
 
 /**

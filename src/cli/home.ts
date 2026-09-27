@@ -15,7 +15,7 @@ import { checkAgent } from './commands/connect'
 import type { RunningServe } from './commands/serve'
 import { DEFAULT_SERVE_OPTIONS, startServe, waitForInterrupt } from './commands/serve'
 import type { BoardTarget } from './db-target'
-import { BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE, resolveDbTarget } from './db-target'
+import { BoardFileMissingError, BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE, resolveDbTarget } from './db-target'
 import { findKanboProject } from './doctor'
 import { describeFailure } from './failure'
 import { AGENT_IDS, AGENTS, detectAgents } from './setup/agents'
@@ -75,7 +75,19 @@ const INSTRUCTION_BLOCK_PRESENT = new Set(['current', 'outdated', 'legacy', 'edi
 type MenuChoice = 'review' | 'board' | 'serve' | 'card' | 'connect' | 'instructions' | 'columns' | 'doctor' | 'exit'
 
 export async function runBareKanbo(context: BareKanboContext): Promise<void> {
-  const target = findBoardTarget()
+  let target: BoardTarget | null
+  try {
+    target = findBoardTarget()
+  }
+  catch (error) {
+    // The board file this project is bound to is gone: the wizard offers a new
+    // one; with nobody to ask, the message says what to do.
+    if (error instanceof BoardFileMissingError && context.interactive) {
+      await runCommand(context, ['init'])
+      return
+    }
+    throw error
+  }
   if (!context.interactive) {
     console.log(target ? await describePlainly(target) : describeNoBoard())
     return
@@ -93,7 +105,7 @@ function findBoardTarget(): BoardTarget | null {
     return resolveDbTarget({ cwd: process.cwd() })
   }
   catch (error) {
-    if (error instanceof BoardNotFoundError) {
+    if (error instanceof BoardNotFoundError && !(error instanceof BoardFileMissingError)) {
       return null
     }
     throw error

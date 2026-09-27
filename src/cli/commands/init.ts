@@ -344,7 +344,11 @@ function resolveOwnFile(projectDir: string, options: InitOptions): Pick<InitPlan
     throw new CliError(1, FILE_AND_DATABASE_URL_MESSAGE)
   }
 
-  const relativePath = typeof options.file === 'string' && options.file.trim() ? options.file.trim() : DEFAULT_BOARD_FILE_PATH
+  // A bare --file keeps the file this project is already bound to: after the
+  // file went missing, `kanbo init --file` puts a new board where it was.
+  const relativePath = typeof options.file === 'string' && options.file.trim()
+    ? options.file.trim()
+    : readProjectBinding(projectDir)?.dbPath?.trim() || DEFAULT_BOARD_FILE_PATH
   const absolutePath = resolve(projectDir, relativePath)
   const workspace = resolveOwnFileWorkspace(projectDir, options)
   const exists = existsSync(absolutePath)

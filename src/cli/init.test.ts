@@ -563,4 +563,36 @@ describe('kanbo init', () => {
       expect(existsSync(join(projectDir, '.kanbo', 'binding.json'))).toBe(false)
     })
   })
+  describe('when the board file the project is bound to is gone', () => {
+    const missingMessage = (path: string): string =>
+      `This project's board file is missing: ${path}. Create a new empty board here: kanbo init --file (the old cards are gone), or restore the file.`
+
+    it('says so, with the path and both ways on — not "run kanbo"', async () => {
+      await runWithoutHost(['--file', 'boards/team.db'])
+      const file = join(projectDir, 'boards', 'team.db')
+      rmSync(file)
+
+      await expect(runWithoutHost([])).rejects.toMatchObject({ exitCode: 2, message: missingMessage(file) })
+      expect(existsSync(file)).toBe(false)
+    })
+
+    it('says the same about the file KANBO_DB_PATH names', async () => {
+      const file = join(projectDir, 'gone.db')
+      vi.stubEnv('KANBO_DB_PATH', file)
+
+      await expect(runWithoutHost(['--connect', 'none'])).rejects.toMatchObject({ exitCode: 2, message: missingMessage(file) })
+    })
+
+    it('puts a new empty board where the old one was with kanbo init --file, under the same card key', async () => {
+      await runWithoutHost(['--file', 'boards/team.db', '--key', 'TEA'])
+      const file = join(projectDir, 'boards', 'team.db')
+      rmSync(file)
+
+      await runWithoutHost(['--file'])
+
+      expect(existsSync(file)).toBe(true)
+      expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toMatchObject({ dbPath: join('boards', 'team.db'), identifier: 'TEA' })
+      expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(false)
+    })
+  })
 })

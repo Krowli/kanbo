@@ -45,6 +45,9 @@ The `kanbo` a client would start fails before answering. The detail is its first
 **`This folder has no kanbo board yet. Run kanbo to set one up (or kanbo init --yes for the defaults).` (exit 2)**
 No flag (`--db`, `--database-url`), environment variable (`KANBO_DB_PATH`, `KANBO_DATABASE_URL`) or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo` in the project root, or `cd` into the project. In an agent's shell the message ends `Ask a person to run kanbo here.` instead. For an MCP client, check that it starts `kanbo mcp` in the project directory.
 
+**`This project's board file is missing: <path>. Create a new empty board here: kanbo init --file (the old cards are gone), or restore the file.` (exit 2)**
+The project is bound to a board file (`.kanbo/binding.json`), or `KANBO_DB_PATH` names one, and the file is not there — deleted, moved, or on a checkout that never had it (the board file is not in git). Put the file back where the message says, or start again with an empty board: `kanbo init --file` creates it at the same path and keeps the project's card key. In a terminal, `kanbo` and `kanbo init` offer the same: *Create a new empty board at <path>* or *Cancel*.
+
 **`kanbo` prints `This folder has no kanbo board yet.` and `kanbo init --yes` instead of starting the setup**
 `kanbo` asks questions only when it runs in a terminal it can draw in: not when its input or output is piped or redirected, `CI` is set, `TERM=dumb`, or the shell belongs to an agent (`KANBO_ACTOR_KIND=agent`, or a mark such as `CLAUDECODE=1` — see the `actor` finding above). Run it in your own terminal, or run the printed `kanbo init --yes` (add `--connect claude` to connect Claude Code as well).
 

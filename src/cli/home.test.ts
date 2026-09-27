@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 import { PassThrough } from 'node:stream'
@@ -10,6 +10,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { APPROVED_COMMENT } from '../ops/approval'
 import type { PromptDriver } from '../testing/prompt-driver'
 import { createPromptDriver } from '../testing/prompt-driver'
+import { readBinding } from './binding'
 import { openBoardSession } from './command'
 import { registerKanboCommands } from './commands'
 import { createKanboProgram, runKanbo } from './program'
@@ -231,6 +232,59 @@ describe('kanbo with no words', () => {
       expect(await kanbo()).toBeNull()
 
       expect(printed[0]!.split('\n')[0]).toBe(`kanbo · weather-station (WST) · ${join(root, 'homebase', 'board.db').replaceAll('\\', '/')}`)
+    })
+  })
+
+  describe('when the board file is gone', () => {
+    const boardFile = (): string => join(projectDir, '.kanbo', 'board.db')
+
+    it('says what to do with nobody to ask, and exits 2', async () => {
+      await createBoard()
+      rmSync(boardFile())
+      withoutTerminal()
+
+      const outcome = await kanbo()
+
+      expect(outcome).toMatchObject({
+        exitCode: 2,
+        message: `This project's board file is missing: ${boardFile()}. Create a new empty board here: kanbo init --file (the old cards are gone), or restore the file.`,
+      })
+      expect(existsSync(boardFile())).toBe(false)
+    })
+
+    it('offers a new empty board where the old one was, and makes it on a yes', async () => {
+      await createBoard()
+      rmSync(boardFile())
+
+      const running = kanbo()
+      await driver.waitFor(`This project's board file is missing: ${boardFile()}.`)
+      await driver.waitFor('Create a new empty board at .kanbo/board.db (the old cards are gone)')
+      driver.press('enter')
+      for (const question of ['Which columns should the board start with?', 'Which coding agents do you use here?', 'Add a first card?', 'Write these changes?']) {
+        await driver.waitFor(question)
+        driver.press('enter')
+      }
+      const outcome = await running
+
+      expect(outcome).toBeNull()
+      expect(driver.transcript()).not.toContain('Run kanbo to set one up')
+      expect(existsSync(boardFile())).toBe(true)
+      expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toMatchObject({ workspaceId: 'weather-station', identifier: 'WST' })
+    })
+
+    it('writes nothing on Cancel', async () => {
+      await createBoard()
+      rmSync(boardFile())
+      const before = snapshot(projectDir)
+
+      const running = kanbo()
+      await driver.waitFor('What now?')
+      driver.press('down', 'enter')
+      const outcome = await running
+
+      expect(outcome).toBeInstanceOf(CancelledError)
+      expect((outcome as Error).message).toBe('Cancelled — nothing was written.')
+      expect(snapshot(projectDir)).toEqual(before)
     })
   })
 

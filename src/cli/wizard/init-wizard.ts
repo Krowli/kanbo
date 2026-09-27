@@ -18,6 +18,7 @@ import { formatIssueId, readIssuePrefix } from '../../domain/numbering'
 import { normalizeStatusName } from '../../domain/status-name'
 import type { FoundBinding } from '../binding'
 import { findBinding } from '../binding'
+import { findMissingBoardFile } from '../db-target'
 import type { InitOptions } from '../commands/init'
 import { deriveProjectSlug } from '../commands/init'
 import { CliError } from '../output'
@@ -30,6 +31,7 @@ import { describeInitPlan } from '../setup/init-plan'
 import { INSTRUCTION_BLOCK } from '../setup/instructions'
 import { tildify } from '../tildify'
 import type { Ui } from '../ui/ui'
+import { CancelledError } from '../ui/ui'
 
 /**
  * `kanbo init` at a person's terminal: one question at a time, each answered
@@ -84,7 +86,12 @@ export async function runInitWizard(context: InitWizardContext): Promise<InitWiz
 
   say(ui, 'kanbo — set up a board for this project')
   let projectDir: string
-  if (bound) {
+  const missing = findMissingBoardFile(context.cwd)
+  if (missing) {
+    projectDir = bound?.projectDir ?? await askProjectDir(ui, context.cwd)
+    await replaceMissingBoard(ui, missing, projectDir, bound, options)
+  }
+  else if (bound) {
     projectDir = bound.projectDir
     say(ui, describeExistingBoard(bound, context.cwd))
   }
@@ -150,6 +157,40 @@ function describeExistingBoard(bound: FoundBinding, cwd: string): string {
   const cards = prefix ? ` (cards ${formatIssueId(prefix, 1)}, ${formatIssueId(prefix, 2)}, …)` : ''
   const folder = bound.projectDir === resolve(cwd) ? 'This project' : `The project at ${bound.projectDir}`
   return `${folder} already has a board: ${where}${cards}. It stays as it is; this sets up your agents.`
+}
+
+/**
+ * The board file this project is bound to (or `KANBO_DB_PATH` names) is gone.
+ * The one way on from here is a new, empty board — where the old one was when
+ * the project is bound to it — or nothing at all. `--file` already said "a new
+ * one"; the columns are asked, and the card key stays the one it was bound to.
+ */
+async function replaceMissingBoard(ui: Ui, missing: string, projectDir: string, bound: FoundBinding | null, options: InitOptions): Promise<void> {
+  say(ui, `This project's board file is missing: ${missing}.`)
+  if (options.file === undefined) {
+    const boundPath = bound?.binding.dbPath?.trim()
+    const where = boundPath ? resolve(bound!.projectDir, boundPath) : resolve(projectDir, DEFAULT_BOARD_FILE_PATH)
+    const choice = await ui.select<'create' | 'cancel'>({
+      message: 'What now?',
+      options: [
+        { value: 'create', label: `Create a new empty board at ${shortPath(where, projectDir)} (the old cards are gone)` },
+        { value: 'cancel', label: 'Cancel' },
+      ],
+    })
+    if (choice === 'cancel') {
+      throw new CancelledError()
+    }
+    options.file = true
+  }
+  if (options.columns === undefined) {
+    options.columns = await askColumns(ui)
+  }
+}
+
+/** A path inside the project from its root, any other one from home when it can be. */
+function shortPath(path: string, projectDir: string): string {
+  const inside = relative(projectDir, path)
+  return inside && !inside.startsWith('..') && !/^[a-z]:/i.test(inside) ? inside.replaceAll('\\', '/') : tildify(path)
 }
 
 /** (1) The repository's root, when this folder is somewhere inside one. */
