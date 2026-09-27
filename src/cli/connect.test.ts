@@ -319,6 +319,18 @@ describe('kanbo connect', () => {
       expect(checked).toContain(`Cursor: ${join(home, '.cursor', 'mcp.json')} has your own kanbo entry — left as is.`)
     })
 
+    it('knows the entry this very kanbo wrote, wherever it runs from, and reports it unchanged', async () => {
+      onPlatform('win32')
+      await connect('cursor', '--global', '--no-instructions', '--yes')
+      const before = read(home, '.cursor', 'mcp.json')
+
+      const printed = await connect('cursor', '--global', '--no-instructions', '--yes')
+
+      expect(read(home, '.cursor', 'mcp.json')).toBe(before)
+      expect(printed).toContain(`Cursor: ${join(home, '.cursor', 'mcp.json')} (unchanged)`)
+      expect(printed).not.toContain('your own kanbo entry')
+    })
+
     it('on Windows rewrites its own stale bare entry and keeps the person\'s other fields', async () => {
       mkdirSync(join(home, '.cursor'))
       writeFileSync(join(home, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } } }))

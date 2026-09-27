@@ -156,7 +156,9 @@ export async function planConnect(
     planned.add(target.path)
     const launch = mcpLaunchSpec({ scope, platform: context.platform })
     const entry = readMcpEntry(target)
-    if (entry !== undefined && !isOwnMcpEntry(entry)) {
+    // What this very kanbo would write is a shape kanbo writes, wherever it runs from.
+    const own = entry !== undefined && isKanboEntry(entry, scope, context.platform)
+    if (entry !== undefined && !own) {
       plan.notes.push(ownMcpEntryNote(AGENTS[agent].label, displayPath(plan, target.path)))
       continue
     }
@@ -235,7 +237,7 @@ export async function planDisconnect(
     }
     const target = AGENTS[agent].mcpTarget(scope, context.projectDir)
     const entry = readMcpEntry(target)
-    const remove = entry !== undefined && (isOwnMcpEntry(entry) || await confirmOwnEntryRemoval(AGENTS[agent].label, displayPath(plan, target.path), asking, plan))
+    const remove = entry !== undefined && (isKanboEntry(entry, scope) || await confirmOwnEntryRemoval(AGENTS[agent].label, displayPath(plan, target.path), asking, plan))
     if (target.format === 'claude-cli') {
       plan.items.push({ kind: 'claude-cli', agent: 'claude', scope: 'user', path: target.path, argvs: remove ? [CLAUDE_USER_REMOVE] : [] })
       continue
@@ -247,6 +249,22 @@ export async function planDisconnect(
   }
   plan.notes = [...new Set(plan.notes)]
   return plan
+}
+
+/**
+ * Is the entry kanbo's own: one of the shapes kanbo writes (`isOwnMcpEntry`),
+ * or exactly what this very kanbo registers in this scope — wherever it runs
+ * from — and nothing else?
+ */
+export function isKanboEntry(entry: McpEntry, scope: McpScope, platform?: NodeJS.Platform): boolean {
+  if (isOwnMcpEntry(entry)) {
+    return true
+  }
+  const launch = mcpLaunchSpec({ scope, platform })
+  return entry.otherFields.length === 0
+    && entry.command === launch.command
+    && entry.args.length === launch.args.length
+    && entry.args.every((arg, index) => arg === launch.args[index])
 }
 
 /** Remove a `kanbo` MCP entry the person set up themselves? Only on `--yes`, or a yes at a terminal (default no). */
@@ -283,7 +301,7 @@ export function readMcpState(agent: AgentId, scope: McpScope, projectDir: string
   if (entry === undefined) {
     return 'missing'
   }
-  if (!isOwnMcpEntry(entry)) {
+  if (!isKanboEntry(entry, scope, platform)) {
     return 'own'
   }
   return isStaleMcpEntry(entry, scope, platform) ? 'stale' : 'ok'

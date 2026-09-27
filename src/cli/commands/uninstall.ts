@@ -11,11 +11,10 @@ import { AGENT_IDS, AGENTS, instructionPaths } from '../setup/agents'
 import type { FileChange } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
 import { removeWithRetry } from '../setup/fs-retry'
-import { confirmOwnEntryRemoval, readMcpEntry } from '../setup/connect-plan'
+import { confirmOwnEntryRemoval, isKanboEntry, readMcpEntry } from '../setup/connect-plan'
 import { planInstructionBlockRemovalAsking } from '../setup/instructions'
 import {
   CLAUDE_USER_REMOVE,
-  isOwnMcpEntry,
   planCodexMcpServerRemoval,
   planJsonMcpServerRemoval,
   readJsonMcpEntry,
@@ -90,7 +89,7 @@ async function uninstall(options: UninstallOptions): Promise<void> {
     ...(withGlobal ? await planEdits('user', process.cwd(), options, notes) : []),
   ].filter(edit => edit.change.next !== null)
   const claudeEntry = withGlobal ? readJsonMcpEntry(globalMcpConfigPath('claude')) : undefined
-  const claudeUser = claudeEntry !== undefined && (isOwnMcpEntry(claudeEntry)
+  const claudeUser = claudeEntry !== undefined && (isKanboEntry(claudeEntry, 'user')
     || await confirmOwnEntryRemoval(AGENTS.claude.label, globalMcpConfigPath('claude'), options, { notes }))
   const bindingPath = projectRoot && options.purge ? join(projectRoot, BINDING_FILE_PATH) : null
   const purgeBinding = bindingPath !== null && existsSync(bindingPath)
@@ -152,7 +151,7 @@ async function planEdits(scope: McpScope, root: string, options: UninstallOption
       continue
     }
     const entry = readMcpEntry(target)
-    if (entry === undefined || (!isOwnMcpEntry(entry) && !await confirmOwnEntryRemoval(AGENTS[agent].label, target.path, options, { notes }))) {
+    if (entry === undefined || (!isKanboEntry(entry, scope) && !await confirmOwnEntryRemoval(AGENTS[agent].label, target.path, options, { notes }))) {
       continue
     }
     const change = target.format === 'toml' ? planCodexMcpServerRemoval(target.path) : planJsonMcpServerRemoval(target.path)
