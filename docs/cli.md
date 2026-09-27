@@ -32,7 +32,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 
 | Command | What it does |
 | --- | --- |
-| `kanbo` | Where to start: the init wizard in a folder with no board, the home screen in one with a board, a short hint with nobody to ask. Always exits `0`. |
+| `kanbo` | Where to start: the init wizard in a folder with no board, the home screen in one with a board, a short hint with nobody to ask. Exits `0` after the hint, and when you leave the home screen (Exit, or Ctrl-C at the menu); in the wizard, Ctrl-C at any question or No at the last one ("Write these changes?") exits `1` with nothing written. |
 | `kanbo init` | Set up a board for this project and connect its agents — a wizard in a terminal, defaults with `--yes`. With `--global`, set up your own agent tools for every project instead. |
 | `kanbo connect [agents...]` | Connect your agents (`claude`, `codex`, `cursor`, `gemini`, or `all`) to kanbo: the kanbo section in their instructions and the board's MCP server. `--check` shows what is connected, `--remove` takes it out. Alias `kanbo setup`. |
 | `kanbo instructions [kind]` | Print the text to give an agent: `agent` (default, the full rules), `short`, `global`, `orchestrator`, `mcp` or `board`. `--copy` also puts it on the clipboard. No board needed except for `board`. |

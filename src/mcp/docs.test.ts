@@ -127,6 +127,10 @@ describe('the reference docs', () => {
     for (const line of [...NO_BOARD_HINT, NO_BOARD_AGENT_FIRST_LINE]) {
       expect(cli).toContain(line)
     }
+    // Not "always 0": leaving the wizard without writing is exit 1.
+    const row = cli.split('\n').find(line => line.startsWith('| `kanbo` |'))!
+    expect(row).toContain('Exits `0` after the hint, and when you leave the home screen (Exit, or Ctrl-C at the menu)')
+    expect(row).toContain('in the wizard, Ctrl-C at any question or No at the last one ("Write these changes?") exits `1`')
   })
 })
 
