@@ -26,6 +26,18 @@ npm link             # optional: `kanbo` on your PATH, pointing at this checkout
 
 Tests need no external services. Board-file tests use real SQLite files in a temporary directory; Postgres tests use [PGlite](https://pglite.dev), an in-process Postgres, so no database server is required. Some tests run the built output, so run `npm run build` before `npm test`.
 
+### The smoke test
+
+`node scripts/smoke.mjs` checks what users install. It packs this checkout (`npm pack`, which builds first), installs the tarball globally into a temporary prefix, and drives the installed `kanbo` through a new git project: `--version`, bare `kanbo` without a terminal, `init --yes --columns simple --key SMK`, `prime`, a card and `ready`, `connect claude --project --yes`, an MCP handshake started from the written registrations (the project's `.mcp.json` everywhere but Windows, and Codex's user-scope entry everywhere), `serve` answering over HTTP, `doctor --json` with no failure, `instructions short` against the `CLAUDE.md` block, and `uninstall --yes`. `HOME`, `USERPROFILE`, `CODEX_HOME` and `CLAUDE_CONFIG_DIR` point into the temporary folder, so your own settings are never touched. It prints a step log and exits non-zero naming the step that failed.
+
+```bash
+node scripts/smoke.mjs                          # pack and check this checkout
+node scripts/smoke.mjs --tarball kanbo-cli-x.y.z.tgz   # check a tarball packed already
+node scripts/smoke.mjs --keep                   # keep the temporary folder to look at
+```
+
+CI runs it on every job after the tests, and the release workflow runs it on the tarball before publishing.
+
 Every prompt goes through `src/cli/ui/ui.ts`; a test answers one with `src/testing/prompt-driver.ts` (fake terminal streams and key presses, no pty). A test that needs a program on `PATH` writes it with `src/testing/fake-bin.ts`, which works on Windows too.
 
 ## Layout
@@ -62,14 +74,14 @@ Releases are published by `.github/workflows/release.yml` through npm trusted pu
 4. Optional rehearsal: run the `release` workflow by hand (Actions → release → Run workflow). A manual run is always a dry run: it checks the version against the changelog, builds, tests, packs and runs `npm publish --dry-run`.
 5. Tag and push: `git tag vx.y.z && git push origin vx.y.z`.
 
-On the tag the workflow checks that the tag, `package.json` and a `CHANGELOG.md` section all name the same version, builds, typechecks, tests, checks the tarball, runs `npm publish --provenance --access public`, and creates (or updates) the GitHub release with that changelog section as its notes and the tarball attached. A version already on the registry is skipped, so a failed run can be re-run.
+On the tag the workflow checks that the tag, `package.json` and a `CHANGELOG.md` section all name the same version, builds, typechecks, tests, checks the tarball, runs the smoke test on it, runs `npm publish --provenance --access public`, and creates (or updates) the GitHub release with that changelog section as its notes and the tarball attached. A version already on the registry is skipped, so a failed run can be re-run.
 
 The trusted publisher is configured once on npmjs.com (package `kanbo-cli` → Settings → Trusted Publisher): GitHub Actions, organization or user `Krowli`, repository `kanbo`, workflow filename `release.yml`, no environment.
 
 ## Pull requests
 
 - Keep a pull request to one change, with tests for new behavior.
-- `npm run build && npm test && npm run typecheck` must pass; CI runs the same on Linux, macOS and Windows (not yet required to pass), Node 22 and 24.
+- `npm run build && npm test && npm run typecheck` must pass; CI runs the same, and the smoke test, on Linux, macOS and Windows, Node 22 and 24; arm64 Linux and Windows and Alpine run too, not yet required to pass.
 - Update `docs/` when a command, flag, tool or route changes: `src/mcp/docs.test.ts` fails when a command is missing from `docs/cli.md` or a tool from `docs/mcp.md`.
 - Add a line to the `Unreleased` section of `CHANGELOG.md` for anything a user would notice.
 

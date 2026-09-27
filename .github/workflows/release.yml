@@ -77,6 +77,11 @@ jobs:
           test "$(node -p "require('./package.json').bin.kanbo")" = "dist/cli.cjs"
           wc -l contents.txt
 
+      # Install that very tarball globally into a temporary prefix and drive it
+      # through a new project before anything is published.
+      - name: Smoke-test the tarball
+        run: node scripts/smoke.mjs --tarball "$(ls kanbo-cli-*.tgz)"
+
       - uses: actions/upload-artifact@v7
         with:
           name: tarball

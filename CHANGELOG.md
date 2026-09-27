@@ -22,6 +22,7 @@ These change what the column operations of `createBoardOps(...)` do. Signatures 
 - `kanbo doctor --fix [--yes]`: fixes what is kanbo's own — an instruction block from an older kanbo, kanbo's own MCP entry whose Node or script moved (the Windows form), a board with no columns (Standard columns), a board file a migration behind (`kanbo migrate`) — after one plan and one question (default Yes), then checks again. Never deletes anything; a block you edited and an MCP entry of your own are left alone. Without a terminal and without `--yes` it prints the plan and `Run kanbo doctor --fix --yes to apply.`
 - `kanbo doctor` checks: `columns` (a board with no columns), `install` (kanbo running from npx's cache), `update` (a newer kanbo, status `info`). `--json` findings carry `fixable`; `status` can be `info`. Fix texts that `--fix` covers name `kanbo doctor --fix` first.
 - `removeColumn` returns `unmetRules` for moved cards that entered a column without meeting its entry rules; `kanbo columns remove` prints the same warning as `kanbo card move`. Moved cards keep `waitingFor`, as a moved card does.
+- `scripts/smoke.mjs`: an end-to-end check of the packed tarball installed with `npm install -g` — board, card, agent connection, MCP handshake from the written registrations, `serve`, `doctor`, `uninstall`. CI runs it on Linux, macOS and Windows with Node 22 and 24 (and, not yet required, on arm64 Linux and Windows and on Alpine); the release workflow runs it before publishing.
 
 ### Changed
 
