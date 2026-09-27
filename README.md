@@ -16,6 +16,7 @@
 - **Storage you choose.** A board file in the project (`.kanbo/board.db`), or an external Postgres database such as Supabase shared by a team, with `kanban_person` / `kanban_agent` roles.
 - **MCP alone is enough to start.** `kanbo mcp` sends the board's basic rules as MCP server instructions when a client connects, so an agent needs no instruction file for the basics.
 - **One-command project setup.** `kanbo init` binds the project, writes an instruction block into `CLAUDE.md` or `AGENTS.md`, and registers the MCP server with Claude Code, Codex or Cursor.
+- **The instructions without a trip to GitHub.** `kanbo instructions` prints the text to give an agent (`--copy` puts it on the clipboard); `kanbo instructions orchestrator` prints the orchestrator file.
 - **Board over HTTP.** `kanbo serve` answers a JSON API and serves a board page on `http://127.0.0.1:4318`, loopback-only and token-guarded.
 - **Machine-readable capabilities.** `kanbo capabilities --json` describes every tool, command, rule and limit for an orchestrator to read.
 

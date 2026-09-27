@@ -34,6 +34,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | --- | --- |
 | `kanbo init` | Bind this project to a board, and tell its agents about it. With `--global`, set up your own agent tools for every project instead. |
 | `kanbo connect [agents...]` | Connect your agents (`claude`, `codex`, `cursor`, `gemini`, or `all`) to kanbo: the kanbo section in their instructions and the board's MCP server. `--check` shows what is connected, `--remove` takes it out. Alias `kanbo setup`. |
+| `kanbo instructions [kind]` | Print the text to give an agent: `agent` (default, the full rules), `short`, `global`, `orchestrator`, `mcp` or `board`. `--copy` also puts it on the clipboard. No board needed except for `board`. |
 | `kanbo doctor` | Check this install, this project's binding and board, instruction blocks and MCP registrations. |
 | `kanbo uninstall` | Remove what `kanbo init` wrote: instruction blocks and `kanbo` MCP entries. Boards stay unless `--purge`. |
 | `kanbo capabilities` | The board's tools, commands, rules and limits — machine-readable, no board needed. |
@@ -147,6 +148,24 @@ With no agents, in a terminal, `connect` asks which agents you use (the ones fou
 A `kanbo` MCP entry of kanbo's own that no longer starts — a full path to a Node or script that is gone, or on Windows a bare `kanbo` in your own configuration — is rewritten. Any other `kanbo` entry is yours and left alone. A block you edited is replaced only when you answer yes in a terminal.
 
 `--remove` takes the block out of `AGENTS.md` only when no other agent that reads it (Codex, Cursor) is still connected, that is, still has a `kanbo` MCP entry.
+
+## `kanbo instructions`
+
+`kanbo instructions [kind] [--copy] [--markers]`. The text goes to stdout and nothing else does, so `kanbo instructions >> AGENTS.md` writes exactly the text; in a terminal, a line before and after it on stderr says what to do with it.
+
+| Kind | Text |
+| --- | --- |
+| `agent` (default) | The full rules for an agent working the board from a shell. |
+| `short` | The short kanbo section `kanbo connect` writes into a project's `CLAUDE.md` or `AGENTS.md`. |
+| `global` | The section for your own instruction file, for every project. |
+| `orchestrator` | The orchestrator instruction file from [Orchestrator examples](orchestrator.md). |
+| `mcp` | What `kanbo mcp` tells a client when it connects. |
+| `board` | This board's columns and rules, and the commands — what `kanbo prime` prints. Needs a board (exit `2` otherwise). |
+
+| Option | Meaning |
+| --- | --- |
+| `--copy` | Also put the text on the clipboard: `pbcopy` on macOS, `clip.exe` on Windows and WSL, `wl-copy` on Wayland, `xclip` or `xsel` on X11, and over SSH without any of them the OSC 52 escape to your terminal. Without a clipboard it says so; the text is on the screen to select. |
+| `--markers` | Wrap the text in the `<!-- KANBO_START … -->` / `<!-- KANBO_END -->` markers, as kanbo writes it into a file. |
 
 ## `kanbo doctor`
 

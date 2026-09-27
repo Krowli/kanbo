@@ -7,6 +7,7 @@ import { registerColumnsCommands } from './columns'
 import { registerConnectCommand } from './connect'
 import { registerDoctorCommand } from './doctor'
 import { registerInitCommand } from './init'
+import { registerInstructionsCommand } from './instructions'
 import { registerMcpCommand } from './mcp'
 import { registerMigrateCommand } from './migrate'
 import { registerPrimeCommand } from './prime'
@@ -31,6 +32,7 @@ import { registerUninstallCommand } from './uninstall'
 export function registerKanboCommands(program: Command): void {
   registerInitCommand(program)
   registerConnectCommand(program)
+  registerInstructionsCommand(program)
   registerDoctorCommand(program)
   registerUninstallCommand(program)
   registerCapabilitiesCommand(program)

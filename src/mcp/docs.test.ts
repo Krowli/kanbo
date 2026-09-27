@@ -20,6 +20,7 @@ import { Command } from 'commander'
 import { describe, expect, it } from 'vitest'
 
 import { registerKanboCommands } from '../cli/commands'
+import { ORCHESTRATOR_GUIDE } from '../cli/setup/orchestrator-guide'
 import { KANBO_TOOL_NAMES } from './tool-names'
 
 const DOCS_DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs')
@@ -116,5 +117,12 @@ describe('the reference docs', () => {
     // not.
     const row = documentedCommands.some(spelling => spelling === path || spelling.startsWith(`${path} `))
     expect(row, `kanbo ${path} has no row in the docs/cli.md command table`).toBe(true)
+  })
+})
+
+describe('docs/orchestrator.md', () => {
+  it('shows the orchestrator instruction file word for word, as `kanbo instructions orchestrator` prints it', () => {
+    const doc = readFileSync(join(DOCS_DIRECTORY, 'orchestrator.md'), 'utf8').replace(/\r\n/g, '\n')
+    expect(doc).toContain(`\`\`\`markdown\n${ORCHESTRATOR_GUIDE}\n\`\`\`\n`)
   })
 })

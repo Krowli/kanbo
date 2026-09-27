@@ -6,7 +6,7 @@ Every example assumes the project was set up with `kanbo init` (see [agents](age
 
 ## An orchestrator instruction file
 
-Use it as the body of a Claude Code subagent, a Codex `AGENTS.md` section, a Cursor rule, or the prompt of your own script.
+Use it as the body of a Claude Code subagent, a Codex `AGENTS.md` section, a Cursor rule, or the prompt of your own script. `kanbo instructions orchestrator` prints it (`--copy` puts it on the clipboard).
 
 ```markdown
 # Orchestrator

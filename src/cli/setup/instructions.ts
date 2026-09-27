@@ -113,7 +113,8 @@ export const COMMAND_SHEET = [
 /** How to take work and who approves it — said by both blocks after their first sentence. */
 const POINTER_TAIL = `Take work with \`${COMMAND.ready}\`. ${PERSON_ONLY_RULE}`
 
-const PROJECT_BODY = [
+/** The body of the project block: what `kanbo instructions short` prints. */
+export const PROJECT_BODY = [
   '## Kanbo board',
   '',
   'This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime`'
@@ -121,7 +122,8 @@ const PROJECT_BODY = [
   POINTER_TAIL,
 ].join('\n')
 
-const GLOBAL_BODY = [
+/** The body of the global block: what `kanbo instructions global` prints. */
+export const GLOBAL_BODY = [
   '## Kanbo boards',
   '',
   'In a project with a `.kanbo/` folder, before starting a task, run `kanbo prime`'
