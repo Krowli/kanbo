@@ -11,7 +11,7 @@ import { defineConfig } from 'tsdown'
  * dependency (`drizzle-orm`, `postgres`, `better-sqlite3`, `zod`, `commander`,
  * `@modelcontextprotocol/sdk`, `@clack/prompts`, `picocolors`) stays an
  * `import`/`require` in the output, which is tsdown's default for anything
- * listed under `dependencies` or `peerDependencies` — a consumer installs this
+ * listed under `dependencies`, `optionalDependencies` or `peerDependencies` — a consumer installs this
  * package the ordinary way and gets its own copy of each, rather than a second
  * one baked into ours. `src/testing/` is not an entry point: it pulls in
  * `@electric-sql/pglite`, a development dependency of this package's own

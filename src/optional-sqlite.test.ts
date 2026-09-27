@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -7,7 +7,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 /**
- * `better-sqlite3` is an optional peer dependency, and this is what says so
+ * `better-sqlite3` is an optional dependency, and this is what says so
  * honestly rather than in a `package.json` field nobody executes.
  *
  * The native module is *not* uninstalled to prove it — it is a devDependency of
@@ -16,8 +16,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
  * patch for CJS, which together cover both halves of the built output. What
  * then has to hold is that `kanbo capabilities --json` still answers and every
  * built entry point still imports: a Postgres-only or capabilities-only install
- * carries no native module, and npm does not install an optional peer on its
- * own, so this is the ordinary new install rather than an edge (finding A1).
+ * carries no native module, and so does an install where npm could not build
+ * it — an optional dependency that fails is left out, not an error.
  *
  * It runs against `dist`, because the defect it guards was invisible in source:
  * the eager `import Client from "better-sqlite3"` inside
@@ -106,7 +106,7 @@ describe.skipIf(!built)('the library and the binary without better-sqlite3', () 
     const printed = withoutBetterSqlite3([
       '--input-type=module',
       '-e',
-      `const loaded = await import(${JSON.stringify(join(dist, 'lib', `${entry}.mjs`))}); console.log(Object.keys(loaded).length > 0)`,
+      `const loaded = await import(${JSON.stringify(pathToFileURL(join(dist, 'lib', `${entry}.mjs`)).href)}); console.log(Object.keys(loaded).length > 0)`,
     ])
 
     expect(printed.trim()).toBe('true')
@@ -126,10 +126,21 @@ describe.skipIf(!built)('the library and the binary without better-sqlite3', () 
     const attempt = (): string => withoutBetterSqlite3([
       '--input-type=module',
       '-e',
-      `const { openBoardDatabase } = await import(${JSON.stringify(join(dist, 'lib', 'sqlite', 'index.mjs'))})\n`
+      `const { openBoardDatabase } = await import(${JSON.stringify(pathToFileURL(join(dist, 'lib', 'sqlite', 'index.mjs')).href)})\n`
       + `await openBoardDatabase(${JSON.stringify(join(hideDir, 'board.db'))})`,
     ])
 
-    expect(attempt).toThrowError(/Install better-sqlite3 to use a board file/)
+    expect(attempt).toThrowError(`Could not load better-sqlite3, which kanbo opens board files with, on Node ${process.version} (${process.platform}-${process.arch}): Cannot find module better-sqlite3`)
+    expect(attempt).toThrowError('Reinstall kanbo with npm install -g kanbo-cli')
+  })
+})
+
+describe('how better-sqlite3 is declared', () => {
+  it('is an optional dependency, so npm install -g kanbo-cli brings it along, and not a peer any more', () => {
+    const manifest = JSON.parse(readFileSync(join(packageRoot, 'package.json'), 'utf8'))
+
+    expect(manifest.optionalDependencies['better-sqlite3']).toBe('^13.0.3')
+    expect(manifest.peerDependencies['better-sqlite3']).toBeUndefined()
+    expect(manifest.peerDependenciesMeta['@types/better-sqlite3']).toEqual({ optional: true })
   })
 })

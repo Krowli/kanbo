@@ -1,3 +1,5 @@
+import './check-node'
+
 import { Command } from 'commander'
 import pc from 'picocolors'
 

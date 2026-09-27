@@ -3,19 +3,17 @@
 ## Requirements
 
 - **Node.js** `^22.19.0` or `>=24.11.0` (the `engines` field of `package.json`).
-- **`better-sqlite3`** for board files. It is an *optional peer dependency*: kanbo loads it only when a SQLite board file is actually opened. A Postgres-only setup, `kanbo capabilities` and `kanbo --help` work without it. Opening a board file without it fails with `Install better-sqlite3 to use a board file`.
+- **`better-sqlite3`** for board files. It is an *optional dependency*: `npm install -g kanbo-cli` brings it along, with a prebuilt binary for macOS, Linux (glibc and musl) and Windows on x64 and arm64. kanbo loads it only when a board file is actually opened, so a Postgres-only setup, `kanbo capabilities` and `kanbo --help` work even where it could not be installed. Opening a board file without it fails with `Could not load better-sqlite3, which kanbo opens board files with, …`.
 - For a shared board: a **Postgres** database you can create tables and roles in (Supabase works). See [storage](storage.md).
 
-`better-sqlite3` is a native module. npm downloads a prebuilt binary for common platforms and Node versions; otherwise it compiles from source, which needs Python and a C++ toolchain (Xcode Command Line Tools on macOS, `build-essential` on Debian/Ubuntu, the "Desktop development with C++" workload on Windows).
+An older Node is refused before anything else runs: `kanbo needs Node ^22.19.0 || >=24.11.0; this is Node …`.
 
 ## npm, globally
 
 ```bash
-npm install -g kanbo-cli better-sqlite3
+npm install -g kanbo-cli
 kanbo --version
 ```
-
-Install `better-sqlite3` next to kanbo so the binary can find it. Leave it out if you only use Postgres boards.
 
 > The npm package is named `kanbo-cli`; the command it installs is `kanbo`.
 

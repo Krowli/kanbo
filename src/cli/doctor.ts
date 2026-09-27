@@ -190,7 +190,7 @@ async function checkSqlite(): Promise<DoctorFinding> {
       check: 'sqlite',
       status: 'fail',
       detail: `better-sqlite3 cannot be loaded: ${describeFailure(error).message}`,
-      fix: 'Install better-sqlite3 next to kanbo (npm install -g better-sqlite3 for a global kanbo).',
+      fix: 'Reinstall kanbo: npm install -g kanbo-cli',
     }
   }
 }

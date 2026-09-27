@@ -23,22 +23,32 @@ export interface BoardDatabase {
   close: () => void
 }
 
-/** What a caller is told when the native module a board file needs is not installed. */
-const BETTER_SQLITE3_MISSING_MESSAGE = 'Install better-sqlite3 to use a board file'
+/**
+ * What a caller is told when the native module a board file needs does not
+ * load: which Node, system and processor it was tried on — a prebuilt module
+ * exists for most, not all — what the loader said, and how to get it back.
+ */
+export function betterSqlite3MissingMessage(cause: unknown): string {
+  const said = cause instanceof Error ? cause.message.split('\n')[0] : String(cause)
+  return `Could not load better-sqlite3, which kanbo opens board files with, on Node ${process.version} `
+    + `(${process.platform}-${process.arch}): ${said}. Reinstall kanbo with npm install -g kanbo-cli, which brings it along; `
+    + 'a program that uses kanbo as a library installs better-sqlite3 itself.'
+}
 
 /**
- * `better-sqlite3` is an optional peer dependency (ruling 5): a Postgres-only
- * or capabilities-only install carries no native module, and importing
- * `kanbo/sqlite` for a type or for `runSqliteTransaction` should not
- * demand one either. So the require happens here, the one place a board file
- * is actually opened, rather than at the top of this module.
+ * `better-sqlite3` is an optional dependency (ruling 5): an install where it
+ * could not be built carries no native module, and a Postgres-only or
+ * capabilities-only use — or importing `kanbo/sqlite` for a type or for
+ * `runSqliteTransaction` — should not demand one. So the require happens here,
+ * the one place a board file is actually opened, rather than at the top of
+ * this module.
  */
 function loadBetterSqlite3(): new (path: string, options?: SqliteConnectionOptions) => SqliteConnection {
   try {
     return require('better-sqlite3')
   }
   catch (error) {
-    throw new Error(BETTER_SQLITE3_MISSING_MESSAGE, { cause: error })
+    throw new Error(betterSqlite3MissingMessage(error), { cause: error })
   }
 }
 
@@ -52,7 +62,7 @@ function loadBetterSqlite3(): new (path: string, options?: SqliteConnectionOptio
  * this module, `kanbo capabilities` and `kanbo/mcp` included, and the
  * friendly message above becomes unreachable. A dynamic import keeps the whole
  * chain behind the one call that actually opens a file, which is what makes the
- * optional peer honest. `createRequire` would be the smaller change and is the
+ * optional dependency honest. `createRequire` would be the smaller change and is the
  * wrong one: it would load drizzle's CJS copy beside the ESM one this package
  * already holds, and it would resolve from `node_modules`, which the packaged
  * `dist/cli.cjs` deliberately does not have beside it.

@@ -31,12 +31,11 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      # npm 10 (Node 22's) runs `node-gyp rebuild` for better-sqlite3 on `npm ci`:
-      # the lockfile does not record its "gypfile": false, and Windows runners
-      # have no C++ toolchain. npm 11 reads it; a plain `npm install` is not affected.
-      - if: matrix.node == 22 && runner.os == 'Windows'
-        run: npm install -g npm@11
-      - run: npm ci
+      # Installing from the lockfile, npm runs `node-gyp rebuild` for
+      # better-sqlite3 (it misses its "gypfile": false), and Windows runners have
+      # no C++ toolchain. No dependency needs its scripts: better-sqlite3 ships
+      # prebuilt binaries. A user's `npm install -g kanbo-cli` is not affected.
+      - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run typecheck
       - run: npm test

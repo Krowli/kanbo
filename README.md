@@ -24,7 +24,7 @@
 Requires Node.js `^22.19.0` or `>=24.11.0`. See [installation](docs/installation.md) for other ways to install.
 
 ```bash
-npm install -g kanbo-cli better-sqlite3
+npm install -g kanbo-cli
 
 cd your-project
 kanbo init --file --identifier APP --instructions claude --mcp claude

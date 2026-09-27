@@ -11,7 +11,7 @@ Two installs; agents and MCP clients start the first one. Remove the other (`npm
 The project's binding is gone or damaged. Run `kanbo init --file` (or `kanbo init --database-url …` with the same flags as before) in the project root.
 
 **`sqlite` fail: `better-sqlite3 cannot be loaded`**
-See `Install better-sqlite3 to use a board file` below.
+See `Could not load better-sqlite3 …` below.
 
 **`board` fail: `Board file is older than this build. Run kanbo migrate.`**
 Run `kanbo migrate` in the project.
@@ -33,11 +33,11 @@ The `kanbo` a client would start fails before answering. The detail is its first
 **`No board found. Run "kanbo init --file" in the project, pass --db or --database-url, or set KANBO_DB_PATH or KANBO_DATABASE_URL.` (exit 2)**
 No flag, environment variable or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo init --file` in the project root, or `cd` into the project. For an MCP client, check that it starts `kanbo mcp` in the project directory.
 
-**`Install better-sqlite3 to use a board file`**
-The native module is not installed where kanbo can find it. Install it next to kanbo: `npm install -g better-sqlite3` for a global kanbo, `npm install -D better-sqlite3` in a project.
+**`Could not load better-sqlite3, which kanbo opens board files with, on Node … (<platform>-<arch>): …`**
+The native module kanbo reads board files with is missing or does not load on this Node, system and processor. Reinstall kanbo, which brings it along: `npm install -g kanbo-cli`. A program that uses kanbo as a library installs `better-sqlite3` itself (`npm install better-sqlite3`).
 
-**`better-sqlite3` fails to build**
-There was no prebuilt binary for your platform and Node version, and the compiler toolchain is missing. Install Python and a C++ toolchain (Xcode Command Line Tools, `build-essential`, or Visual Studio's C++ workload) and reinstall. After switching Node versions, run `npm rebuild better-sqlite3`.
+**`kanbo needs Node ^22.19.0 || >=24.11.0; this is Node …`**
+Install a current Node from https://nodejs.org (or with your version manager) and run kanbo again.
 
 **`… is not a board database this tool can open.` (exit 2)**
 `--db` or the binding points at a file that is not a SQLite database.
