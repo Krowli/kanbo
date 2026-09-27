@@ -93,7 +93,8 @@ export interface BrowserLauncher {
  * Windows gets `rundll32 url.dll,FileProtocolHandler`, which takes the link as
  * one argument: `cmd /c start` would read the `&` and `^` in it as its own.
  * WSL is Linux with Windows' browser: `wslview` when it is installed, else
- * Windows' own `cmd.exe`.
+ * Windows' own `explorer.exe`, which takes the link as one argument too — no
+ * shell between them to read its `&` (`cmd.exe /c start` would).
  */
 export function chooseBrowserLauncher(url: string, environment: BrowserEnvironment = {}): BrowserLauncher | null {
   const platform = environment.platform ?? process.platform
@@ -110,7 +111,7 @@ export function chooseBrowserLauncher(url: string, environment: BrowserEnvironme
   if (/microsoft/i.test(readFile('/proc/version') ?? '')) {
     return onPath('wslview')
       ? { command: 'wslview', args: [url] }
-      : { command: 'cmd.exe', args: ['/c', 'start', '""', url] }
+      : { command: 'explorer.exe', args: [url] }
   }
   if (!env.DISPLAY && !env.WAYLAND_DISPLAY) {
     return null

@@ -36,10 +36,10 @@ describe('opening the board page in a browser', () => {
     expect(chooseBrowserLauncher(LINK, linux({ env: {}, onPath: ['xdg-open'] }))).toBeNull()
   })
 
-  it('opens Windows\' browser from WSL: wslview when it is there, else cmd.exe', () => {
+  it('opens Windows\' browser from WSL: wslview when it is there, else explorer.exe with the link as one argument', () => {
     expect(chooseBrowserLauncher(LINK, linux({ procVersion: WSL_VERSION, onPath: ['wslview'] })))
       .toEqual({ command: 'wslview', args: [LINK] })
     expect(chooseBrowserLauncher(LINK, linux({ procVersion: WSL_VERSION })))
-      .toEqual({ command: 'cmd.exe', args: ['/c', 'start', '""', LINK] })
+      .toEqual({ command: 'explorer.exe', args: [LINK] })
   })
 })

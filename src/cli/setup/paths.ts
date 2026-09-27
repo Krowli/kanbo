@@ -103,11 +103,20 @@ export function findAllOnPath(command: string, lookup: PathLookup = {}): string[
     return extensions.map(extension => command + extension).filter(isRunnable).slice(0, 1)
   }
   const found: string[] = []
+  const seen = new Set<string>()
   const pathValue = env.PATH ?? (windows ? env.Path : undefined) ?? ''
-  for (const directory of pathValue.split(windows ? ';' : ':').filter(Boolean)) {
+  for (const entry of pathValue.split(windows ? ';' : ':')) {
+    // Windows allows a PATH entry in double quotes (`"C:\Program Files\nodejs"`); the quotes are not part of the folder.
+    const directory = windows ? entry.replace(/^"(.*)"$/, '$1') : entry
+    if (!directory) {
+      continue
+    }
     for (const extension of extensions) {
       const candidate = join(directory, command + extension)
-      if (isRunnable(candidate) && !found.includes(candidate)) {
+      // Windows paths are case-insensitive: `C:\Tools` and `c:\tools` are one folder.
+      const key = windows ? candidate.toLowerCase() : candidate
+      if (!seen.has(key) && isRunnable(candidate)) {
+        seen.add(key)
         found.push(candidate)
       }
     }

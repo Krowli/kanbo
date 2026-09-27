@@ -60,6 +60,8 @@ export interface DoctorInput {
   self: string | null
   /** How long the MCP server may take to answer `initialize`. */
   handshakeTimeoutMs: number
+  /** The OS whose rules a registration is checked by; defaults to this process's. */
+  platform?: NodeJS.Platform
 }
 
 /** How long an external board may take to answer before the doctor gives up on it. */
@@ -75,6 +77,8 @@ export interface ProjectState {
 interface Registration {
   client: McpClient
   path: string
+  /** The project's shared file, or the person's own configuration. */
+  scope: 'project' | 'user'
   command: string | null
   args: string[]
 }
@@ -97,10 +101,11 @@ export async function collectDoctorFindings(input: DoctorInput): Promise<DoctorF
 
   findings.push(...checkInstructions(project?.root ?? null))
 
+  const platform = input.platform ?? process.platform
   const registrations = findRegistrations(project?.root ?? null)
-  findings.push(...checkRegistrations(registrations))
+  findings.push(...checkRegistrations(registrations, platform))
   if (project?.binding && !(target instanceof Error)) {
-    findings.push(await checkHandshake(registrations, project.root, input.handshakeTimeoutMs))
+    findings.push(await checkHandshake(registrations, project.root, input.handshakeTimeoutMs, platform))
   }
 
   findings.push(checkActor())
@@ -115,7 +120,7 @@ function checkPath(self: string | null): DoctorFinding {
       check: 'path',
       status: 'warn',
       detail: 'No kanbo on PATH: a shell or MCP client that runs `kanbo` will not find it.',
-      fix: 'Install kanbo globally (see docs/installation.md), or put the directory that holds it on PATH.',
+      fix: 'Run npm install -g kanbo-cli, or put the directory that holds kanbo on PATH.',
     }
   }
   const first = all[0]!
@@ -154,7 +159,7 @@ function checkProject(project: ProjectState | null): DoctorFinding {
       check: 'binding',
       status: 'warn',
       detail: 'Not inside a kanbo project (no .kanbo/ here or above); board checks are skipped.',
-      fix: 'Run kanbo init --file in a project to give it a board.',
+      fix: 'Run kanbo init in a project to give it a board.',
     }
   }
   const path = join(project.root, BINDING_FILE_PATH)
@@ -266,7 +271,7 @@ function checkInstructions(root: string | null): DoctorFinding[] {
       const path = join(root, name)
       const state = readInstructionBlockState(path, INSTRUCTION_BLOCK)
       if (state !== null) {
-        findings.push(blockFinding(path, state, `cd ${root} && kanbo init --instructions ${target}`))
+        findings.push(blockFinding(path, state, `cd ${root} && kanbo connect ${target === 'claude' ? 'claude' : 'codex'} --project --no-mcp`))
       }
     }
   }
@@ -274,7 +279,7 @@ function checkInstructions(root: string | null): DoctorFinding[] {
     const path = globalInstructionPath(client)
     const state = readInstructionBlockState(path, GLOBAL_INSTRUCTION_BLOCK)
     if (state !== null) {
-      findings.push(blockFinding(path, state, `kanbo init --global --instructions ${client}`))
+      findings.push(blockFinding(path, state, `kanbo connect ${client} --global --no-mcp`))
     }
   }
   if (findings.length === 0) {
@@ -282,7 +287,7 @@ function checkInstructions(root: string | null): DoctorFinding[] {
       check: 'instructions',
       status: 'warn',
       detail: 'No kanbo instruction block in this project\'s or your own agent files: agents learn the rules only from the MCP server.',
-      fix: 'Run kanbo init --instructions claude in the project, or kanbo init --global.',
+      fix: 'Run kanbo connect in the project (kanbo connect claude --yes, say), or kanbo connect claude --global.',
     })
   }
   return findings
@@ -318,42 +323,54 @@ function blockFinding(path: string, state: InstructionBlockState, command: strin
 function findRegistrations(root: string | null): Registration[] {
   const found: Registration[] = []
   for (const client of MCP_CLIENTS) {
-    const paths = [...(root ? [projectMcpConfigPath(root, client)] : []), globalMcpConfigPath(client)]
-    for (const path of paths) {
+    const paths = [
+      ...(root ? [{ path: projectMcpConfigPath(root, client), scope: 'project' as const }] : []),
+      { path: globalMcpConfigPath(client), scope: 'user' as const },
+    ]
+    for (const { path, scope } of paths) {
       const entry = client === 'codex' ? readCodexMcpEntry(path) : readJsonMcpEntry(path)
       if (entry !== undefined) {
-        found.push({ client, path, ...entry })
+        found.push({ client, path, scope, ...entry })
       }
     }
   }
   return found
 }
 
-function checkRegistrations(registrations: Registration[]): DoctorFinding[] {
+function checkRegistrations(registrations: Registration[], platform: NodeJS.Platform): DoctorFinding[] {
   if (registrations.length === 0) {
     return [{
       check: 'mcp',
       status: 'warn',
       detail: 'No MCP client has the kanbo server registered.',
-      fix: 'Run kanbo init --mcp claude,codex,cursor in the project, or kanbo init --global.',
+      fix: 'Run kanbo connect in the project (kanbo connect claude --yes, say), or kanbo connect claude --global.',
     }]
   }
-  return registrations.map(({ client, path, command, args }) => {
+  return registrations.map((registration) => {
+    const { client, path, command, args } = registration
     const check = `mcp:${client}`
     if (command === null) {
       return { check, status: 'warn', detail: `${path}: the kanbo entry names no command.`, fix: `Set "command" to kanbo in ${path}.` }
     }
-    if (isAbsolute(command)) {
-      return checkAbsoluteRegistration(check, path, command, args)
+    if (codexCannotStart(registration, platform)) {
+      return {
+        check,
+        status: 'warn',
+        detail: `${path}: starts ${command}, which on Windows is a .cmd shim.`,
+        fix: 'Codex on Windows can\'t start a .cmd — re-register with `kanbo connect codex`.',
+      }
     }
-    const resolved = findOnPath(command)
+    if (isAbsolute(command)) {
+      return checkAbsoluteRegistration({ ...registration, command })
+    }
+    const resolved = findOnPath(command, { platform })
     return resolved
       ? { check, status: 'ok', detail: `${path}: starts ${command} (${resolved}).` }
       : {
           check,
           status: 'fail',
           detail: `${path}: starts ${command}, which is not on PATH — the client cannot start the server.`,
-          fix: `Install kanbo globally, or change the command in ${path} to a path that exists.`,
+          fix: `Run npm install -g kanbo-cli, or change the command in ${path} to a path that exists.`,
         }
   })
 }
@@ -363,14 +380,15 @@ function checkRegistrations(registrations: Registration[]): DoctorFinding[] {
  * the kanbo script it runs. Both have to still be there: a Node upgrade or a
  * reinstall elsewhere leaves the client starting nothing.
  */
-function checkAbsoluteRegistration(check: string, path: string, command: string, args: string[]): DoctorFinding {
+function checkAbsoluteRegistration({ client, path, scope, command, args }: Registration & { command: string }): DoctorFinding {
+  const check = `mcp:${client}`
   const missing = [command, ...args.filter(arg => isAbsolute(arg))].filter(file => !existsSync(file))
   if (missing.length > 0) {
     return {
       check,
       status: 'fail',
       detail: `${path}: starts ${[command, ...args].join(' ')}, but ${missing.join(' and ')} ${missing.length === 1 ? 'does' : 'do'} not exist — the client cannot start the server.`,
-      fix: 'Run kanbo doctor --fix to point it at this kanbo.',
+      fix: `Run ${connectCommand(client, scope)} to point it at this kanbo.`,
     }
   }
   return { check, status: 'ok', detail: `${path}: starts ${[command, ...args].join(' ')}.` }
@@ -380,10 +398,15 @@ function checkAbsoluteRegistration(check: string, path: string, command: string,
  * Start the server a client would start, from the project folder, and ask it
  * `initialize`. It has to call itself `kanbo` and send its instructions.
  */
-async function checkHandshake(registrations: Registration[], root: string, timeoutMs: number): Promise<DoctorFinding> {
-  const launch = findStartable(registrations)
+async function checkHandshake(
+  registrations: Registration[],
+  root: string,
+  timeoutMs: number,
+  platform: NodeJS.Platform,
+): Promise<DoctorFinding> {
+  const launch = findStartable(registrations, platform)
   if (!launch) {
-    return { check: 'mcp:handshake', status: 'warn', detail: 'No kanbo to start, so the MCP server was not tried.', fix: 'Put kanbo on PATH.' }
+    return { check: 'mcp:handshake', status: 'warn', detail: 'No kanbo to start, so the MCP server was not tried.', fix: 'Run npm install -g kanbo-cli.' }
   }
   const command = [launch.command, ...launch.args.slice(0, -1)].join(' ')
 
@@ -402,7 +425,7 @@ async function checkHandshake(registrations: Registration[], root: string, timeo
         check: 'mcp:handshake',
         status: 'fail',
         detail: `${command} mcp answered as ${name ?? 'nothing'}${instructions?.trim() ? '' : ', without instructions'}.`,
-        fix: 'Put a current kanbo first on PATH.',
+        fix: 'Run npm install -g kanbo-cli@latest, and make it the first kanbo on PATH.',
       }
     }
     return { check: 'mcp:handshake', status: 'ok', detail: `${command} mcp answers initialize as kanbo, with instructions.` }
@@ -426,8 +449,13 @@ async function checkHandshake(registrations: Registration[], root: string, timeo
  * own arguments when it names its program by full path — else `kanbo mcp`
  * from `PATH`.
  */
-function findStartable(registrations: Registration[]): { command: string, args: string[] } | null {
-  for (const { command, args } of registrations) {
+function findStartable(registrations: Registration[], platform: NodeJS.Platform): { command: string, args: string[] } | null {
+  for (const registration of registrations) {
+    const { command, args } = registration
+    // Starting it here goes through cross-spawn, which runs a .cmd; Codex would not, so it proves nothing.
+    if (codexCannotStart(registration, platform)) {
+      continue
+    }
     if (command && isAbsolute(command)) {
       if (existsSync(command) && args.filter(arg => isAbsolute(arg)).every(arg => existsSync(arg))) {
         return { command, args }
@@ -441,6 +469,32 @@ function findStartable(registrations: Registration[]): { command: string, args: 
   }
   const found = findOnPath(MCP_COMMAND)
   return found ? { command: found, args: [...MCP_ARGS] } : null
+}
+
+/**
+ * A Codex registration on Windows that names a `.cmd`/`.bat`, by path or by a
+ * bare name that finds one — `kanbo`, which there is npm's `kanbo.cmd`. Codex
+ * starts programs without a shell, and without one Windows cannot run either.
+ * A bare name that finds no `.exe` is taken for the shim it would be.
+ */
+function codexCannotStart({ client, command }: Registration, platform: NodeJS.Platform): boolean {
+  if (client !== 'codex' || platform !== 'win32' || !command) {
+    return false
+  }
+  if (isWindowsAbsolute(command)) {
+    return /\.(?:cmd|bat)$/i.test(command)
+  }
+  return !/\.(?:exe|com)$/i.test(findOnPath(command, { platform }) ?? '')
+}
+
+/** `C:\…`, `\\server\…` or a POSIX-style absolute path — what `isAbsolute` says on Windows, on any OS. */
+function isWindowsAbsolute(command: string): boolean {
+  return /^(?:[a-z]:[\\/]|[\\/])/i.test(command)
+}
+
+/** The command that registers kanbo with this client again, in the same scope. */
+function connectCommand(client: McpClient, scope: Registration['scope']): string {
+  return `kanbo connect ${client} ${scope === 'project' ? '--project' : '--global'}`
 }
 
 function checkActor(): DoctorFinding {

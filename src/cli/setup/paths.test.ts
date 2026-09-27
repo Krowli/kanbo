@@ -42,6 +42,23 @@ describe('findAllOnPath', () => {
     expect(findAllOnPath(join(first, 'kanbo'), { platform: 'win32', env })).toEqual([join(first, 'kanbo.cmd')])
   })
 
+  it('on Windows reads a PATH entry in double quotes as the folder inside them', () => {
+    const env = { PATH: `"${first}";${second}`, PATHEXT: '.EXE;.CMD' }
+
+    expect(findAllOnPath('kanbo', { platform: 'win32', env })).toEqual([join(first, 'kanbo.cmd'), join(second, 'kanbo.exe')])
+  })
+
+  it('on Windows lists a folder named twice in different case once', () => {
+    // Two folders on a case-sensitive file system, one on a case-insensitive one: to Windows they are one.
+    for (const name of ['Tools', 'tools']) {
+      mkdirSync(join(root, name), { recursive: true })
+      writeFileSync(join(root, name, 'kanbo.cmd'), '')
+    }
+    const env = { PATH: `${join(root, 'Tools')};${join(root, 'tools')}`, PATHEXT: '.CMD' }
+
+    expect(findAllOnPath('kanbo', { platform: 'win32', env })).toEqual([join(root, 'Tools', 'kanbo.cmd')])
+  })
+
   // POSIX rules on a POSIX file system: a `C:\` path cannot sit in a `:`-separated PATH, and Windows has no executable bit.
   it.skipIf(process.platform === 'win32')('elsewhere finds the executable of that exact name only', () => {
     const env = { PATH: `${first}:${second}` }

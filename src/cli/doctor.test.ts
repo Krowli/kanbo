@@ -140,7 +140,7 @@ describe('kanbo doctor', () => {
 
     expect(instructions.status).toBe('warn')
     expect(instructions.detail).toContain('older kanbo')
-    expect(instructions.fix).toContain('kanbo init --instructions claude --yes')
+    expect(instructions.fix).toContain('kanbo connect claude --project --no-mcp --yes')
   })
 
   it('warns about a block the person edited, without offering --yes', async () => {
@@ -180,7 +180,7 @@ describe('kanbo doctor', () => {
     const missingScript = finding(await doctor(), 'mcp:cursor')
     expect(missingScript.status).toBe('fail')
     expect(missingScript.detail).toContain(script)
-    expect(missingScript.fix).toBe('Run kanbo doctor --fix to point it at this kanbo.')
+    expect(missingScript.fix).toBe('Run kanbo connect cursor --project to point it at this kanbo.')
 
     mkdirSync(dirname(script), { recursive: true })
     writeFileSync(script, '')
@@ -190,6 +190,29 @@ describe('kanbo doctor', () => {
     const missingNode = finding(await doctor(), 'mcp:cursor')
     expect(missingNode.status).toBe('fail')
     expect(missingNode.detail).toContain(join(root, 'old-node', 'node.exe'))
+  })
+
+  it('on Windows warns about a Codex registration that starts a .cmd, even when the handshake would pass', async () => {
+    installKanbo('process.exit(1)')
+    const path = join(projectDir, '.codex', 'config.toml')
+    const onWindows = async () => finding(
+      await collectDoctorFindings({ cwd: projectDir, self: null, handshakeTimeoutMs: 2_000, platform: 'win32' }),
+      'mcp:codex',
+    )
+
+    // What `kanbo init --mcp codex` writes: the bare name, which on Windows finds npm's kanbo.cmd.
+    const bare = await onWindows()
+    expect(bare.status).toBe('warn')
+    expect(bare.fix).toBe('Codex on Windows can\'t start a .cmd — re-register with `kanbo connect codex`.')
+
+    const shim = join(bin, 'kanbo.cmd')
+    writeFileSync(shim, '@echo off\r\n')
+    writeFileSync(path, `[mcp_servers.kanbo]\ncommand = ${JSON.stringify(shim)}\nargs = ["mcp"]\n`)
+    expect((await onWindows()).status).toBe('warn')
+
+    // A Node and a script, by full path, is what Codex can start.
+    writeFileSync(path, `[mcp_servers.kanbo]\ncommand = ${JSON.stringify(process.execPath)}\nargs = [${JSON.stringify(CLI_ENTRY)}, "mcp"]\n`)
+    expect((await onWindows()).status).toBe('ok')
   })
 
   it('fails a board file older than this build and points at kanbo migrate', async () => {
