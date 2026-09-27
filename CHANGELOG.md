@@ -4,6 +4,10 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- **License: MIT → PolyForm Noncommercial 1.0.0.** Free for personal, research, educational and other noncommercial use; selling kanbo or building it into a paid product or service needs a separate license from the author. Versions up to and including 0.2.0 were released under MIT and stay under MIT.
+
 ## [0.2.0] — 2026-09-27
 
 ### Removed (breaking)

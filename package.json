@@ -27,7 +27,7 @@
     "type": "git",
     "url": "git+https://github.com/Krowli/kanbo.git"
   },
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "author": "Krowli",
   "type": "module",
   "bin": {

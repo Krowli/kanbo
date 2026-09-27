@@ -71,4 +71,4 @@ The trusted publisher is configured once on npmjs.com (package `kanbo-cli` → S
 - Update `docs/` when a command, flag, tool or route changes: `src/mcp/docs.test.ts` fails when a command is missing from `docs/cli.md` or a tool from `docs/mcp.md`.
 - Add a line to the `Unreleased` section of `CHANGELOG.md` for anything a user would notice.
 
-By contributing you agree that your contributions are licensed under the [MIT License](LICENSE), and to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+By contributing you agree that your contributions are licensed under the [PolyForm Noncommercial License 1.0.0](LICENSE), and to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
