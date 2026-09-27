@@ -13,6 +13,8 @@ import { registerDoctorCommand } from './commands/doctor'
 import { registerInitCommand } from './commands/init'
 import type { DoctorFinding } from './doctor'
 import { collectDoctorFindings } from './doctor'
+import { wrapInstructionBlock } from './setup/instructions'
+import { LEGACY_BLOCK_BODIES } from './setup/legacy-blocks'
 
 /** This package's own command, run from source: what a healthy install's `kanbo` on PATH would be. */
 const CLI_ENTRY = join(dirname(fileURLToPath(import.meta.url)), 'index.ts')
@@ -137,7 +139,8 @@ describe('kanbo doctor', () => {
   it('warns about a block an older kanbo wrote, and says how to rewrite it', async () => {
     installKanbo('process.exit(1)')
     const path = join(projectDir, 'CLAUDE.md')
-    writeFileSync(path, '# Notes\n\n<!-- KANBO_START -->\n## Kanbo board\n\n- Take a card from `kanbo ready`.\n<!-- KANBO_END -->\n')
+    // A 0.1.x–0.2.x block is one kanbo wrote only when its body is word for word one those versions wrote.
+    writeFileSync(path, `# Notes\n\n<!-- KANBO_START -->\n${LEGACY_BLOCK_BODIES[1]}\n<!-- KANBO_END -->\n`)
 
     const instructions = finding(await doctor(), 'instructions')
 
@@ -158,22 +161,48 @@ describe('kanbo doctor', () => {
     expect(instructions.fix).not.toContain('--yes')
   })
 
-  it('fails an MCP registration whose command is not on PATH', async () => {
+  it('is fine with a block a newer kanbo wrote or a text the person chose, and fails a start marker without an end', async () => {
+    installKanbo('process.exit(1)')
+    const path = join(projectDir, 'CLAUDE.md')
+
+    writeFileSync(path, `${wrapInstructionBlock('## Kanbo board\n\nNewer words.', 3)}\n`)
+    const newer = finding(await doctor(), 'instructions')
+    expect(newer.status).toBe('ok')
+    expect(newer.detail).toContain('written by a newer kanbo (v3) — update kanbo: npm install -g kanbo-cli@latest')
+
+    writeFileSync(path, `${wrapInstructionBlock('Coordinate the agents.', 2, 'orchestrator')}\n`)
+    const chosen = finding(await doctor(), 'instructions')
+    expect(chosen.status).toBe('ok')
+    expect(chosen.detail).toContain('you chose the orchestrator text')
+
+    writeFileSync(path, '# Notes\n\n<!-- KANBO_START -->\nMine.\n')
+    const damaged = finding(await doctor(), 'instructions')
+    expect(damaged.status).toBe('fail')
+    expect(damaged.fix).toBe(`${path} has a kanbo start marker without an end — fix it by hand, then run again.`)
+  })
+
+  it('fails an MCP registration of kanbo\'s own whose command is not on PATH', async () => {
     installKanbo('process.exit(1)')
     const path = join(projectDir, '.mcp.json')
-    writeFileSync(path, readFileSync(path, 'utf8').replace('"command": "kanbo"', '"command": "kanbo-nowhere"'))
+    vi.stubEnv('PATH', join(root, 'home'))
 
     const claude = finding(await doctor(), 'mcp:claude')
 
     expect(claude.status).toBe('fail')
-    expect(claude.detail).toContain('kanbo-nowhere')
+    expect(claude.detail).toContain('not on PATH')
     expect(claude.fix).toBeDefined()
+    vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
+    // An entry of the person's own that cannot start is theirs to fix: a warning, and left as it is.
+    writeFileSync(path, readFileSync(path, 'utf8').replace('"command": "kanbo"', '"command": "kanbo-nowhere"'))
+    const own = finding(await doctor(), 'mcp:claude')
+    expect(own.status).toBe('warn')
+    expect(own.detail).toContain('your own kanbo entry (kanbo-nowhere mcp) — left as is')
     expect(finding(await doctor(), 'mcp:codex').status).toBe(process.platform === 'win32' ? 'warn' : 'ok')
   })
 
   it('checks both the Node and the script of a registration that names them by full path', async () => {
     installKanbo('process.exit(1)')
-    const script = join(root, 'kanbo-dist', 'cli.cjs')
+    const script = join(root, 'kanbo-cli', 'dist', 'cli.cjs')
     const path = join(projectDir, '.cursor', 'mcp.json')
     const register = (command: string) => writeFileSync(path, JSON.stringify({
       mcpServers: { kanbo: { type: 'stdio', command, args: [script, 'mcp'] } },
@@ -206,12 +235,17 @@ describe('kanbo doctor', () => {
     // What `kanbo init --mcp codex` writes: the bare name, which on Windows finds npm's kanbo.cmd.
     const bare = await onWindows()
     expect(bare.status).toBe('warn')
-    expect(bare.fix).toBe('Codex on Windows can\'t start a .cmd — re-register with `kanbo connect codex`.')
+    // A project entry: take it out of the project, then register kanbo for the person — two commands, two lines.
+    expect(bare.fix).toBe('Codex on Windows can\'t start a .cmd. Remove the project entry, then register kanbo for your user:\n'
+      + '  kanbo connect codex --project --remove --no-instructions\n'
+      + '  kanbo connect codex')
 
     const shim = join(bin, 'kanbo.cmd')
     writeFileSync(shim, '@echo off\r\n')
     writeFileSync(path, `[mcp_servers.kanbo]\ncommand = ${JSON.stringify(shim)}\nargs = ["mcp"]\n`)
-    expect((await onWindows()).status).toBe('warn')
+    const shimmed = await onWindows()
+    expect(shimmed.status).toBe('warn')
+    expect(shimmed.fix).toBe(bare.fix)
 
     // A Node and a script, by full path, is what Codex can start.
     writeFileSync(path, `[mcp_servers.kanbo]\ncommand = ${JSON.stringify(process.execPath)}\nargs = [${JSON.stringify(CLI_ENTRY)}, "mcp"]\n`)

@@ -1,7 +1,7 @@
 import type { CliResult } from '../output'
 import { CliError, printResult, readFormat } from '../output'
 import { confirmPlan } from '../setup/confirm'
-import { applyConnectPlan, describeConnectPlan, pendingItems, planConnect } from '../setup/connect-plan'
+import { applyConnectPlan, describeConnectPlan, describeManualOutcome, pendingItems, planConnect } from '../setup/connect-plan'
 import type { GlobalInstructionClient, McpClient } from '../setup/paths'
 import { GLOBAL_INSTRUCTION_CLIENTS, MCP_CLIENTS } from '../setup/paths'
 import type { InitOptions } from './init'
@@ -44,6 +44,8 @@ interface GlobalMcpOutcome {
   state: 'written' | 'unchanged' | 'manual'
   command?: string
   reason?: string
+  /** `claude mcp remove` ran, and the `add` after it did not. */
+  removed?: boolean
 }
 
 interface GlobalInstructionOutcome {
@@ -94,13 +96,14 @@ export async function initGlobal(options: InitOptions): Promise<void> {
     .map(({ agents, path, state }) => ({ client: agents[0] as GlobalInstructionClient, path, state: state as GlobalInstructionOutcome['state'] }))
   const mcp: GlobalMcpOutcome[] = outcomes
     .filter(outcome => outcome.kind !== 'instructions')
-    .map(({ agents, path, state, command, reason }) => ({
+    .map(({ agents, path, state, command, reason, removed }) => ({
       client: agents[0] as McpClient,
       path,
       // `claude mcp add` having run is the registration written.
       state: state === 'ran' ? 'written' : state,
       ...(command ? { command } : {}),
       ...(reason ? { reason } : {}),
+      ...(removed ? { removed } : {}),
     }))
 
   printResult(describeResult(instructions, mcp), options)
@@ -113,7 +116,7 @@ function describeResult(instructions: GlobalInstructionOutcome[], mcp: GlobalMcp
   }
   for (const outcome of mcp) {
     if (outcome.state === 'manual') {
-      lines.push(`MCP: ${outcome.client} — run this yourself: ${outcome.command} (${outcome.reason})`)
+      lines.push(`MCP: ${describeManualOutcome(outcome.client, outcome)}`)
     }
     else {
       lines.push(`MCP: ${outcome.path} (${outcome.state})`)

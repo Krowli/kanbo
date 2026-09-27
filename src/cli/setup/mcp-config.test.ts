@@ -7,13 +7,49 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeFakeBin, writeRecordingBin } from '../../testing/fake-bin'
 
 import { planInstructionBlock, planInstructionBlockRemoval } from './instructions'
+import type { McpEntry } from './mcp-config'
 import {
+  isOwnMcpEntry,
+  isStaleMcpEntry,
   planCodexMcpServer,
   planCodexMcpServerRemoval,
+  planJsonMcpServer,
   planJsonMcpServerRemoval,
   readCodexMcpCommand,
+  readCodexMcpEntry,
+  readJsonMcpEntry,
   runClaudeMcp,
 } from './mcp-config'
+
+/**
+ * kanbo changes only an entry it wrote itself, in exactly the shape it wrote
+ * it; the Windows review's scenarios are all entries of the person's own.
+ */
+describe('which kanbo entries are kanbo\'s own', () => {
+  const entry = (command: string, args: string[], otherFields: string[] = []): McpEntry => ({ command, args, otherFields })
+  const NODE = 'C:\\Program Files\\nodejs\\node.exe'
+  const SCRIPT = 'C:\\Users\\Ann\\AppData\\Roaming\\npm\\node_modules\\kanbo-cli\\dist\\cli.cjs'
+
+  it('knows the shapes it writes, and nothing else', () => {
+    expect(isOwnMcpEntry(entry('kanbo', ['mcp']))).toBe(true)
+    expect(isOwnMcpEntry(entry(NODE, [SCRIPT, 'mcp']))).toBe(true)
+    expect(isOwnMcpEntry(entry('/usr/local/bin/node', ['/usr/local/lib/node_modules/kanbo-cli/dist/cli-main.cjs', 'mcp']))).toBe(true)
+
+    expect(isOwnMcpEntry(entry('cmd', ['/c', 'kanbo', 'mcp']))).toBe(false)
+    expect(isOwnMcpEntry(entry('npx', ['-y', 'kanbo-cli', 'mcp']))).toBe(false)
+    expect(isOwnMcpEntry(entry('kanbo', ['mcp'], ['env']))).toBe(false)
+    expect(isOwnMcpEntry(entry('kanbo', ['mcp', '--verbose']))).toBe(false)
+    expect(isOwnMcpEntry(entry(NODE, ['C:\\tools\\my-kanbo.js', 'mcp']))).toBe(false)
+    expect(isOwnMcpEntry(entry('C:\\tools\\bun.exe', [SCRIPT, 'mcp']))).toBe(false)
+  })
+
+  it('never calls a Windows entry of the person\'s own stale, however it starts kanbo', () => {
+    for (const own of [entry('cmd', ['/c', 'kanbo', 'mcp']), entry('npx', ['-y', 'kanbo-cli', 'mcp']), entry('kanbo', ['mcp'], ['env'])]) {
+      expect(isStaleMcpEntry(own, 'user', 'win32')).toBe(false)
+    }
+    expect(isStaleMcpEntry(entry('kanbo', ['mcp']), 'user', 'win32')).toBe(true)
+  })
+})
 
 describe('taking kanbo back out of a configuration file', () => {
   let directory: string
@@ -84,6 +120,23 @@ describe('taking kanbo back out of a configuration file', () => {
 
     const onlyKanbo = file('only.json', JSON.stringify({ mcpServers: { kanbo: { command: 'kanbo' } } }))
     expect(JSON.parse(planJsonMcpServerRemoval(onlyKanbo).next!)).toEqual({ mcpServers: {} })
+  })
+
+  it('reads the other keys and subtables of an entry, and a type other than stdio', () => {
+    const toml = file('config.toml', '[mcp_servers.kanbo]\ncommand = "cmd"\nargs = [\n  "/c",\n  "kanbo",\n]\nstartup_timeout_sec = 20\n\n[mcp_servers.kanbo.env]\nA = "1"\n')
+    expect(readCodexMcpEntry(toml)?.otherFields).toEqual(['startup_timeout_sec', 'env'])
+    const json = file('mcp.json', JSON.stringify({ mcpServers: { kanbo: { type: 'http', command: 'kanbo', args: ['mcp'], cwd: '/x' } } }))
+    expect(readJsonMcpEntry(json)?.otherFields).toEqual(['type', 'cwd'])
+  })
+
+  it('rewrites only the command and arguments of its own stale entry, keeping the rest in place', () => {
+    const launch = { command: 'C:\\node\\node.exe', args: ['C:\\npm\\node_modules\\kanbo-cli\\dist\\cli.cjs', 'mcp'] }
+    const toml = file('config.toml', 'model = "o3"\n\n[mcp_servers.kanbo]\n# mine\ncommand = "kanbo"\nargs = ["mcp"]\n\n[profiles.x]\nmodel = "o4"\n')
+    expect(planCodexMcpServer(toml, launch, { replace: true }).next).toBe(
+      'model = "o3"\n\n[mcp_servers.kanbo]\ncommand = \'C:\\node\\node.exe\'\nargs = [\'C:\\npm\\node_modules\\kanbo-cli\\dist\\cli.cjs\', "mcp"]\n# mine\n\n[profiles.x]\nmodel = "o4"\n',
+    )
+    const json = file('mcp.json', JSON.stringify({ mcpServers: { kanbo: { command: 'kanbo', args: ['mcp'] } } }))
+    expect(JSON.parse(planJsonMcpServer(json, launch, { replace: true }).next!)).toEqual({ mcpServers: { kanbo: { type: 'stdio', ...launch } } })
   })
 
   it('takes the instruction block out and joins what was around it', () => {

@@ -28,7 +28,7 @@ import type { CliResult } from '../output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
 import type { AgentId } from '../setup/agents'
 import { AGENT_IDS, AGENTS, defaultMcpScope, detectAgents, parseAgentId } from '../setup/agents'
-import { planConnect } from '../setup/connect-plan'
+import { describeManualOutcome, pendingItems, planConnect } from '../setup/connect-plan'
 import type { FileOutcome } from '../setup/file-change'
 import type { AppliedInitPlan, InitFileChange, InitPlan } from '../setup/init-plan'
 import { applyInitPlan, assertOwnBoardFile } from '../setup/init-plan'
@@ -165,7 +165,7 @@ export function registerInitCommand(program: Command): void {
         await initWithWizard(request)
         return
       }
-      const plan = await planInit(process.cwd(), request)
+      const plan = withoutUnconfirmedAgentFiles(await planInit(process.cwd(), request), request)
       warnAboutOwnerAccess(plan.target, request)
       const applied = await applyInitPlan(plan)
       printResult(describeInit(plan, applied, request), request)
@@ -194,6 +194,27 @@ async function initWithWizard(options: InitOptions): Promise<void> {
     throw error instanceof CancelledError ? new CancelledError(INIT_CANCELLED_MESSAGE) : error
   }
   printInitOutro(ui, answered, await applyInitPlan(answered.plan))
+}
+
+/**
+ * Agent files — instructions, MCP settings, `claude mcp` — change only on a
+ * yes: the wizard's, or `--yes`. Without either (an agent's shell, a script,
+ * machine output) the board is still set up and the agent files are left as
+ * they are, and the person is told how to connect them, as `kanbo connect` would.
+ */
+function withoutUnconfirmedAgentFiles(plan: InitPlan, options: InitOptions): InitPlan {
+  const pending = plan.fileChanges.some(({ change }) => change.next !== null) || (plan.connect !== null && pendingItems(plan.connect).length > 0)
+  if (options.yes || !pending) {
+    return plan
+  }
+  const agents = options.connect?.length
+    ? options.connect
+    : [...new Set([
+        ...(options.instructions === 'claude' ? ['claude'] : options.instructions === 'agents' ? ['codex'] : []),
+        ...(options.mcp ?? []),
+      ])]
+  console.error(`Not changing agent files without a yes: run kanbo connect ${agents.join(' ') || '<agent>'} --yes`)
+  return { ...plan, fileChanges: [], connect: null }
 }
 
 /** The flags as `planInit` takes them: `--key` is `--identifier`, and `--connect` does not mix with the older flags. */
@@ -593,7 +614,7 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
   for (const entry of applied.connect) {
     const who = entry.agents.map(agent => AGENTS[agent].label).join(', ')
     lines.push(entry.state === 'manual'
-      ? `${who}: run this yourself: ${entry.command} (${entry.reason})`
+      ? describeManualOutcome(who, entry)
       : `${who}: ${entry.path} (${entry.state === 'ran' ? `ran ${entry.command}` : entry.state})`)
   }
   if (applied.firstCard) {

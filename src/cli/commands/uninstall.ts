@@ -11,12 +11,14 @@ import { AGENT_IDS, AGENTS, instructionPaths } from '../setup/agents'
 import type { FileChange } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
 import { removeWithRetry } from '../setup/fs-retry'
-import { planInstructionBlockRemoval } from '../setup/instructions'
+import { confirmOwnEntryRemoval, readMcpEntry } from '../setup/connect-plan'
+import { planInstructionBlockRemovalAsking } from '../setup/instructions'
 import {
   CLAUDE_USER_REMOVE,
+  isOwnMcpEntry,
   planCodexMcpServerRemoval,
   planJsonMcpServerRemoval,
-  readClaudeUserMcpCommand,
+  readJsonMcpEntry,
   runClaudeMcp,
 } from '../setup/mcp-config'
 import type { McpScope } from '../setup/mcp-launch'
@@ -82,11 +84,14 @@ async function uninstall(options: UninstallOptions): Promise<void> {
   }
 
   const projectRoot = withProject ? (findKanboProject(process.cwd())?.root ?? process.cwd()) : null
+  const notes: string[] = []
   const edits = [
-    ...(projectRoot ? planEdits('project', projectRoot) : []),
-    ...(withGlobal ? planEdits('user', process.cwd()) : []),
+    ...(projectRoot ? await planEdits('project', projectRoot, options, notes) : []),
+    ...(withGlobal ? await planEdits('user', process.cwd(), options, notes) : []),
   ].filter(edit => edit.change.next !== null)
-  const claudeUser = withGlobal && readClaudeUserMcpCommand() !== undefined
+  const claudeEntry = withGlobal ? readJsonMcpEntry(globalMcpConfigPath('claude')) : undefined
+  const claudeUser = claudeEntry !== undefined && (isOwnMcpEntry(claudeEntry)
+    || await confirmOwnEntryRemoval(AGENTS.claude.label, globalMcpConfigPath('claude'), options, { notes }))
   const bindingPath = projectRoot && options.purge ? join(projectRoot, BINDING_FILE_PATH) : null
   const purgeBinding = bindingPath !== null && existsSync(bindingPath)
   const boardFile = projectRoot && options.purge ? findOwnBoardFile(projectRoot) : null
@@ -94,7 +99,7 @@ async function uninstall(options: UninstallOptions): Promise<void> {
   const actions: UninstallAction[] = []
   if (edits.length > 0 || claudeUser || purgeBinding || boardFile) {
     const confirmed = await confirmPlan({
-      preview: describePlan(edits, claudeUser, purgeBinding ? bindingPath : null, boardFile),
+      preview: describePlan(edits, claudeUser, purgeBinding ? bindingPath : null, boardFile, notes),
       question: 'Remove these?',
       yes: options.yes,
       machineOutput: Boolean(options.json),
@@ -121,29 +126,39 @@ async function uninstall(options: UninstallOptions): Promise<void> {
     }
   }
 
-  printActions(actions, options)
+  printActions(actions, notes, options)
 }
 
 /**
  * Every file of every agent in the registry (`setup/agents.ts`) that kanbo may
  * have written in this scope: each instruction file once, and each MCP file.
  * Claude Code's `~/.claude.json` is its own state file: `claude mcp remove`
- * edits it, not this.
+ * edits it, not this. A block or an entry that is not in the shape kanbo
+ * writes is asked about first (`--yes` answers it); a file whose markers do
+ * not pair up is left alone, and the person is told in `notes`.
  */
-function planEdits(scope: McpScope, root: string): PlannedEdit[] {
-  return [
-    ...instructionPaths(scope, root).map(({ path }) => ({
-      change: planInstructionBlockRemoval(path),
-      what: 'kanbo instruction block',
-    })),
-    ...AGENT_IDS.map(agent => AGENTS[agent].mcpTarget(scope, root)).flatMap((target) => {
-      if (target.format === 'claude-cli') {
-        return []
-      }
-      const change = target.format === 'toml' ? planCodexMcpServerRemoval(target.path) : planJsonMcpServerRemoval(target.path)
-      return [{ change, what: 'kanbo MCP server' }]
-    }),
-  ]
+async function planEdits(scope: McpScope, root: string, options: UninstallOptions, notes: string[]): Promise<PlannedEdit[]> {
+  const edits: PlannedEdit[] = []
+  for (const { path } of instructionPaths(scope, root)) {
+    const asked = await planInstructionBlockRemovalAsking(path, { yes: options.yes })
+    if (asked.note) {
+      notes.push(asked.note)
+    }
+    edits.push({ change: asked.change, what: 'kanbo instruction block' })
+  }
+  for (const agent of AGENT_IDS) {
+    const target = AGENTS[agent].mcpTarget(scope, root)
+    if (target.format === 'claude-cli') {
+      continue
+    }
+    const entry = readMcpEntry(target)
+    if (entry === undefined || (!isOwnMcpEntry(entry) && !await confirmOwnEntryRemoval(AGENTS[agent].label, target.path, options, { notes }))) {
+      continue
+    }
+    const change = target.format === 'toml' ? planCodexMcpServerRemoval(target.path) : planJsonMcpServerRemoval(target.path)
+    edits.push({ change, what: 'kanbo MCP server' })
+  }
+  return edits
 }
 
 /**
@@ -184,7 +199,7 @@ async function purgeBoardFile(path: string): Promise<UninstallAction> {
   return { path, action: 'deleted', note: 'board file' }
 }
 
-function describePlan(edits: PlannedEdit[], claudeUser: boolean, bindingPath: string | null, boardFile: string | null): string {
+function describePlan(edits: PlannedEdit[], claudeUser: boolean, bindingPath: string | null, boardFile: string | null, notes: string[]): string {
   const lines = ['kanbo uninstall will:']
   for (const edit of edits) {
     lines.push(`  edit    ${edit.change.path}  (remove the ${edit.what})`)
@@ -198,20 +213,25 @@ function describePlan(edits: PlannedEdit[], claudeUser: boolean, bindingPath: st
   if (boardFile) {
     lines.push(`  ask     whether to delete the board file ${boardFile} (only in a terminal; --yes does not answer this)`)
   }
+  for (const note of notes) {
+    lines.push(`Note: ${note}`)
+  }
   lines.push('Files stay even when nothing is left in them. Boards stay unless you confirm deleting one.')
   return lines.join('\n')
 }
 
-function printActions(actions: UninstallAction[], options: UninstallOptions): void {
+function printActions(actions: UninstallAction[], notes: string[], options: UninstallOptions): void {
   if (options.json) {
-    console.log(JSON.stringify({ actions }, null, 2))
+    console.log(JSON.stringify({ actions, notes }, null, 2))
     return
   }
   if (actions.length === 0) {
     console.log('Nothing to remove: no kanbo block or MCP entry in the files kanbo writes.')
-    return
   }
   for (const action of actions) {
     console.log(`${action.action.padEnd(8)} ${action.path}${action.note ? `  (${action.note})` : ''}`)
+  }
+  for (const note of notes) {
+    console.log(`Note: ${note}`)
   }
 }

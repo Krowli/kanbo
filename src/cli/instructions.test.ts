@@ -10,7 +10,7 @@ import type { InstructionsCommandDependencies } from './commands/instructions'
 import { NO_BOARD_FOR_INSTRUCTIONS_MESSAGE, registerInstructionsCommand } from './commands/instructions'
 import { registerInitCommand } from './commands/init'
 import type { ClipboardRunner } from './setup/clipboard'
-import { AGENT_GUIDE_TEXT, COMMAND_SHEET, GLOBAL_BODY, GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, PROJECT_BODY } from './setup/instructions'
+import { AGENT_GUIDE_TEXT, classifyBlock, COMMAND_SHEET, GLOBAL_BODY, GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, PROJECT_BODY } from './setup/instructions'
 import { ORCHESTRATOR_GUIDE } from './setup/orchestrator-guide'
 
 /** One call a clipboard program got. */
@@ -78,6 +78,13 @@ describe('kanbo instructions', () => {
     await kanbo(['instructions', 'global', '--markers'])
 
     expect(stdout).toEqual([INSTRUCTION_BLOCK, GLOBAL_INSTRUCTION_BLOCK])
+  })
+
+  it('marks any other text with its kind, so kanbo connect leaves that block alone', async () => {
+    await kanbo(['instructions', 'orchestrator', '--markers'])
+
+    expect(stdout[0]).toMatch(/^<!-- KANBO_START v2 k=orchestrator h=[0-9a-f]{8} -->\n/)
+    expect(classifyBlock(stdout[0]!, INSTRUCTION_BLOCK)).toBe('chosen')
   })
 
   it('says what to do with the text on stderr in a terminal, and nothing when stderr is piped', async () => {

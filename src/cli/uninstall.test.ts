@@ -110,6 +110,20 @@ describe('kanbo uninstall', () => {
     expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(true)
   })
 
+  it('leaves a file whose kanbo start marker has no end byte for byte, even under --yes', async () => {
+    const damaged = '# Project notes\n\n<!-- KANBO_START -->\nMine, which goes on.\n'
+    writeFileSync(join(projectDir, 'CLAUDE.md'), damaged)
+    const printed: string[] = []
+    vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+      printed.push(String(line))
+    })
+
+    await uninstall(['--project', '--yes'])
+
+    expect(read(projectDir, 'CLAUDE.md')).toBe(damaged)
+    expect(printed.join('\n')).toContain(`${join(projectDir, 'CLAUDE.md')} has a kanbo start marker without an end — fix it by hand, then run again.`)
+  })
+
   it('touches only the project with --project', async () => {
     await uninstall(['--project', '--yes'])
 

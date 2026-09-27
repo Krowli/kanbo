@@ -70,7 +70,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo mcp` | Serve this board to an MCP client over stdio. |
 | `kanbo serve` | Serve this board over HTTP, with a board page for the browser. |
 
-**Person only** commands refuse with exit `4` in an agent's shell: `KANBO_ACTOR_KIND=agent`, or a mark Claude Code, Gemini CLI or Cursor leaves ([configuration](configuration.md#agent-shells-kanbo-recognises)). There is no flag to get past this. See [agents](agents.md#agents-and-people).
+**Person only** commands refuse with exit `4` in an agent's shell: `KANBO_ACTOR_KIND=agent`, or a mark Claude Code, Gemini CLI or Cursor leaves ([configuration](configuration.md#agent-shells-kanbo-recognises)). `KANBO_ACTOR_KIND=person` overrides the mark — meant for your own terminal that an agent tool marked, but nothing stops an agent from setting it too: this check keeps an honest agent from approving its own work, it does not stop one that tries. Real enforcement needs a shared Postgres board with agents on the agent role ([storage](storage.md#roles)). See [agents](agents.md#agents-and-people).
 
 ## `kanbo init`
 
@@ -96,7 +96,7 @@ A warning is shown when agents could not start `kanbo mcp`: kanbo running from n
 
 ### Without a terminal, or with `--yes`
 
-No questions. When nothing names a board — no `--db`/`--database-url`, no `KANBO_DB_PATH`/`KANBO_DATABASE_URL`, no binding at or above the folder — `init` creates a board file of the project's own, exactly like `--file`, with the standard columns (so `kanbo prime` has them to show) and the card key suggested from the folder name (a project already bound keeps its key). No agent file is touched unless `--connect`, `--instructions` or `--mcp` says so; the output ends with how to connect them later (`kanbo connect <agent>`, or `kanbo instructions --copy` and paste it).
+No questions. When nothing names a board — no `--db`/`--database-url`, no `KANBO_DB_PATH`/`KANBO_DATABASE_URL`, no binding at or above the folder — `init` creates a board file of the project's own, exactly like `--file`, with the standard columns (so `kanbo prime` has them to show) and the card key suggested from the folder name (a project already bound keeps its key). No agent file is touched unless `--connect`, `--instructions` or `--mcp` says so — and even then only with `--yes`: without it (an agent's shell, a script, `--json`) `init` sets up the board, leaves every agent file as it is, and says `Not changing agent files without a yes: run kanbo connect <agent> --yes`. The output ends with how to connect them later (`kanbo connect <agent>`, or `kanbo instructions --copy` and paste it).
 
 | Option | Meaning |
 | --- | --- |
@@ -118,11 +118,11 @@ No questions. When nothing names a board — no `--db`/`--database-url`, no `KAN
 | `--yes` | Take the defaults instead of asking. |
 | `--json <fields>`, `--format <format>` | Output, as everywhere. No wizard. |
 
-The wizard's answers and the equivalent flags plan exactly the same changes. The instruction block sits between `<!-- KANBO_START v2 h=… -->` and `<!-- KANBO_END -->` and is replaced in place on a later run — unless you edited it, in which case `init` asks first (default no) and leaves it alone under `--yes`. An MCP entry named `kanbo` that already exists is left alone, unless it is kanbo's own and no longer starts (see `kanbo connect`). `--instructions` and `--mcp` plan the same changes as `kanbo connect <agent> --project` (`agents` is the `AGENTS.md` Codex and Cursor read).
+The wizard's answers and the equivalent flags plan exactly the same changes. The instruction block sits between `<!-- KANBO_START v2 h=… -->` and `<!-- KANBO_END -->` and is replaced in place on a later run when kanbo wrote it — see [which blocks and entries kanbo changes](#what-kanbo-changes-and-what-it-leaves-alone). An MCP entry named `kanbo` that already exists is left alone, unless it is kanbo's own and no longer starts. `--instructions` and `--mcp` plan the same changes as `kanbo connect <agent> --project` (`agents` is the `AGENTS.md` Codex and Cursor read).
 
 `--file` together with `--database-url` is refused (exit `1`).
 
-A block written by an older kanbo (including the bare `<!-- KANBO_START -->` block of 0.1–0.2) is not refreshed on its own: `kanbo doctor` warns about it, and running `kanbo connect <agent> --yes` (or `kanbo connect <agent> --global --yes` for your own files) rewrites it. No other command touches it.
+A block written by an older kanbo (including the bare `<!-- KANBO_START -->` block of 0.1–0.2, word for word as it wrote it) is refreshed whenever `init` or `kanbo connect` writes that file: `kanbo init --connect <agent> --yes`, the wizard, or `kanbo connect <agent> --yes` (`--global` for your own files). `kanbo doctor` warns about one until then.
 
 ### `kanbo init --global`
 
@@ -149,7 +149,7 @@ Paths and formats follow each tool's docs: [Claude Code memory](https://code.cla
 | `--global` | Write into your own files, for every project. |
 | `--no-instructions` | Leave the agents' instruction files alone. |
 | `--no-mcp` | Leave the agents' MCP configuration alone. |
-| `--check` | Print a table — agent, instructions (`current`/`outdated`/`legacy`/`edited`/`missing`), MCP (`ok`/`missing`/`stale path`), scope — and exit `1` when an agent you named is not connected. |
+| `--check` | Print a table — agent, instructions (`current`/`outdated`/`legacy`/`edited`/`chosen`/`newer`/`damaged`/`missing`), MCP (`ok`/`missing`/`stale path`/`yours`/`yours, won't start`), scope — and exit `1` when an agent you named is not connected. An entry of your own is reported as "your own kanbo entry — left as is". |
 | `--remove` | Take the kanbo section and the `kanbo` MCP entry out again (both scopes unless `--project` or `--global` is given). |
 | `--dry-run` | Print what would change, and change nothing. |
 | `--yes` | Make the changes without asking. |
@@ -168,9 +168,20 @@ Instructions go into the project unless `--global` is given; the MCP server goes
 
 With no agents, in a terminal, `connect` asks which agents you use (the ones found on this machine or in this project are ticked), shows the kanbo section, lists each file it would change with what it is for — untick any — and asks once. Without a terminal it names the agents instead of asking (exit `1`). Named agents get the same preview and one question; `--yes` skips it, and a shell with no terminal and no `--yes` changes nothing (exit `1`).
 
-A `kanbo` MCP entry of kanbo's own that no longer starts — a full path to a Node or script that is gone, or on Windows a bare `kanbo` in your own configuration — is rewritten. Any other `kanbo` entry is yours and left alone. A block you edited is replaced only when you answer yes in a terminal.
+#### What kanbo changes, and what it leaves alone
 
-`--remove` takes the block out of `AGENTS.md` only when no other agent that reads it (Codex, Cursor) is still connected, that is, still has a `kanbo` MCP entry.
+kanbo changes only what it wrote itself, in exactly the shape it wrote it. Anything else it shows you and asks about; it never rewrites or deletes it silently.
+
+- **MCP entries.** kanbo's own `kanbo` entry is `{"command": "kanbo", "args": ["mcp"]}` (with `"type": "stdio"` or without), or a Node by full path running kanbo's own script — `{"command": "C:\\…\\node.exe", "args": ["C:\\…\\kanbo-cli\\dist\\cli.cjs", "mcp"]}` — with no other field: no `env`, no `cwd`, no `[mcp_servers.kanbo.env]` table. Only such an entry that no longer starts (a Node or script that is gone; on Windows, a bare `kanbo` in your own configuration) is rewritten, and only its `command` and `args` change. Any other `kanbo` entry — `cmd /c kanbo mcp`, `npx -y kanbo-cli mcp`, one with an `env` — is yours: `connect` leaves it as it is and says so, and `--remove`/`uninstall` take it out only on `--yes` or a yes in a terminal (default no).
+- **Instruction blocks.** A block kanbo wrote — current, from an older version, or a 0.1–0.2 block whose text is word for word one those versions wrote — is replaced in place. A block you edited is replaced only when you answer yes to "You changed the kanbo section in … Replace it with the current one?" (default no); with `--yes` or without a terminal it is kept, with a note. Taking it out asks "You changed the kanbo section in …. Remove it anyway?" (default no); `--yes` removes it.
+- **A text you chose.** A block from `kanbo instructions <kind> --markers` for a text other than `short`/`global` carries its kind on the marker (`k=orchestrator`); `connect` keeps it ("you chose the orchestrator text — kept") and `doctor` is fine with it.
+- **A block from a newer kanbo** (`v3` or later on the marker) is never rewritten, and `doctor` says to update kanbo (`npm install -g kanbo-cli@latest`).
+- **Markers that do not pair up** — a start without an end, an end without a start, a start inside another block — make the file one kanbo does not write to or remove anything from: `connect`, `init` and `uninstall` skip it with "CLAUDE.md has a kanbo start marker without an end — fix it by hand, then run again", and `doctor` fails it with the same text.
+- **From npx.** A kanbo run from npm's npx cache does not register itself by full path in your own settings — that path is gone once the command ends. It says "Install kanbo first so agents can start it: npm install -g kanbo-cli" instead.
+
+`--remove` takes the block out of `AGENTS.md` only when every agent that reads it (Codex, Cursor) is removed in the same command — `kanbo connect codex cursor --remove`, or `kanbo connect --remove` with no agents, which removes kanbo from all of them. Otherwise it keeps it and says `AGENTS.md section kept — Cursor also reads it. Remove it with: kanbo connect cursor --remove`.
+
+When a `kanbo` entry in Claude Code's user settings is rewritten, kanbo runs `claude mcp remove` and then `claude mcp add`. If the `add` fails after the `remove` ran, it says the old entry was removed and prints only the `add` command, on a line of its own — each command it hands you is on its own line, so it pastes into any shell, PowerShell included.
 
 ## `kanbo instructions`
 
@@ -205,7 +216,7 @@ Checks, each `ok`, `warn` or `fail`, with a `fix` on everything that is not `ok`
 | `binding` | The nearest `.kanbo/` at or above this folder has a readable `binding.json` (`fail` when it does not; `warn` outside any project). |
 | `sqlite` | `better-sqlite3` loads (a board-file project only). |
 | `board` | The board opens and its schema is current (`fail` with `kanbo migrate` as the fix). A Postgres board gets 5 seconds. |
-| `instructions` | Every kanbo block in the project's `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` and your own files is the block this version writes. `warn` when a block was written by an older kanbo, when you edited one, or when there is no block anywhere. |
+| `instructions` | Every kanbo block in the project's `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` and your own files is the block this version writes. `warn` when a block was written by an older kanbo, when you edited one, or when there is no block anywhere; `ok` for a text you chose (`--markers`) or a block a newer kanbo wrote (with a note to update); `fail` when a file's markers do not pair up. |
 | `mcp:<client>` | Every `kanbo` registration in the files `kanbo connect` writes (and `~/.claude.json`): its `command` is on `PATH`, or its full paths exist (`fail` otherwise, fixed by `kanbo connect <agent>`). On Windows a Codex registration that starts a `.cmd` is a `warn`. `warn` when there is none. |
 | `mcp:handshake` | Starts `kanbo mcp` in the project (the command a registration names), sends `initialize`, and expects server name `kanbo` with instructions, within 10 seconds. |
 | `actor` | `warn` when this shell is an agent's: `KANBO_ACTOR_KIND=agent`, or an agent tool's mark (named in the detail). |
@@ -222,7 +233,7 @@ Exits `1` when any check fails; warnings alone exit `0`. Nothing is written.
 | `--yes` | Do it without asking. Never deletes a board file. |
 | `--json` | Print `{ actions: [{ path, action, note? }] }`. |
 
-Removes the marked instruction block and the `kanbo` MCP entry from every file `kanbo connect` writes, for every agent: `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` (project) and `~/.claude/CLAUDE.md`, `$CODEX_HOME/AGENTS.md`, `~/.gemini/GEMINI.md` (global); `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `.gemini/settings.json` (project) and `~/.cursor/mcp.json`, `$CODEX_HOME/config.toml`, `~/.gemini/settings.json` (global). To disconnect one agent, use `kanbo connect <agent> --remove`. Everything else in those files — your own text, other MCP servers, other TOML tables — stays. Files stay even when nothing is left in them: kanbo does not record which files it created. Claude Code's user-scope registration is removed with `claude mcp remove kanbo --scope user`, or the line is printed when `claude` is not on `PATH`.
+Removes the marked instruction block and the `kanbo` MCP entry from every file `kanbo connect` writes, for every agent: `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` (project) and `~/.claude/CLAUDE.md`, `$CODEX_HOME/AGENTS.md`, `~/.gemini/GEMINI.md` (global); `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `.gemini/settings.json` (project) and `~/.cursor/mcp.json`, `$CODEX_HOME/config.toml`, `~/.gemini/settings.json` (global). To disconnect one agent, use `kanbo connect <agent> --remove`. Everything else in those files — your own text, other MCP servers, other TOML tables — stays. Files stay even when nothing is left in them: kanbo does not record which files it created. Claude Code's user-scope registration is removed with `claude mcp remove kanbo --scope user`, or the line is printed when `claude` is not on `PATH`. A block or `kanbo` entry that is not in the shape kanbo writes is asked about first (`--yes` answers it); a file whose markers do not pair up is left exactly as it is.
 
 Boards are never touched without `--purge`. With it, only the binding and a board file of the project's own (`kanbo init --file`) are candidates, and the board file is deleted only when you answer yes in a terminal to a question naming it — not with `--yes`, and never from a shell with no terminal. A host app's database and a Postgres board are never deleted. Same preview and confirmation as `kanbo init --global`.
 

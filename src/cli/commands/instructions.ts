@@ -6,7 +6,7 @@ import { DATABASE_NOT_FOUND_MESSAGE } from '../db-target'
 import { CliError, EXIT_NOT_RESOLVED } from '../output'
 import type { ClipboardEnvironment } from '../setup/clipboard'
 import { copyToClipboard } from '../setup/clipboard'
-import { AGENT_GUIDE_TEXT, COMMAND_SHEET, GLOBAL_BODY, PROJECT_BODY, wrapInstructionBlock } from '../setup/instructions'
+import { AGENT_GUIDE_TEXT, COMMAND_SHEET, GLOBAL_BODY, INSTRUCTION_BLOCK_VERSION, PROJECT_BODY, wrapInstructionBlock } from '../setup/instructions'
 import { ORCHESTRATOR_GUIDE } from '../setup/orchestrator-guide'
 
 /**
@@ -67,10 +67,14 @@ export function registerInstructionsCommand(program: Command, dependencies: Inst
     .description('print the text to give an agent: agent (default), short, global, orchestrator, mcp or board')
     .argument('[kind]', 'which version: agent, short, global, orchestrator, mcp or board', 'agent')
     .option('--copy', 'also put the text on the clipboard')
-    .option('--markers', 'wrap the text in the kanbo section markers, as kanbo writes it into a file')
+    .option('--markers', 'wrap the text in the kanbo section markers, which say which text it is; kanbo connect keeps any but short and global')
     .action(async (kind: string, options: InstructionsOptions) => {
-      const body = await readInstructionText(parseKind(kind))
-      const text = options.markers ? wrapInstructionBlock(body) : body
+      const found = parseKind(kind)
+      const body = await readInstructionText(found)
+      // The pointer (short, global) comes out exactly as kanbo connect writes it; any other text's
+      // marker says which one it is (k=orchestrator), and kanbo connect leaves that block alone.
+      const pointer = found === 'short' || found === 'global'
+      const text = options.markers ? wrapInstructionBlock(body, INSTRUCTION_BLOCK_VERSION, pointer ? undefined : found) : body
 
       const hints = process.stderr.isTTY === true
       if (hints) {

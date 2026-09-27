@@ -15,12 +15,17 @@ import {
   AGENT_GUIDE_TEXT,
   classifyBlock,
   GLOBAL_INSTRUCTION_BLOCK,
+  inspectBlock,
   INSTRUCTION_BLOCK,
+  INSTRUCTION_END,
   planInstructionBlock,
   planInstructionBlockAsking,
   planInstructionBlockRemoval,
+  planInstructionBlockRemovalAsking,
+  PROJECT_BODY,
   wrapInstructionBlock,
 } from './instructions'
+import { LEGACY_BLOCK_BODIES } from './legacy-blocks'
 
 /** A project's `CLAUDE.md` exactly as `kanbo init --instructions claude` 0.2.1 left it. */
 const CLAUDE_MD_0_2_1 = readFileSync(join(import.meta.dirname, 'fixtures', 'claude-md-0.2.1.md'), 'utf8')
@@ -76,8 +81,47 @@ describe('the kanbo instruction block', () => {
 
   it('reads the 0.2.1 block as legacy, and the whole old guide is kept word for word', () => {
     expect(classifyBlock(CLAUDE_MD_0_2_1, INSTRUCTION_BLOCK)).toBe('legacy')
+    expect(classifyBlock(CLAUDE_MD_0_2_1.replaceAll('\n', '\r\n'), INSTRUCTION_BLOCK)).toBe('legacy')
     const body = CLAUDE_MD_0_2_1.split('<!-- KANBO_START -->\n')[1]!.split('\n<!-- KANBO_END -->')[0]
     expect(AGENT_GUIDE_TEXT).toBe(body)
+  })
+
+  it('reads a bare-marker block whose body no 0.1–0.2 release wrote as edited, and keeps it under --yes', async () => {
+    const changed = CLAUDE_MD_0_2_1.replace('Take a card from', 'Always take a card from')
+    expect(classifyBlock(changed, INSTRUCTION_BLOCK)).toBe('edited')
+    for (const body of LEGACY_BLOCK_BODIES) {
+      expect(classifyBlock(`<!-- KANBO_START -->\n${body}\n<!-- KANBO_END -->`, INSTRUCTION_BLOCK)).toBe('legacy')
+    }
+    writeFileSync(join(projectDir, 'CLAUDE.md'), changed)
+
+    const { err } = await kanbo('init', '--file', '--instructions', 'claude', '--yes')
+
+    expect(claudeMd()).toBe(changed)
+    expect(err).toContain('you changed the kanbo section')
+  })
+
+  it('reads a block a newer kanbo wrote as newer, a chosen text as chosen, and markers that do not pair up as damaged', () => {
+    expect(inspectBlock(wrapInstructionBlock('## Kanbo board\n\nNewer words.', 3), INSTRUCTION_BLOCK))
+      .toEqual({ state: 'newer', version: 3, kind: null })
+    expect(inspectBlock(wrapInstructionBlock('Any text.', 2, 'orchestrator'), INSTRUCTION_BLOCK))
+      .toEqual({ state: 'chosen', version: 2, kind: 'orchestrator' })
+    expect(classifyBlock(wrapInstructionBlock(PROJECT_BODY, 2, 'short'), INSTRUCTION_BLOCK)).toBe('outdated')
+    expect(inspectBlock(`# Mine\n${INSTRUCTION_BLOCK.replace(INSTRUCTION_END, '')}`, INSTRUCTION_BLOCK))
+      .toMatchObject({ state: 'damaged', damage: 'a kanbo start marker without an end' })
+    expect(inspectBlock(`${INSTRUCTION_END}\n${INSTRUCTION_BLOCK}`, INSTRUCTION_BLOCK))
+      .toMatchObject({ state: 'damaged', damage: 'a kanbo end marker without a start' })
+    expect(inspectBlock(INSTRUCTION_BLOCK.replace('## Kanbo board', INSTRUCTION_BLOCK), INSTRUCTION_BLOCK))
+      .toMatchObject({ state: 'damaged', damage: 'a kanbo start marker inside another kanbo section' })
+  })
+
+  it('writes nothing into and removes nothing from a file with a start marker and no end (the review\'s probe)', () => {
+    const path = join(projectDir, 'CLAUDE.md')
+    const probe = '# Mine\r\n\r\n<!-- KANBO_START -->\r\nMy own notes, which go on.\r\n\r\n## More of mine\r\n'
+    writeFileSync(path, probe)
+
+    expect(planInstructionBlock(path, INSTRUCTION_BLOCK).next).toBeNull()
+    expect(planInstructionBlockRemoval(path).next).toBeNull()
+    expect(readFileSync(path, 'utf8')).toBe(probe)
   })
 
   it('replaces the 0.2.1 block under --yes and keeps the rest of the file', async () => {
@@ -138,12 +182,49 @@ describe('the kanbo instruction block', () => {
     expect(classifyBlock(GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK)).toBe('outdated')
   })
 
-  it('takes out every kind of block: current, outdated, legacy and edited', () => {
+  // Was: every kind of block, the edited one included, came out without a word. A block the person
+  // changed is theirs (the review's rule: kanbo removes only what it wrote, in the shape it wrote it),
+  // so it now goes only on --yes or a yes at a terminal, and is kept — with a note — otherwise.
+  it('takes out kanbo\'s own blocks — current, outdated, legacy — and an edited, chosen or newer one only on --yes', async () => {
     const path = join(projectDir, 'CLAUDE.md')
-    for (const block of [INSTRUCTION_BLOCK, wrapInstructionBlock('Old words.', 1), CLAUDE_MD_0_2_1.slice('# Project notes\n\n'.length), EDITED_BLOCK]) {
+    const without = '# Mine\n\nMore of mine.\n'
+    for (const block of [INSTRUCTION_BLOCK, wrapInstructionBlock('Old words.', 1), CLAUDE_MD_0_2_1.slice('# Project notes\n\n'.length)]) {
       writeFileSync(path, `# Mine\n\n${block}\n\nMore of mine.\n`)
-      expect(planInstructionBlockRemoval(path).next).toBe('# Mine\n\nMore of mine.\n')
+      expect((await planInstructionBlockRemovalAsking(path, {})).change.next).toBe(without)
     }
+    for (const block of [EDITED_BLOCK, wrapInstructionBlock('Mine.', 2, 'orchestrator'), wrapInstructionBlock('Newer.', 3)]) {
+      writeFileSync(path, `# Mine\n\n${block}\n\nMore of mine.\n`)
+      const kept = await planInstructionBlockRemovalAsking(path, { label: 'CLAUDE.md' })
+      expect(kept.change.next).toBeNull()
+      expect(kept.note).toBe('CLAUDE.md: you changed the kanbo section, so it was kept. Remove it with --yes.')
+      expect((await planInstructionBlockRemovalAsking(path, { yes: true })).change.next).toBe(without)
+    }
+  })
+
+  describe('removing an edited block, asked about at a terminal', () => {
+    let driver: PromptDriver
+
+    beforeEach(() => {
+      driver = createPromptDriver()
+      setUiForTests(driver.ui)
+    })
+
+    async function remove(keys: Parameters<PromptDriver['press']>): Promise<string | null> {
+      const path = join(projectDir, 'CLAUDE.md')
+      writeFileSync(path, `# Mine\n\n${EDITED_BLOCK}\n`)
+      const planning = planInstructionBlockRemovalAsking(path, { label: 'CLAUDE.md' })
+      await driver.waitFor('You changed the kanbo section in CLAUDE.md. Remove it anyway?')
+      driver.press(...keys)
+      return (await planning).change.next
+    }
+
+    it('keeps it when the person just presses Enter', async () => {
+      expect(await remove(['enter'])).toBeNull()
+    })
+
+    it('removes it when the person says yes', async () => {
+      expect(await remove(['down', 'enter'])).toBe('# Mine\n')
+    })
   })
 
   it('kanbo prime on the command line ends with the commands', async () => {

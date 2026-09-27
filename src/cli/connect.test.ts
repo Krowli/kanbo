@@ -1,18 +1,22 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { writeFakeBin } from '../testing/fake-bin'
+import { writeFakeBin, writeRecordingBin } from '../testing/fake-bin'
 import { createPromptDriver } from '../testing/prompt-driver'
 import { registerConnectCommand } from './commands/connect'
 import { detectAgents } from './setup/agents'
-import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK } from './setup/instructions'
-import { readCodexMcpEntry } from './setup/mcp-config'
+import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, wrapInstructionBlock } from './setup/instructions'
+import { claudeUserAddArgv, displayCommand, readCodexMcpEntry } from './setup/mcp-config'
 import { mcpLaunchSpec } from './setup/mcp-launch'
+import { ORCHESTRATOR_GUIDE } from './setup/orchestrator-guide'
 import { CancelledError, setUiForTests } from './ui/ui'
+
+/** A project's `CLAUDE.md` exactly as `kanbo init --instructions claude` 0.2.1 left it. */
+const CLAUDE_MD_0_2_1 = readFileSync(join(import.meta.dirname, 'setup', 'fixtures', 'claude-md-0.2.1.md'), 'utf8')
 
 /** Every file under a folder with its bytes, to show a command left it exactly as it was. */
 function snapshot(directory: string): Record<string, string> {
@@ -149,7 +153,7 @@ describe('kanbo connect', () => {
 
     expect(JSON.parse(read(home, '.cursor', 'mcp.json'))).toEqual({ mcpServers: { kanbo: { type: 'stdio', ...launch } } })
     expect(JSON.parse(read(home, '.gemini', 'settings.json'))).toEqual({ mcpServers: { kanbo: launch } })
-    expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toEqual(launch)
+    expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toEqual({ ...launch, otherFields: [] })
     // Claude Code's user settings change only through `claude mcp add`, which is not on this PATH.
     expect(printed).toContain('claude mcp add --scope user kanbo --')
     expect(readdirSync(projectDir)).toEqual([])
@@ -167,10 +171,25 @@ describe('kanbo connect', () => {
     expect(JSON.parse(read(cursorMcp))).toEqual({ mcpServers: {} })
     expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toBeDefined()
 
-    await connect('codex', '--remove', '--yes')
+    await connect('codex', 'cursor', '--remove', '--yes')
 
     expect(read(projectDir, 'AGENTS.md')).toBe('')
     expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toBeUndefined()
+  })
+
+  it('keeps AGENTS.md\'s section for Cursor, connected with --no-mcp, when only Codex is removed', async () => {
+    await connect('cursor', '--no-mcp', '--yes')
+    await connect('codex', '--yes')
+
+    const printed = await connect('codex', '--remove', '--yes')
+
+    expect(read(projectDir, 'AGENTS.md')).toBe(`${INSTRUCTION_BLOCK}\n`)
+    expect(printed).toContain('AGENTS.md section kept — Cursor also reads it. Remove it with: kanbo connect cursor --remove')
+    expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toBeUndefined()
+
+    await connect('--remove', '--yes')
+
+    expect(read(projectDir, 'AGENTS.md')).toBe('')
   })
 
   describe('--check', () => {
@@ -191,9 +210,9 @@ describe('kanbo connect', () => {
     })
 
     it('tells an old block, an edited one and a registration that no longer starts from a current one', async () => {
-      writeFileSync(join(projectDir, 'CLAUDE.md'), '<!-- KANBO_START -->\nold rules\n<!-- KANBO_END -->\n')
+      writeFileSync(join(projectDir, 'CLAUDE.md'), CLAUDE_MD_0_2_1)
       writeFileSync(join(projectDir, '.mcp.json'), JSON.stringify({
-        mcpServers: { kanbo: { command: join(root, 'old-node', 'node'), args: [join(root, 'gone', 'cli.cjs'), 'mcp'] } },
+        mcpServers: { kanbo: { command: join(root, 'old-node', 'node'), args: [join(root, 'gone', 'kanbo-cli', 'dist', 'cli.cjs'), 'mcp'] } },
       }))
       await connect('gemini', '--project', '--yes')
       writeFileSync(join(projectDir, 'GEMINI.md'), read(projectDir, 'GEMINI.md').replace('Take work', 'Pick work'))
@@ -216,7 +235,7 @@ describe('kanbo connect', () => {
   })
 
   it('rewrites a kanbo entry of its own that no longer starts, and leaves one the person pointed elsewhere', async () => {
-    const stale = { command: join(root, 'old-node', 'node.exe'), args: [join(root, 'gone', 'cli.cjs'), 'mcp'] }
+    const stale = { command: join(root, 'old-node', 'node.exe'), args: [join(root, 'gone', 'kanbo-cli', 'dist', 'cli.cjs'), 'mcp'] }
     writeFileSync(join(projectDir, '.mcp.json'), JSON.stringify({ mcpServers: { other: { command: 'other' }, kanbo: stale } }))
     mkdirSync(codexHome)
     writeFileSync(join(codexHome, 'config.toml'), `model = "o3"\n\n[mcp_servers.kanbo]\ncommand = ${JSON.stringify(stale.command)}\nargs = ${JSON.stringify(stale.args)}\n\n[profiles.x]\nmodel = "o4"\n`)
@@ -231,7 +250,7 @@ describe('kanbo connect', () => {
       mcpServers: { other: { command: 'other' }, kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
     })
     const toml = read(codexHome, 'config.toml')
-    expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toEqual(mcpLaunchSpec({ scope: 'user' }))
+    expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toEqual({ ...mcpLaunchSpec({ scope: 'user' }), otherFields: [] })
     expect(toml.match(/\[mcp_servers\.kanbo\]/g)).toHaveLength(1)
     expect(toml.startsWith('model = "o3"\n\n[mcp_servers.kanbo]\n')).toBe(true)
     expect(toml.endsWith('\n\n[profiles.x]\nmodel = "o4"\n')).toBe(true)
@@ -262,6 +281,121 @@ describe('kanbo connect', () => {
   it('without agents and without a terminal, names the agents it knows instead of asking', async () => {
     await expect(connect('--yes')).rejects.toThrowError(/claude, codex, cursor, gemini/)
     await expect(connect('copilot')).rejects.toThrowError(/Unknown agent "copilot"/)
+  })
+
+  describe('an entry or a section that is not in the shape kanbo writes', () => {
+    /** Scenario A of the Windows review: Codex started through cmd /c, with an env subtable of the person's. */
+    const CODEX_CMD = '[mcp_servers.kanbo]\ncommand = "cmd"\nargs = ["/c", "kanbo", "mcp"]\n\n[mcp_servers.kanbo.env]\nKANBO_ACTOR_ID = "codex"\n'
+    /** Scenario B: Cursor started through npx, with an env of the person's. */
+    const CURSOR_NPX = { mcpServers: { kanbo: { command: 'npx', args: ['-y', 'kanbo-cli', 'mcp'], env: { KANBO_ACTOR_ID: 'cursor' } } } }
+    /** Scenario C: Claude Code's user registration started through cmd /c. */
+    const CLAUDE_CMD = { mcpServers: { kanbo: { type: 'stdio', command: 'cmd', args: ['/c', 'kanbo', 'mcp'] } } }
+
+    it('on Windows leaves the person\'s own kanbo entries exactly as they are, and --check says so', async () => {
+      mkdirSync(codexHome)
+      writeFileSync(join(codexHome, 'config.toml'), CODEX_CMD)
+      mkdirSync(join(home, '.cursor'))
+      writeFileSync(join(home, '.cursor', 'mcp.json'), JSON.stringify(CURSOR_NPX))
+      writeFileSync(join(home, '.claude.json'), JSON.stringify(CLAUDE_CMD))
+      const calls = join(root, 'claude-calls')
+      writeRecordingBin(bin, 'claude', calls)
+      vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
+      const before = snapshot(root)
+      onPlatform('win32')
+
+      const printed = await connect('codex', 'cursor', 'claude', '--no-instructions', '--yes')
+
+      expect(snapshot(root)).toEqual(before)
+      expect(existsSync(calls)).toBe(false)
+      expect(printed).toContain(`Codex: ${join(codexHome, 'config.toml')} has your own kanbo entry — left as is.`)
+      expect(printed).toContain(`Cursor: ${join(home, '.cursor', 'mcp.json')} has your own kanbo entry — left as is.`)
+      expect(printed).toContain(`Claude Code: ${join(home, '.claude.json')} has your own kanbo entry — left as is.`)
+
+      // npx is on this PATH, as it is wherever Node is: the entry can start, so Cursor counts as connected.
+      writeFakeBin(bin, 'npx', 'process.exit(0)', 'win32')
+      vi.stubEnv('PATHEXT', '.COM;.EXE;.BAT;.CMD')
+      vi.stubEnv('PATH', bin)
+      const checked = await connect('cursor', '--global', '--no-instructions', '--check')
+      expect(checked).toContain(`Cursor: ${join(home, '.cursor', 'mcp.json')} has your own kanbo entry — left as is.`)
+    })
+
+    it('on Windows rewrites its own stale bare entry and keeps the person\'s other fields', async () => {
+      mkdirSync(join(home, '.cursor'))
+      writeFileSync(join(home, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } } }))
+      onPlatform('win32')
+
+      await connect('cursor', '--no-instructions', '--yes')
+
+      expect(JSON.parse(read(home, '.cursor', 'mcp.json'))).toEqual({ mcpServers: { kanbo: { type: 'stdio', ...mcpLaunchSpec({ scope: 'user', platform: 'win32' }) } } })
+    })
+
+    it('says the old Claude Code entry was removed when claude mcp add fails after it, and prints only the add, alone on its line', async () => {
+      writeFileSync(join(home, '.claude.json'), JSON.stringify({
+        mcpServers: { kanbo: { command: join(root, 'old-node', 'node'), args: [join(root, 'gone', 'kanbo-cli', 'dist', 'cli.cjs'), 'mcp'] } },
+      }))
+      writeFakeBin(bin, 'claude', 'if (process.argv[3] === "add") { process.stderr.write("add broke\\n"); process.exit(1) }')
+      vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
+
+      const printed = await connect('claude', '--global', '--no-instructions', '--yes')
+
+      const add = displayCommand(claudeUserAddArgv(mcpLaunchSpec({ scope: 'user' })))
+      expect(printed).toContain(`Claude Code: the old kanbo entry was removed, but adding the new one failed (claude exited 1: add broke). Add it yourself:\n  ${add}`)
+      const result = printed.slice(printed.indexOf('Claude Code: the old kanbo entry was removed'))
+      expect(result).not.toContain('claude mcp remove')
+      expect(printed).not.toContain('&&')
+    })
+
+    it('leaves a v3 block alone: connect keeps it, --remove without --yes keeps it, --remove --yes takes it out', async () => {
+      const newer = `# Mine\n\n${wrapInstructionBlock('## Kanbo board\n\nNewer words.', 3)}\n`
+      writeFileSync(join(projectDir, 'CLAUDE.md'), newer)
+
+      const printed = await connect('claude', '--no-mcp', '--yes')
+      expect(read(projectDir, 'CLAUDE.md')).toBe(newer)
+      expect(printed).toContain('CLAUDE.md: the kanbo section was written by a newer kanbo (v3) — kept. Update kanbo: npm install -g kanbo-cli@latest')
+
+      const kept = await connect('claude', '--no-mcp', '--remove', '--dry-run')
+      expect(read(projectDir, 'CLAUDE.md')).toBe(newer)
+      expect(kept).not.toContain('edit  CLAUDE.md')
+
+      await connect('claude', '--no-mcp', '--remove', '--yes')
+      expect(read(projectDir, 'CLAUDE.md')).toBe('# Mine\n')
+    })
+
+    it('never touches a file whose start marker has no end, and says how to fix it', async () => {
+      const damaged = '# Mine\n\n<!-- KANBO_START v2 h=4842e336 -->\n## Kanbo board\n\nMy notes after the marker.\r\n'
+      writeFileSync(join(projectDir, 'CLAUDE.md'), damaged)
+
+      const printed = await connect('claude', '--no-mcp', '--yes')
+      expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe(damaged)
+      expect(printed).toContain('CLAUDE.md has a kanbo start marker without an end — fix it by hand, then run again.')
+
+      const removed = await connect('claude', '--no-mcp', '--remove', '--yes')
+      expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe(damaged)
+      expect(removed).toContain('CLAUDE.md has a kanbo start marker without an end')
+    })
+
+    it('keeps a block of a text the person chose (instructions orchestrator --markers)', async () => {
+      const chosen = `${wrapInstructionBlock(ORCHESTRATOR_GUIDE, 2, 'orchestrator')}\n`
+      writeFileSync(join(projectDir, 'CLAUDE.md'), chosen)
+
+      const printed = await connect('claude', '--no-mcp', '--yes')
+
+      expect(read(projectDir, 'CLAUDE.md')).toBe(chosen)
+      expect(printed).toContain('CLAUDE.md: you chose the orchestrator text for the kanbo section — kept.')
+    })
+
+    it('refuses to register this kanbo by full path while it runs from the npx cache', async () => {
+      const script = join(root, 'npm-cache', '_npx', 'a1b2', 'node_modules', 'kanbo-cli', 'dist', 'cli.cjs')
+      mkdirSync(dirname(script), { recursive: true })
+      writeFileSync(script, '')
+      vi.spyOn(process, 'argv', 'get').mockReturnValue([process.execPath, script, 'connect'])
+      onPlatform('win32')
+
+      const printed = await connect('cursor', '--global', '--no-instructions', '--yes')
+
+      expect(existsSync(join(home, '.cursor', 'mcp.json'))).toBe(false)
+      expect(printed).toContain('Install kanbo first so agents can start it: npm install -g kanbo-cli')
+    })
   })
 
   describe('asked at a terminal', () => {

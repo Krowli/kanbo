@@ -22,13 +22,17 @@ export interface LaunchWarningInput extends PathLookup {
   script?: string
 }
 
+/** Is this script one npx runs from npm's cache (a folder named `_npx`), gone once that command ends? */
+export function isNpxScript(script: string): boolean {
+  return script.replaceAll('\\', '/').includes('/_npx/')
+}
+
 /** What to tell the person, or `null` when agents will find kanbo. */
 export function readLaunchWarning(input: LaunchWarningInput = {}): string | null {
   const env = input.env ?? process.env
-  const script = (input.script ?? process.argv[1] ?? '').replaceAll('\\', '/')
   // npm 7+ runs npx as `npm exec` (it sets `npm_command=exec`), from a folder
   // under its cache named `_npx`. A kanbo that npx found installed is on PATH.
-  if (script.includes('/_npx/')) {
+  if (isNpxScript(input.script ?? process.argv[1] ?? '')) {
     return NPX_LAUNCH_WARNING
   }
   if (findOnPath('kanbo', input)) {

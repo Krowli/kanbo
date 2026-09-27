@@ -83,9 +83,11 @@ export function createCliActor(): BoardActor {
  *
  * Approving, returning, closing a sprint, setting a column's entry rules and
  * taking back the log a run names are the things only a person may do, and a shell
- * that says it belongs to an agent is not one. There is no flag to get past this: an
- * agent that can approve its own work makes every card waiting for a person a
- * lie, and an escape hatch would be used by the first agent that read about it.
+ * that says it belongs to an agent is not one. `KANBO_ACTOR_KIND=person` overrides
+ * the marks — for a person's own terminal that an agent tool marked — so this
+ * keeps an honest agent from approving its own work, and does not stop one that
+ * sets the variable. Real enforcement needs a shared Postgres board with agents
+ * on the agent role, where the database itself refuses.
  */
 export function requireHumanActor(action: HumanOnlyAction): BoardActor {
   const marker = readAgentShellMarker()

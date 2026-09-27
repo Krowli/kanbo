@@ -60,20 +60,20 @@ describe('writing the Windows form', () => {
     const next = planCodexMcpServer(path, windows).next!
     expect(next).toBe(`[mcp_servers.kanbo]\ncommand = '${NODE}'\nargs = ['${SCRIPT}', "mcp"]\n`)
     writeFileSync(path, next)
-    expect(readCodexMcpEntry(path)).toEqual({ command: NODE, args: [SCRIPT, 'mcp'] })
+    expect(readCodexMcpEntry(path)).toEqual({ command: NODE, args: [SCRIPT, 'mcp'], otherFields: [] })
   })
 
   it('reads escaped basic strings in config.toml as the path they spell', () => {
     const path = join(directory, 'config.toml')
     writeFileSync(path, `[mcp_servers.kanbo]\ncommand = ${JSON.stringify(NODE)}\nargs = [${JSON.stringify(SCRIPT)}, 'mcp']\n`)
-    expect(readCodexMcpEntry(path)).toEqual({ command: NODE, args: [SCRIPT, 'mcp'] })
+    expect(readCodexMcpEntry(path)).toEqual({ command: NODE, args: [SCRIPT, 'mcp'], otherFields: [] })
   })
 
   it('writes the Node and the script into a JSON registration', () => {
     const path = join(directory, 'mcp.json')
     writeFileSync(path, planJsonMcpServer(path, windows).next!)
     expect(JSON.parse(readFileSync(path, 'utf8')).mcpServers.kanbo).toEqual({ type: 'stdio', command: NODE, args: [SCRIPT, 'mcp'] })
-    expect(readJsonMcpEntry(path)).toEqual({ command: NODE, args: [SCRIPT, 'mcp'] })
+    expect(readJsonMcpEntry(path)).toEqual({ command: NODE, args: [SCRIPT, 'mcp'], otherFields: [] })
   })
 
   it('hands the same form to claude mcp add', () => {

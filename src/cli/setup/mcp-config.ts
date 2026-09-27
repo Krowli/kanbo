@@ -5,7 +5,7 @@ import { CliError } from '../output'
 import type { FileChange } from './file-change'
 import type { McpLaunch } from './mcp-launch'
 import { PORTABLE_MCP_LAUNCH } from './mcp-launch'
-import { findOnPath, globalMcpConfigPath } from './paths'
+import { findOnPath } from './paths'
 import { spawnCommandSync } from './process'
 import { planTextFile, readTextFile } from './text-file'
 
@@ -51,6 +51,16 @@ const TOML_COMMAND_PATTERN = /^\s*command\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*')/m
 /** A one-line `args = [...]` array. */
 const TOML_ARGS_PATTERN = /^\s*args\s*=\s*\[(.*)\]\s*$/m
 
+/** The first key on a `key = …` or `key.sub = …` line; a line that goes on an array (`"mcp",`) has none. */
+const TOML_KEY_PATTERN = /^\s*("[^"]*"|'[^']*'|[\w-]+)\s*[.=]/
+
+/** A line that sets `command` or `args` — the two lines a rewrite replaces. */
+const TOML_COMMAND_LINE = /^\s*command\s*=/
+const TOML_ARGS_LINE = /^\s*args\s*=/
+
+/** The script kanbo registers itself by: the package's `dist/cli.cjs`, or the `cli-main.cjs` it loads. */
+const KANBO_SCRIPT_PATTERN = /[\\/]kanbo-cli[\\/]dist[\\/](?:cli|cli-main)\.cjs$/i
+
 /** One string in a TOML array, either spelling. */
 const TOML_STRING_PATTERN = /"(?:[^"\\]|\\.)*"|'[^']*'/g
 
@@ -75,12 +85,16 @@ export interface McpWriteOptions {
 export function planJsonMcpServer(path: string, launch: McpLaunch = PORTABLE_MCP_LAUNCH, options: McpWriteOptions = {}): FileChange {
   return planTextFile(path, (text) => {
     const existing = readJsonConfig(path, text)
-    if (existing.mcpServers && MCP_SERVER_NAME in existing.mcpServers && !options.replace) {
+    const present = existing.mcpServers?.[MCP_SERVER_NAME]
+    if (present !== undefined && !options.replace) {
       return null
     }
-    const entry = options.withType === false
-      ? { command: launch.command, args: [...launch.args] }
-      : { type: 'stdio', command: launch.command, args: [...launch.args] }
+    // A rewrite changes the command and its arguments and keeps whatever else the entry says.
+    const entry = isPlainObject(present)
+      ? { ...(options.withType === false ? {} : { type: 'stdio' }), ...present, command: launch.command, args: [...launch.args] }
+      : options.withType === false
+        ? { command: launch.command, args: [...launch.args] }
+        : { type: 'stdio', command: launch.command, args: [...launch.args] }
     const next = {
       ...existing,
       mcpServers: { ...existing.mcpServers, [MCP_SERVER_NAME]: entry },
@@ -120,6 +134,12 @@ export function readJsonMcpCommand(path: string): string | null | undefined {
 export interface McpEntry {
   command: string | null
   args: string[]
+  /**
+   * Everything else the entry says: its other JSON keys (a `type` other than
+   * `stdio` among them), or its other TOML keys and subtables (`env`). kanbo
+   * writes none, so an entry with any is the person's.
+   */
+  otherFields: string[]
 }
 
 /** The JSON registration's command and arguments, `undefined` when the file registers no `kanbo` server. */
@@ -129,54 +149,95 @@ export function readJsonMcpEntry(path: string): McpEntry | undefined {
   if (!isPlainObject(servers) || !isPlainObject(servers[MCP_SERVER_NAME])) {
     return undefined
   }
-  const { command, args } = servers[MCP_SERVER_NAME]
+  const entry = servers[MCP_SERVER_NAME]
+  const { command, args } = entry
   return {
     command: typeof command === 'string' && command.trim() ? command.trim() : null,
     args: Array.isArray(args) ? args.filter((arg): arg is string => typeof arg === 'string') : [],
+    otherFields: Object.keys(entry).filter(key => key !== 'command' && key !== 'args' && !(key === 'type' && entry.type === 'stdio')),
   }
 }
 
 /**
  * Codex keeps its servers in TOML tables, so the table is appended rather than
  * merged. A Windows path is written as a TOML literal string (`'…'`), which
- * takes its backslashes as they are. With `replace`, a stale `kanbo` table and
- * its subtables are swapped for the new one where they stood.
+ * takes its backslashes as they are. With `replace`, the `command` and `args`
+ * lines of the `kanbo` table are rewritten where they stand, and every other
+ * line of it — and every subtable — is kept.
  */
 export function planCodexMcpServer(path: string, launch: McpLaunch = PORTABLE_MCP_LAUNCH, options: Pick<McpWriteOptions, 'replace'> = {}): FileChange {
   return planTextFile(path, (text) => {
     const existing = text ?? ''
     const sections = findCodexSections(existing)
-    const table = `[mcp_servers.${MCP_SERVER_NAME}]\ncommand = ${tomlString(launch.command)}\nargs = [${launch.args.map(tomlString).join(', ')}]\n`
+    const command = `command = ${tomlString(launch.command)}`
+    const args = `args = [${launch.args.map(tomlString).join(', ')}]`
+    const table = `[mcp_servers.${MCP_SERVER_NAME}]\n${command}\n${args}\n`
     if (sections.length > 0) {
-      if (!options.replace) {
+      const main = sections.find(section => section.main)
+      if (!options.replace || !main) {
         return null
       }
       const lines = existing.split('\n')
-      const removed = new Set(sections.flatMap(({ start, end }) => range(start, end)))
-      const before = lines.slice(0, sections[0]!.start).join('\n').replace(/\s*$/, '')
-      const after = lines.slice(sections[0]!.start).filter((_, offset) => !removed.has(sections[0]!.start + offset)).join('\n').trim()
-      return [before, table.trimEnd(), after].filter(part => part.length > 0).join('\n\n') + '\n'
+      const body = lines.slice(main.start + 1, main.end)
+        .filter(line => !TOML_COMMAND_LINE.test(line) && !TOML_ARGS_LINE.test(line))
+      lines.splice(main.start + 1, main.end - main.start - 1, command, args, ...body)
+      return lines.join('\n')
     }
     return existing.trim() ? `${existing.replace(/\s*$/, '')}\n\n${table}` : table
   })
 }
 
 /**
- * A `kanbo` registration of kanbo's own that no longer starts, and that
- * `kanbo connect` may therefore rewrite: one that names its program by full
- * path when that program — or a script among its arguments — is gone (a Node
- * upgrade, a reinstall elsewhere), or, on Windows, one of the person's own that
- * names a bare command, which there is npm's `kanbo.cmd` shim.
+ * Is this entry one kanbo wrote, in exactly the shape it writes it? `kanbo mcp`
+ * (with `"type": "stdio"` or without), or a Node given by full path running
+ * kanbo's own script (`…/kanbo-cli/dist/cli.cjs mcp`) — and nothing else: an
+ * entry with an `env`, a `cwd` or any other field, or one that starts kanbo
+ * some other way (`cmd /c kanbo mcp`, `npx -y kanbo-cli mcp`), is the
+ * person's, and kanbo never rewrites or removes it without asking.
  */
-export function isStaleMcpEntry(entry: McpEntry, scope: 'project' | 'user', platform: NodeJS.Platform = process.platform): boolean {
-  const { command, args } = entry
-  if (command === null) {
+export function isOwnMcpEntry(entry: McpEntry): boolean {
+  const { command, args, otherFields } = entry
+  if (command === null || otherFields.length > 0) {
     return false
   }
-  if (isAbsolutePath(command)) {
-    return [command, ...args.filter(isAbsolutePath)].some(file => !existsSync(file))
+  if (command === MCP_COMMAND) {
+    return args.length === MCP_ARGS.length && args.every((arg, index) => arg === MCP_ARGS[index])
+  }
+  return isAbsolutePath(command)
+    && /^node(?:\.exe)?$/i.test(command.split(/[\\/]/).pop() ?? '')
+    && args.length === 2
+    && args[1] === 'mcp'
+    && isAbsolutePath(args[0]!)
+    && KANBO_SCRIPT_PATTERN.test(args[0]!)
+}
+
+/**
+ * A `kanbo` registration of kanbo's own (`isOwnMcpEntry`) that no longer
+ * starts, and that `kanbo connect` may therefore rewrite: one that names its
+ * Node and script by full path when either is gone (a Node upgrade, a
+ * reinstall elsewhere), or, on Windows, the bare `kanbo mcp` in the person's
+ * own settings, which there is npm's `kanbo.cmd` shim.
+ */
+export function isStaleMcpEntry(entry: McpEntry, scope: 'project' | 'user', platform: NodeJS.Platform = process.platform): boolean {
+  if (!isOwnMcpEntry(entry)) {
+    return false
+  }
+  const { command, args } = entry
+  if (isAbsolutePath(command!)) {
+    return [command!, ...args.filter(isAbsolutePath)].some(file => !existsSync(file))
   }
   return platform === 'win32' && scope === 'user'
+}
+
+/**
+ * Can this entry — one of the person's own, say — start at all here? Its
+ * program by full path has to exist, or its bare name be on `PATH`.
+ */
+export function canStartMcpEntry(entry: McpEntry, platform: NodeJS.Platform = process.platform): boolean {
+  if (entry.command === null) {
+    return false
+  }
+  return isAbsolutePath(entry.command) ? existsSync(entry.command) : findOnPath(entry.command, { platform }) !== null
 }
 
 /** A full path on either system: `/…`, `C:\\…` or `\\\\server\\…`. */
@@ -215,17 +276,32 @@ export function readCodexMcpEntry(path: string): McpEntry | undefined {
   if (text === undefined) {
     return undefined
   }
-  const main = findCodexSections(text).find(section => section.main)
+  const sections = findCodexSections(text)
+  const main = sections.find(section => section.main)
   if (!main) {
     return undefined
   }
-  const body = text.split('\n').slice(main.start, main.end).join('\n')
+  const lines = text.split('\n').slice(main.start + 1, main.end)
+  const body = lines.join('\n')
   const command = TOML_COMMAND_PATTERN.exec(body)?.[1]
   const args = TOML_ARGS_PATTERN.exec(body)?.[1]
+  const keys = lines.flatMap((line) => {
+    const key = TOML_KEY_PATTERN.exec(line)?.[1]
+    return key === undefined ? [] : [readTomlKey(key)]
+  })
   return {
     command: command === undefined ? null : readTomlString(command),
     args: args === undefined ? [] : (args.match(TOML_STRING_PATTERN) ?? []).map(readTomlString),
+    otherFields: [
+      ...keys.filter(key => key !== 'command' && key !== 'args'),
+      ...sections.filter(section => !section.main).map(section => section.subtable),
+    ],
   }
+}
+
+/** A key's name, quotes taken off. */
+function readTomlKey(key: string): string {
+  return /^["']/.test(key) ? key.slice(1, -1) : key
 }
 
 /**
@@ -247,11 +323,6 @@ function readTomlString(quoted: string): string {
   catch {
     return quoted.slice(1, -1)
   }
-}
-
-/** Is the server registered with Claude Code for every project of this user (`~/.claude.json`, read only)? */
-export function readClaudeUserMcpCommand(): string | null | undefined {
-  return readJsonMcpCommand(globalMcpConfigPath('claude'))
 }
 
 /** What happened to a registration that goes through the `claude` command. */
@@ -296,9 +367,9 @@ export function displayCommand(argv: readonly string[]): string {
 }
 
 /** The line ranges (`end` exclusive) of the `kanbo` table and its subtables. */
-function findCodexSections(text: string): { start: number, end: number, main: boolean }[] {
+function findCodexSections(text: string): { start: number, end: number, main: boolean, subtable: string }[] {
   const lines = text.split('\n')
-  const sections: { start: number, end: number, main: boolean }[] = []
+  const sections: { start: number, end: number, main: boolean, subtable: string }[] = []
   for (let index = 0; index < lines.length; index += 1) {
     const match = CODEX_HEADER_PATTERN.exec(lines[index]!)
     if (!match) {
@@ -308,7 +379,7 @@ function findCodexSections(text: string): { start: number, end: number, main: bo
     while (end < lines.length && !TOML_HEADER_PATTERN.test(lines[end]!)) {
       end += 1
     }
-    sections.push({ start: index, end, main: match[1] === undefined })
+    sections.push({ start: index, end, main: match[1] === undefined, subtable: match[1]?.replace(/^\s*\.\s*/, '').trim() ?? '' })
     index = end - 1
   }
   return sections

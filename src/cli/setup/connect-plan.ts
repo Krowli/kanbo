@@ -1,5 +1,7 @@
 import { relative } from 'node:path'
 
+import { canPrompt } from '../ui/environment'
+import { getUi } from '../ui/ui'
 import type { AgentId, McpTarget } from './agents'
 import { AGENT_IDS, AGENTS } from './agents'
 import type { FileChange } from './file-change'
@@ -9,14 +11,16 @@ import {
   GLOBAL_INSTRUCTION_BLOCK,
   INSTRUCTION_BLOCK,
   planInstructionBlockAsking,
-  planInstructionBlockRemoval,
+  planInstructionBlockRemovalAsking,
   readInstructionBlockState,
 } from './instructions'
+import { isNpxScript, NOT_INSTALLED_FIX } from './launch-warning'
 import type { McpEntry } from './mcp-config'
 import {
   CLAUDE_USER_REMOVE,
   claudeUserAddArgv,
   displayCommand,
+  isOwnMcpEntry,
   isStaleMcpEntry,
   planCodexMcpServer,
   planCodexMcpServerRemoval,
@@ -43,6 +47,17 @@ import { mcpLaunchSpec } from './mcp-launch'
 /** Codex reads a project's `.codex/config.toml` only once the person has marked the project trusted. */
 export const CODEX_PROJECT_NOTE = 'Codex reads .codex/config.toml only in a project you have marked as trusted; '
   + 'kanbo connect codex without --project registers it in your own ~/.codex/config.toml instead.'
+
+/**
+ * Why a registration naming this kanbo by full path is not written: a kanbo
+ * run from npx lives in npm's cache only while that one command runs.
+ */
+export const NPX_USER_REGISTRATION_REFUSAL = `Install kanbo first so agents can start it: ${NOT_INSTALLED_FIX}`
+
+/** What the person is told about a `kanbo` MCP entry of their own, which kanbo does not change. */
+export function ownMcpEntryNote(label: string, path: string): string {
+  return `${label}: ${path} has your own kanbo entry — left as is.`
+}
 
 /** What one agent should get, and where: `null` leaves that part alone. */
 export interface AgentRequest {
@@ -90,8 +105,11 @@ export interface ConnectOutcome {
   path: string
   /** `ran`/`manual`: a `claude mcp` command run, or handed to the person. */
   state: 'written' | 'unchanged' | 'ran' | 'manual'
+  /** The command run, or — when `manual` — the ones left to run, one per line. */
   command?: string
   reason?: string
+  /** `manual` after `claude mcp remove` ran and the `add` after it failed: the old entry is gone. */
+  removed?: boolean
 }
 
 /**
@@ -138,22 +156,30 @@ export async function planConnect(
     planned.add(target.path)
     const launch = mcpLaunchSpec({ scope, platform: context.platform })
     const entry = readMcpEntry(target)
-    const stale = entry !== undefined && isStaleMcpEntry(entry, scope, context.platform)
+    if (entry !== undefined && !isOwnMcpEntry(entry)) {
+      plan.notes.push(ownMcpEntryNote(AGENTS[agent].label, displayPath(plan, target.path)))
+      continue
+    }
     if (launch.warning) {
       plan.notes.push(launch.warning)
     }
     if (agent === 'codex' && scope === 'project') {
       plan.notes.push(CODEX_PROJECT_NOTE)
     }
+    const stale = entry !== undefined && isStaleMcpEntry(entry, scope, context.platform)
+    if (entry !== undefined && !stale) {
+      plan.items.push(target.format === 'claude-cli'
+        ? { kind: 'claude-cli', agent: 'claude', scope: 'user', path: target.path, argvs: [] }
+        : { kind: 'mcp', agent, scope, change: { path: target.path, next: null } })
+      continue
+    }
+    if (launch.args.some(isNpxScript)) {
+      plan.notes.push(NPX_USER_REGISTRATION_REFUSAL)
+      continue
+    }
     if (target.format === 'claude-cli') {
       const add = claudeUserAddArgv(launch)
-      plan.items.push({
-        kind: 'claude-cli',
-        agent: 'claude',
-        scope: 'user',
-        path: target.path,
-        argvs: entry === undefined ? [add] : stale ? [CLAUDE_USER_REMOVE, add] : [],
-      })
+      plan.items.push({ kind: 'claude-cli', agent: 'claude', scope: 'user', path: target.path, argvs: stale ? [CLAUDE_USER_REMOVE, add] : [add] })
       continue
     }
     const change = target.format === 'toml'
@@ -169,12 +195,17 @@ export async function planConnect(
 /**
  * The plan that takes kanbo out of these agents' files: the block and the
  * `kanbo` MCP entry, nothing else. A project's `AGENTS.md` is Codex's and
- * Cursor's both, so its block stays while the other one is still connected —
- * still has a `kanbo` MCP entry — and is not being disconnected too.
+ * Cursor's both, so its block goes only when every agent that reads it is
+ * being disconnected here. A block or an MCP entry that is not kanbo's own
+ * shape goes only on a yes at a terminal, or `--yes`.
  */
-export function planDisconnect(requests: AgentRequest[], context: { projectDir: string }): ConnectPlan {
+export async function planDisconnect(
+  requests: AgentRequest[],
+  context: { projectDir: string, yes?: boolean, /** False when nobody may be asked (a dry run). */ prompt?: boolean },
+): Promise<ConnectPlan> {
   const plan: ConnectPlan = { projectDir: context.projectDir, items: [], notes: [] }
   const removing = new Set(requests.map(request => request.agent))
+  const asking = { yes: context.yes, prompt: context.prompt }
 
   for (const { agent, instructions: scope } of requests) {
     const path = scope === null ? null : AGENTS[agent].instructionPath(scope, context.projectDir)
@@ -182,14 +213,20 @@ export function planDisconnect(requests: AgentRequest[], context: { projectDir: 
       continue
     }
     const sharers = AGENT_IDS.filter(other => other !== agent && AGENTS[other].instructionPath(scope, context.projectDir) === path)
-    const stillUsing = sharers.filter(other => !removing.has(other) && isMcpConnected(other, context.projectDir))
-    if (stillUsing.length > 0) {
+    const staying = sharers.filter(other => !removing.has(other))
+    if (staying.length > 0) {
       if (readInstructionBlockState(path, INSTRUCTION_BLOCK) !== null) {
-        plan.notes.push(`${path}: kept the kanbo section, ${stillUsing.map(other => AGENTS[other].label).join(' and ')} still use${stillUsing.length === 1 ? 's' : ''} it.`)
+        const others = staying.map(other => AGENTS[other].label).join(' and ')
+        plan.notes.push(`${displayPath(plan, path)} section kept — ${others} also read${staying.length === 1 ? 's' : ''} it. `
+          + `Remove it with: kanbo connect ${staying.join(' ')} --remove`)
       }
       continue
     }
-    plan.items.push({ kind: 'instructions', agents: [agent, ...sharers.filter(other => removing.has(other))], scope, change: planInstructionBlockRemoval(path) })
+    const asked = await planInstructionBlockRemovalAsking(path, { ...asking, label: displayPath(plan, path) })
+    if (asked.note) {
+      plan.notes.push(asked.note)
+    }
+    plan.items.push({ kind: 'instructions', agents: [agent, ...sharers.filter(other => removing.has(other))], scope, change: asked.change })
   }
 
   for (const { agent, mcp: scope } of requests) {
@@ -197,14 +234,36 @@ export function planDisconnect(requests: AgentRequest[], context: { projectDir: 
       continue
     }
     const target = AGENTS[agent].mcpTarget(scope, context.projectDir)
+    const entry = readMcpEntry(target)
+    const remove = entry !== undefined && (isOwnMcpEntry(entry) || await confirmOwnEntryRemoval(AGENTS[agent].label, displayPath(plan, target.path), asking, plan))
     if (target.format === 'claude-cli') {
-      plan.items.push({ kind: 'claude-cli', agent: 'claude', scope: 'user', path: target.path, argvs: readMcpEntry(target) === undefined ? [] : [CLAUDE_USER_REMOVE] })
+      plan.items.push({ kind: 'claude-cli', agent: 'claude', scope: 'user', path: target.path, argvs: remove ? [CLAUDE_USER_REMOVE] : [] })
       continue
     }
-    const change = target.format === 'toml' ? planCodexMcpServerRemoval(target.path) : planJsonMcpServerRemoval(target.path)
+    const change = !remove
+      ? { path: target.path, next: null }
+      : target.format === 'toml' ? planCodexMcpServerRemoval(target.path) : planJsonMcpServerRemoval(target.path)
     plan.items.push({ kind: 'mcp', agent, scope, change })
   }
+  plan.notes = [...new Set(plan.notes)]
   return plan
+}
+
+/** Remove a `kanbo` MCP entry the person set up themselves? Only on `--yes`, or a yes at a terminal (default no). */
+export async function confirmOwnEntryRemoval(
+  label: string,
+  path: string,
+  options: { yes?: boolean, prompt?: boolean },
+  plan?: Pick<ConnectPlan, 'notes'>,
+): Promise<boolean> {
+  const remove = Boolean(options.yes) || (options.prompt !== false && canPrompt() && await getUi().confirm({
+    message: `${label}: ${path} has a kanbo entry you set up yourself. Remove it anyway?`,
+    initialValue: false,
+  }))
+  if (!remove) {
+    plan?.notes.push(`${ownMcpEntryNote(label, path)} Remove it with --yes.`)
+  }
+  return remove
 }
 
 /** The `kanbo` entry an MCP target holds, `undefined` when it holds none. */
@@ -212,13 +271,20 @@ export function readMcpEntry(target: McpTarget): McpEntry | undefined {
   return target.format === 'toml' ? readCodexMcpEntry(target.path) : readJsonMcpEntry(target.path)
 }
 
-/** What the `kanbo` MCP entry of one agent in one scope is: there and starting, missing, or kanbo's own gone stale. */
-export type McpState = 'ok' | 'missing' | 'stale'
+/**
+ * What the `kanbo` MCP entry of one agent in one scope is: kanbo's own and
+ * starting, missing, kanbo's own gone stale, or the person's own (`own`),
+ * which kanbo leaves as it is.
+ */
+export type McpState = 'ok' | 'missing' | 'stale' | 'own'
 
 export function readMcpState(agent: AgentId, scope: McpScope, projectDir: string, platform?: NodeJS.Platform): McpState {
   const entry = readMcpEntry(AGENTS[agent].mcpTarget(scope, projectDir))
   if (entry === undefined) {
     return 'missing'
+  }
+  if (!isOwnMcpEntry(entry)) {
+    return 'own'
   }
   return isStaleMcpEntry(entry, scope, platform) ? 'stale' : 'ok'
 }
@@ -230,10 +296,6 @@ export function readInstructionState(agent: AgentId, scope: McpScope, projectDir
     return null
   }
   return readInstructionBlockState(path, scope === 'project' ? INSTRUCTION_BLOCK : GLOBAL_INSTRUCTION_BLOCK) ?? 'missing'
-}
-
-function isMcpConnected(agent: AgentId, projectDir: string): boolean {
-  return (['project', 'user'] as const).some(scope => readMcpState(agent, scope, projectDir) !== 'missing')
 }
 
 /** The items that change something. */
@@ -294,13 +356,26 @@ export function applyConnectPlan(plan: ConnectPlan): ConnectOutcome[] {
     }
     const base = { kind: item.kind, agents, scope: item.scope, path: item.path }
     let command: string | undefined
-    for (const argv of item.argvs) {
+    for (const [index, argv] of item.argvs.entries()) {
       const outcome = runClaudeMcp(argv)
       command = outcome.command
       if (outcome.state === 'manual') {
-        return { ...base, state: 'manual' as const, command: item.argvs.map(line => displayCommand(line)).join(' && '), reason: outcome.reason }
+        // What is left to run: this command and the ones after it — never one that already ran.
+        const left = item.argvs.slice(index).map(line => displayCommand(line)).join('\n')
+        return { ...base, state: 'manual' as const, command: left, reason: outcome.reason, ...(index > 0 ? { removed: true } : {}) }
       }
     }
     return command ? { ...base, state: 'ran' as const, command } : { ...base, state: 'unchanged' as const }
   })
+}
+
+/**
+ * What the person reads about `claude mcp` commands left to them: each on a
+ * line of its own, so each can be pasted into any shell — PowerShell has no `&&`.
+ */
+export function describeManualOutcome(who: string, outcome: Pick<ConnectOutcome, 'command' | 'reason' | 'removed'>): string {
+  const commands = (outcome.command ?? '').split('\n').map(line => `  ${line}`).join('\n')
+  return outcome.removed
+    ? `${who}: the old kanbo entry was removed, but adding the new one failed (${outcome.reason}). Add it yourself:\n${commands}`
+    : `${who}: run this yourself (${outcome.reason}):\n${commands}`
 }

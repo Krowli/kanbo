@@ -103,6 +103,21 @@ describe('kanbo init with nothing naming a board', () => {
     expect(JSON.parse(ready)).toEqual([{ id: 'ABC-001', title: 'Check the sensors' }])
   })
 
+  it('in an agent\'s shell without --yes sets up the board but changes no agent file, and says how to', async () => {
+    vi.stubEnv('CLAUDECODE', '1')
+    const said: string[] = []
+    const printed = await kanbo('init', '--connect', 'claude')
+    vi.mocked(console.error).mock.calls.forEach(call => said.push(String(call[0])))
+
+    expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(true)
+    expect(readdirSync(projectDir)).toEqual(['.kanbo'])
+    expect(said.join('\n')).toContain('Not changing agent files without a yes: run kanbo connect claude --yes')
+    expect(printed).toContain(CONNECT_LATER_TIP)
+
+    await kanbo('init', '--connect', 'claude', '--yes')
+    expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toContain('KANBO_START')
+  })
+
   it('takes a list of columns, and puts the ones it does not know as the person\'s own', async () => {
     const printed = await kanbo('init', '--yes', '--columns', 'To Do, Doing, QA, Done')
 

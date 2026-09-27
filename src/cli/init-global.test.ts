@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeRecordingBin } from '../testing/fake-bin'
 import { registerInitCommand } from './commands/init'
 import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK } from './setup/instructions'
+import { LEGACY_BLOCK_BODIES } from './setup/legacy-blocks'
 import { claudeUserAddArgv, displayCommand, readCodexMcpEntry } from './setup/mcp-config'
 import { mcpLaunchSpec } from './setup/mcp-launch'
 
@@ -68,7 +69,7 @@ describe('kanbo init --global', () => {
     expect(readFileSync(join(codexHome, 'AGENTS.md'), 'utf8')).toContain(GLOBAL_INSTRUCTION_BLOCK)
     expect(existsSync(join(home, '.gemini', 'GEMINI.md'))).toBe(false)
     // `kanbo mcp`, or on Windows this Node and this script (mcp-launch.test.ts has both forms).
-    expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toEqual(USER_LAUNCH)
+    expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toEqual({ ...USER_LAUNCH, otherFields: [] })
     expect(JSON.parse(readFileSync(join(home, '.cursor', 'mcp.json'), 'utf8'))).toEqual({
       mcpServers: { kanbo: { type: 'stdio', ...USER_LAUNCH } },
     })
@@ -104,7 +105,7 @@ describe('kanbo init --global', () => {
     mkdirSync(join(home, '.claude'), { recursive: true })
     writeFileSync(
       join(home, '.claude', 'CLAUDE.md'),
-      '# Mine\n\n<!-- KANBO_START -->\nold rules\n<!-- KANBO_END -->\n\nMore of mine.\n',
+      `# Mine\n\n<!-- KANBO_START -->\n${LEGACY_BLOCK_BODIES[2]}\n<!-- KANBO_END -->\n\nMore of mine.\n`,
     )
 
     const result = await run(['--yes', '--instructions', 'claude', '--mcp', ''])

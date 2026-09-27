@@ -19,9 +19,10 @@ import { assertInstalledBoard, FILE_SCHEMA_OUTDATED_MESSAGE, SCHEMA_OUTDATED_MES
 import type { AgentId } from './setup/agents'
 import { AGENT_IDS, AGENTS, instructionPaths } from './setup/agents'
 import { readMcpEntry } from './setup/connect-plan'
-import type { InstructionBlockState } from './setup/instructions'
-import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, readInstructionBlockState } from './setup/instructions'
-import { MCP_ARGS, MCP_COMMAND } from './setup/mcp-config'
+import type { InstructionBlockInspection } from './setup/instructions'
+import { damagedBlockMessage, GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, readInstructionBlockInspection } from './setup/instructions'
+import type { McpEntry } from './setup/mcp-config'
+import { canStartMcpEntry, isOwnMcpEntry, MCP_ARGS, MCP_COMMAND } from './setup/mcp-config'
 import { resolveShimTarget } from './setup/npm-shim'
 import { findAllOnPath, findOnPath } from './setup/paths'
 
@@ -67,13 +68,11 @@ export interface ProjectState {
 }
 
 /** One MCP registration found in a tool's configuration. */
-interface Registration {
+interface Registration extends McpEntry {
   client: AgentId
   path: string
   /** The project's shared file, or the person's own configuration. */
   scope: 'project' | 'user'
-  command: string | null
-  args: string[]
 }
 
 export async function collectDoctorFindings(input: DoctorInput): Promise<DoctorFinding[]> {
@@ -262,10 +261,10 @@ function checkInstructions(root: string | null): DoctorFinding[] {
   const scopes = [...(root ? [{ scope: 'project' as const, root, block: INSTRUCTION_BLOCK }] : []), { scope: 'user' as const, root: root ?? process.cwd(), block: GLOBAL_INSTRUCTION_BLOCK }]
   for (const { scope, root: folder, block } of scopes) {
     for (const { path, agents } of instructionPaths(scope, folder)) {
-      const state = readInstructionBlockState(path, block)
-      if (state !== null) {
+      const inspection = readInstructionBlockInspection(path, block)
+      if (inspection !== null) {
         const command = `kanbo connect ${agents[0]} ${scope === 'project' ? '--project' : '--global'} --no-mcp`
-        findings.push(blockFinding(path, state, scope === 'project' ? `cd ${folder} && ${command}` : command))
+        findings.push(blockFinding(path, inspection, scope === 'project' ? `cd ${folder} && ${command}` : command))
       }
     }
   }
@@ -283,12 +282,26 @@ function checkInstructions(root: string | null): DoctorFinding[] {
 /**
  * A block kanbo wrote and nobody changed is only out of date: it still sends
  * the agent to `kanbo prime`, so it is a warning, and `--yes` rewrites it. A
- * block the person changed is theirs, and only they can say to replace it.
+ * block the person changed is theirs, and only they can say to replace it; a
+ * text they chose, or a block a newer kanbo wrote, is fine as it is. A file
+ * whose markers do not pair up is one kanbo will not touch until it is fixed.
  */
-function blockFinding(path: string, state: InstructionBlockState, command: string): DoctorFinding {
-  switch (state) {
+function blockFinding(path: string, inspection: InstructionBlockInspection, command: string): DoctorFinding {
+  switch (inspection.state) {
     case 'current':
       return { check: 'instructions', status: 'ok', detail: `${path}: block is current.` }
+    case 'chosen':
+      return { check: 'instructions', status: 'ok', detail: `${path}: you chose the ${inspection.kind} text for the kanbo section; kanbo leaves it alone.` }
+    case 'newer':
+      return {
+        check: 'instructions',
+        status: 'ok',
+        detail: `${path}: written by a newer kanbo (v${inspection.version}) — update kanbo: npm install -g kanbo-cli@latest`,
+      }
+    case 'damaged': {
+      const message = damagedBlockMessage(path, inspection.damage!)
+      return { check: 'instructions', status: 'fail', detail: message, fix: message }
+    }
     case 'edited':
       return {
         check: 'instructions',
@@ -332,17 +345,32 @@ function checkRegistrations(registrations: Registration[], platform: NodeJS.Plat
     }]
   }
   return registrations.map((registration) => {
-    const { client, path, command } = registration
+    const { client, path, command, scope } = registration
     const check = `mcp:${client}`
     if (command === null) {
       return { check, status: 'warn', detail: `${path}: the kanbo entry names no command.`, fix: `Set "command" to kanbo in ${path}.` }
     }
-    if (codexCannotStart(registration, platform)) {
+    const cmdShim = codexCannotStart(registration, platform)
+    if (!isOwnMcpEntry(registration)) {
+      const detail = `${path}: your own kanbo entry (${[command, ...registration.args].join(' ')}) — left as is.`
+      if (!cmdShim && canStartMcpEntry(registration, platform)) {
+        return { check, status: 'ok', detail }
+      }
+      return {
+        check,
+        status: 'warn',
+        detail: `${detail} It can't start here.`,
+        fix: cmdShim && scope === 'project'
+          ? CODEX_PROJECT_CMD_FIX
+          : `Change the command in ${path}, or remove the entry and run ${connectCommand(client, scope)}.`,
+      }
+    }
+    if (cmdShim) {
       return {
         check,
         status: 'warn',
         detail: `${path}: starts ${command}, which on Windows is a .cmd shim.`,
-        fix: 'Codex on Windows can\'t start a .cmd — re-register with `kanbo connect codex`.',
+        fix: scope === 'project' ? CODEX_PROJECT_CMD_FIX : 'Codex on Windows can\'t start a .cmd — re-register with `kanbo connect codex`.',
       }
     }
     if (isAbsolute(command)) {
@@ -359,6 +387,15 @@ function checkRegistrations(registrations: Registration[], platform: NodeJS.Plat
         }
   })
 }
+
+/**
+ * A project's Codex entry that Windows cannot start: `kanbo connect codex`
+ * alone would register kanbo for the person and leave the project's entry
+ * there, so the fix is two commands, each on its own line.
+ */
+const CODEX_PROJECT_CMD_FIX = 'Codex on Windows can\'t start a .cmd. Remove the project entry, then register kanbo for your user:\n'
+  + '  kanbo connect codex --project --remove --no-instructions\n'
+  + '  kanbo connect codex'
 
 /**
  * A registration that names its program by full path — on Windows, a Node and

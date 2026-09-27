@@ -6,20 +6,24 @@ import { CliError, printResult } from '../output'
 import type { AgentId } from '../setup/agents'
 import { AGENT_IDS, AGENTS, defaultMcpScope, detectAgents, parseAgentId } from '../setup/agents'
 import { confirmPlan } from '../setup/confirm'
-import type { AgentRequest, ConnectOutcome, ConnectPlan } from '../setup/connect-plan'
+import type { AgentRequest, ConnectOutcome, ConnectPlan, McpState } from '../setup/connect-plan'
 import {
   applyConnectPlan,
   describeConnectPlan,
+  describeManualOutcome,
   displayPath,
   explainItem,
   itemPath,
+  ownMcpEntryNote,
   pendingItems,
   planConnect,
   planDisconnect,
   readInstructionState,
+  readMcpEntry,
   readMcpState,
 } from '../setup/connect-plan'
 import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK } from '../setup/instructions'
+import { canStartMcpEntry } from '../setup/mcp-config'
 import type { McpScope } from '../setup/mcp-launch'
 import { canPrompt } from '../ui/environment'
 import { getUi } from '../ui/ui'
@@ -86,6 +90,12 @@ async function connect(names: string[], options: ConnectOptions): Promise<void> 
     return
   }
 
+  // `--remove` without agents takes kanbo out of every one of them.
+  if (options.remove && named === null) {
+    await disconnect([...AGENT_IDS], scope, projectDir, options)
+    return
+  }
+
   const interactive = named === null
   if (interactive && (!canPrompt() || options.yes)) {
     throw new CliError(1, `Name the agents to connect: kanbo connect <agents...>, from ${AGENT_LIST}. `
@@ -142,7 +152,7 @@ async function disconnect(agents: AgentId[], scope: ScopeFlag, projectDir: strin
     instructions: options.instructions === false ? null : each,
     mcp: options.mcp === false ? null : each,
   })))
-  const plan = planDisconnect(requests, { projectDir })
+  const plan = await planDisconnect(requests, { projectDir, yes: options.yes, prompt: !options.dryRun })
   const machine = options.json !== undefined
   if (options.dryRun) {
     print(machine, describeConnectPlan(plan, 'kanbo connect --remove would:', true))
@@ -215,7 +225,7 @@ function describeOutcomes(action: 'connect' | 'remove', agents: AgentId[], outco
     const who = outcome.agents.map(agent => AGENTS[agent].label).join(', ')
     const where = displayPath(plan, outcome.path)
     if (outcome.state === 'manual') {
-      lines.push(`${who}: run this yourself: ${outcome.command} (${outcome.reason})`)
+      lines.push(describeManualOutcome(who, outcome))
     }
     else {
       const state = outcome.state === 'written' && action === 'remove' ? 'removed' : outcome.state
@@ -253,15 +263,20 @@ interface CheckRow {
 }
 
 function runCheck(agents: AgentId[], named: boolean, flag: ScopeFlag, projectDir: string, options: ConnectOptions): void {
-  const rows = agents.map(agent => checkAgent(agent, flag, projectDir, options))
+  const checked = agents.map(agent => checkAgent(agent, flag, projectDir, options))
+  const rows = checked.map(({ row }) => row)
   const text = [
     ['agent', 'instructions', 'MCP', 'scope'],
     ...rows.map(row => [row.agent, row.instructions, row.mcp, row.scope]),
   ]
   const widths = text[0]!.map((_, column) => Math.max(...text.map(line => line[column]!.length)))
+  const notes = checked.flatMap(({ notes }) => notes)
   printResult({
     value: rows,
-    text: text.map(line => line.map((cell, column) => cell.padEnd(widths[column]!)).join('  ').trimEnd()).join('\n'),
+    text: [
+      ...text.map(line => line.map((cell, column) => cell.padEnd(widths[column]!)).join('  ').trimEnd()),
+      ...notes.map(note => `Note: ${note}`),
+    ].join('\n'),
   }, outputOptions(options))
   const missing = rows.filter(row => !row.connected)
   if (named && missing.length > 0) {
@@ -273,11 +288,13 @@ function runCheck(agents: AgentId[], named: boolean, flag: ScopeFlag, projectDir
  * Where an agent stands: its kanbo section and its MCP entry, looked for in the
  * scope named — or, when none was, in the project first and then the person's
  * own files. Connected means both are there (or were not asked about) and the
- * MCP entry still starts.
+ * MCP entry still starts. An MCP entry of the person's own is theirs: it is
+ * reported, left as it is, and counts as connected when it can start.
  */
-function checkAgent(agent: AgentId, flag: ScopeFlag, projectDir: string, options: ConnectOptions): CheckRow {
+function checkAgent(agent: AgentId, flag: ScopeFlag, projectDir: string, options: ConnectOptions): { row: CheckRow, notes: string[] } {
   const scopes: McpScope[] = flag ? [flag] : ['project', 'user']
   const found: McpScope[] = []
+  const notes: string[] = []
 
   let instructions = 'skipped'
   if (options.instructions !== false) {
@@ -292,8 +309,16 @@ function checkAgent(agent: AgentId, flag: ScopeFlag, projectDir: string, options
   let mcp = 'skipped'
   if (options.mcp !== false) {
     const states = scopes.map(scope => ({ scope, state: readMcpState(agent, scope, projectDir) }))
-    const present = states.find(({ state }) => state === 'ok') ?? states.find(({ state }) => state === 'stale')
-    mcp = present ? (present.state === 'ok' ? 'ok' : 'stale path') : 'missing'
+    const present = states.find(({ state }) => state === 'ok')
+      ?? states.find(({ state }) => state === 'own')
+      ?? states.find(({ state }) => state === 'stale')
+    mcp = present ? MCP_CELLS[present.state as Exclude<McpState, 'missing'>] : 'missing'
+    if (present?.state === 'own') {
+      const target = AGENTS[agent].mcpTarget(present.scope, projectDir)
+      const startable = canStartMcpEntry(readMcpEntry(target)!)
+      mcp = startable ? 'yours' : 'yours, won\'t start'
+      notes.push(`${ownMcpEntryNote(AGENTS[agent].label, target.path)}${startable ? '' : ' It can\'t start here: its command is not found.'}`)
+    }
     if (present) {
       found.push(present.scope)
     }
@@ -301,13 +326,18 @@ function checkAgent(agent: AgentId, flag: ScopeFlag, projectDir: string, options
 
   const where = [...new Set(found)]
   return {
-    agent,
-    instructions,
-    mcp,
-    scope: where.length > 0 ? where.join('+') : (flag ?? defaultMcpScope(agent)),
-    connected: instructions !== 'missing' && (mcp === 'skipped' || mcp === 'ok'),
+    row: {
+      agent,
+      instructions,
+      mcp,
+      scope: where.length > 0 ? where.join('+') : (flag ?? defaultMcpScope(agent)),
+      connected: instructions !== 'missing' && instructions !== 'damaged' && (mcp === 'skipped' || mcp === 'ok' || mcp === 'yours'),
+    },
+    notes,
   }
 }
+
+const MCP_CELLS: Record<Exclude<McpState, 'missing'>, string> = { ok: 'ok', stale: 'stale path', own: 'yours' }
 
 /** The named agents, `all` for every one; `null` when none was named. */
 function parseAgents(names: string[]): AgentId[] | null {

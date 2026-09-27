@@ -17,10 +17,19 @@ See `Could not load better-sqlite3 …` below.
 Run `kanbo migrate` in the project.
 
 **`instructions` warn: `block was written by an older kanbo`**
-Run the command in the fix (`kanbo connect claude --project --no-mcp --yes` in the project, or `kanbo connect <agent> --global --no-mcp --yes`). Blocks are not refreshed automatically.
+Run the command in the fix (`kanbo connect claude --project --no-mcp --yes` in the project, or `kanbo connect <agent> --global --no-mcp --yes`). `kanbo init` and `kanbo connect` also refresh it whenever they write that file.
 
 **`instructions` warn: `you edited the kanbo block`**
 The text between the markers no longer matches what kanbo wrote. kanbo leaves it alone; to replace it, run `kanbo connect claude --project --no-mcp` in a terminal and answer yes.
+
+**`instructions` fail: `… has a kanbo start marker without an end`**
+The file's kanbo markers do not pair up (a start without an end, an end without a start, or a start inside another block), so kanbo does not write to it or remove anything from it. Fix the markers by hand — or delete the stray one — then run the command again.
+
+**`instructions` ok: `written by a newer kanbo (vN)`**
+A newer kanbo wrote this block; this one leaves it alone. Update kanbo: `npm install -g kanbo-cli@latest`.
+
+**`mcp:<client>`: `your own kanbo entry (…) — left as is`**
+The `kanbo` entry is not in a shape kanbo writes (it starts kanbo another way, or has an `env`), so kanbo never changes it. It is a warning only when it cannot start here.
 
 **`mcp:<client>` fail: `starts …, which is not on PATH`**
 The client cannot start the server. Install kanbo globally, or change `command` in the named file to an absolute path.

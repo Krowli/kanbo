@@ -24,7 +24,7 @@ import { deriveProjectSlug } from '../commands/init'
 import { CliError } from '../output'
 import type { AgentDetection, AgentId } from '../setup/agents'
 import { AGENTS } from '../setup/agents'
-import { displayPath, explainItem, itemPath, pendingItems } from '../setup/connect-plan'
+import { describeManualOutcome, displayPath, explainItem, itemPath, pendingItems } from '../setup/connect-plan'
 import { findGitRoot } from '../setup/git-root'
 import type { AppliedInitPlan, InitPlan } from '../setup/init-plan'
 import { describeInitPlan } from '../setup/init-plan'
@@ -361,7 +361,7 @@ export function printInitOutro(ui: Ui, result: InitWizardResult, applied: Applie
     const who = outcome.agents.map(agent => AGENTS[agent].label).join(' and ')
     const where = displayPath(plan, outcome.path).replaceAll('\\', '/')
     if (outcome.state === 'manual') {
-      lines.push(`! ${who}: run this yourself: ${outcome.command} (${outcome.reason})`)
+      lines.push(`! ${describeManualOutcome(who, outcome)}`)
       continue
     }
     connected.push(...outcome.agents)
