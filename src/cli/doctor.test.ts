@@ -1,5 +1,4 @@
-import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
@@ -20,44 +19,19 @@ const CLI_ENTRY = join(dirname(fileURLToPath(import.meta.url)), 'index.ts')
 const TSX_CLI = createRequire(import.meta.url).resolve('tsx/cli')
 
 /**
+ * The folder the tests run from. `process.cwd` is mocked to the project below,
+ * and cross-spawn, which starts the handshake's server, changes into the
+ * server's folder to look the command up and then back to what `process.cwd`
+ * says — the project. Windows cannot remove a folder a process is in.
+ */
+const TEST_CWD = process.cwd()
+
+/**
  * `kanbo doctor` on a project made in a temporary folder, with `HOME`,
  * `CODEX_HOME` and `PATH` pointing into it too. The `kanbo` on that PATH is a
  * script the test writes: this package run from source for the healthy case,
  * or one that fails for the broken ones.
  */
-/**
- * Remove a test's folder. On Windows a folder cannot go while a process has it
- * as its working directory — the server the handshake started, until it has
- * exited — so this waits for that, up to 3 seconds, and then names the
- * processes still running from it.
- */
-async function removeTree(path: string): Promise<void> {
-  for (let waited = 0; ; waited += 250) {
-    try {
-      rmSync(path, { force: true, recursive: true })
-      return
-    }
-    catch (error) {
-      if (process.platform !== 'win32' || waited >= 3_000) {
-        const holders = process.platform === 'win32' ? `${describeLeftovers(path)}\n${describeProcesses()}` : ''
-        throw new Error(`${(error as Error).message}${holders ? `\nprocesses now:\n${holders}` : ''}`, { cause: error })
-      }
-      await new Promise(resolve => setTimeout(resolve, 250))
-    }
-  }
-}
-
-/** What is left of the folder, and what this process still holds. */
-function describeLeftovers(path: string): string {
-  const left = readdirSync(path, { recursive: true }).map(String)
-  return `left: ${left.join(', ') || '(nothing)'}\nactive here: ${process.getActiveResourcesInfo().join(', ')}`
-}
-
-function describeProcesses(): string {
-  const listed = spawnSync('powershell', ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process | Where-Object { $_.Name -match "node|cmd|conhost" } | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.CommandLine)" }'], { encoding: 'utf8' })
-  return `${listed.stdout ?? ''}${listed.stderr ?? ''}`.trim()
-}
-
 describe('kanbo doctor', () => {
   let root: string
   let bin: string
@@ -90,11 +64,12 @@ describe('kanbo doctor', () => {
     )
   })
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
-    await removeTree(root)
-  }, 60_000)
+    process.chdir(TEST_CWD)
+    rmSync(root, { force: true, recursive: true })
+  })
 
   /** A `kanbo` on PATH whose script is `body`, in JavaScript. */
   function installKanbo(body: string): void {
