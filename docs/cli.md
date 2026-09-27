@@ -125,7 +125,9 @@ Without `--yes` (and without `--json`/`--format`), in a terminal, `init` asks on
 8. **Add a first card?** — optional; it goes in To Do.
 9. The full list of changes, then **Write these changes?** — nothing, not even the binding, is written before this yes. At the end: what was done, and what to do next.
 
-A question a flag already answers is not asked. In a project that already has a board, the board questions (1–4) are skipped and the wizard goes straight to the agents. Ctrl-C at any question prints `Cancelled — nothing was written.` and exits `1`; the folder is left exactly as it was.
+A question a flag already answers is not asked. In a project that already has a board, the board questions (1–4) are skipped and the wizard goes straight to the agents — a project bound to a shared Postgres board included: its workspace and key come from the binding. When `--database-url` or `KANBO_DATABASE_URL` names a shared board and the project has no binding yet, question 2 is settled but the workspace id, the tables question and the key are still asked.
+
+What is already there is not asked about again. A shared board's workspace that already has cards keeps their key (`This board already numbers its cards WEA-001, … — new cards go on from there.`); one that already has columns keeps them (`This workspace already has its columns.`); when the board's tables are there, the tables question is skipped (the migration is run, which changes nothing on a current board). A `.kanbo/board.db` that is there without a binding keeps its cards' key and its columns. Without a terminal the same holds: `init --database-url … --workspace …` without `--key` takes the key from the workspace's cards, and is refused (exit `2`) only when the workspace has none. Ctrl-C at any question prints `Cancelled — nothing was written.` and exits `1`; the folder is left exactly as it was.
 
 A warning is shown when agents could not start `kanbo mcp`: kanbo running from npx, or not on `PATH` (`npm install -g kanbo-cli`).
 

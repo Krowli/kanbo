@@ -29,6 +29,7 @@ import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
 import type { AgentId } from '../setup/agents'
 import { AGENT_IDS, AGENTS, defaultMcpScope, detectAgents, parseAgentId } from '../setup/agents'
 import { describeManualOutcome, pendingItems, planConnect } from '../setup/connect-plan'
+import { inspectBoardFile, inspectPostgresWorkspace } from '../setup/existing-workspace'
 import type { FileOutcome } from '../setup/file-change'
 import type { AppliedInitPlan, InitFileChange, InitPlan } from '../setup/init-plan'
 import { applyInitPlan, assertOwnBoardFile } from '../setup/init-plan'
@@ -242,7 +243,9 @@ export function normalizeInitOptions(options: InitOptions): InitOptions {
 export async function planInit(projectDir: string, options: InitOptions): Promise<InitPlan> {
   const { target, workspace, boardFile } = await resolveBoard(projectDir, options)
   const migrate = target.kind === 'postgres' && Boolean(options.migrate)
-  const newBoard = (boardFile !== null && !boardFile.exists) || migrate
+  // A shared board's workspace another member already set up keeps its columns.
+  const newBoard = (boardFile !== null && !boardFile.exists)
+    || (migrate && !(await inspectPostgresWorkspace(target.url, workspace.id))?.hasColumns)
   return {
     projectDir,
     target,
@@ -274,11 +277,11 @@ async function resolveBoard(
   options: InitOptions,
 ): Promise<Pick<InitPlan, 'target' | 'workspace' | 'boardFile'>> {
   if (options.file !== undefined || namesNoBoard(projectDir, options)) {
-    return resolveOwnFile(projectDir, options)
+    return await resolveOwnFile(projectDir, options)
   }
   const target = resolveInitTarget(projectDir, options)
   if (target.kind === 'postgres') {
-    return { target, workspace: await resolveExternalWorkspace(projectDir, options), boardFile: null }
+    return { target, workspace: await resolveExternalWorkspace(projectDir, target.url, options), boardFile: null }
   }
   return { target, workspace: await readSessionWorkspace(options), boardFile: null }
 }
@@ -339,7 +342,7 @@ function resolveInitTarget(projectDir: string, options: InitOptions): BoardTarge
  * else installed, and the answer it needs — an id and a card-key stem — is
  * either typed, already in the binding, or the folder's own name.
  */
-function resolveOwnFile(projectDir: string, options: InitOptions): Pick<InitPlan, 'target' | 'workspace' | 'boardFile'> {
+async function resolveOwnFile(projectDir: string, options: InitOptions): Promise<Pick<InitPlan, 'target' | 'workspace' | 'boardFile'>> {
   if (options.databaseUrl) {
     throw new CliError(1, FILE_AND_DATABASE_URL_MESSAGE)
   }
@@ -350,11 +353,11 @@ function resolveOwnFile(projectDir: string, options: InitOptions): Pick<InitPlan
     ? options.file.trim()
     : readProjectBinding(projectDir)?.dbPath?.trim() || DEFAULT_BOARD_FILE_PATH
   const absolutePath = resolve(projectDir, relativePath)
-  const workspace = resolveOwnFileWorkspace(projectDir, options)
   const exists = existsSync(absolutePath)
   if (exists) {
     assertOwnBoardFile(absolutePath)
   }
+  const workspace = await resolveOwnFileWorkspace(projectDir, absolutePath, options)
   return {
     target: { kind: 'sqlite', path: absolutePath, owner: 'kanbo' },
     workspace,
@@ -437,10 +440,15 @@ interface WorkspaceGuess {
  */
 async function guessWorkspace(projectDir: string, options: InitOptions): Promise<WorkspaceGuess> {
   const local = await readLocalWorkspace(projectDir, options)
+  // Then what this project is already bound to: a second `init` on a bound
+  // project is about the same workspace, and its key goes with its id.
+  const bound = readProjectBinding(projectDir)
+  const id = local?.id ?? (options.workspace?.trim() || bound?.workspaceId.trim() || undefined)
+  const boundIdentifier = id !== undefined && id === bound?.workspaceId.trim() ? bound.identifier?.trim() : undefined
   return {
     local,
-    id: local?.id ?? options.workspace?.trim(),
-    identifier: options.identifier?.trim() || local?.identifier,
+    id,
+    identifier: options.identifier?.trim() || local?.identifier || boundIdentifier || undefined,
   }
 }
 
@@ -453,12 +461,14 @@ async function guessWorkspace(projectDir: string, options: InitOptions): Promise
  * carries that guess for the rest of its life, and an external database is
  * shared in a way a board file of this project's own is not.
  */
-async function resolveExternalWorkspace(projectDir: string, options: InitOptions): Promise<BoardWorkspaceIdentity> {
+async function resolveExternalWorkspace(projectDir: string, url: string, options: InitOptions): Promise<BoardWorkspaceIdentity> {
   const guess = await guessWorkspace(projectDir, options)
-  if (!guess.id || !guess.identifier) {
+  // A workspace the shared board already has cards in says its own key.
+  const identifier = guess.identifier || (guess.id ? (await inspectPostgresWorkspace(url, guess.id))?.key : null)
+  if (!guess.id || !identifier) {
     throw new CliError(EXIT_NOT_RESOLVED, EXTERNAL_WORKSPACE_MESSAGE)
   }
-  return { id: guess.id, identifier: guess.identifier, name: guess.local?.id === guess.id ? guess.local.name : guess.identifier }
+  return { id: guess.id, identifier, name: guess.local?.id === guess.id ? guess.local.name : identifier }
 }
 
 /**
@@ -481,12 +491,16 @@ async function resolveExternalWorkspace(projectDir: string, options: InitOptions
  * belongs to: naming a different workspace on the command line does not inherit
  * the old one's stem.
  */
-function resolveOwnFileWorkspace(projectDir: string, options: InitOptions): BoardWorkspaceIdentity {
+async function resolveOwnFileWorkspace(projectDir: string, path: string, options: InitOptions): Promise<BoardWorkspaceIdentity> {
   const bound = readProjectBinding(projectDir)
   const slug = deriveProjectSlug(projectDir)
   const id = options.workspace?.trim() || bound?.workspaceId.trim() || slug
   const boundIdentifier = id === bound?.workspaceId.trim() ? bound.identifier?.trim() : null
-  const identifier = options.identifier?.trim() || boundIdentifier || suggestCardKey(basename(resolve(projectDir)))
+  const identifier = options.identifier?.trim()
+    || boundIdentifier
+    // A board file that is there without a binding keeps numbering its cards as it did.
+    || (await inspectBoardFile(path, id))?.key
+    || suggestCardKey(basename(resolve(projectDir)))
   return { id, identifier, name: identifier }
 }
 

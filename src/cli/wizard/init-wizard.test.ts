@@ -2,15 +2,26 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpath
 import { tmpdir } from 'node:os'
 import { join, relative } from 'node:path'
 
+import { PGlite } from '@electric-sql/pglite'
 import { Command } from 'commander'
+import { drizzle } from 'drizzle-orm/pglite'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { COLUMN_TEMPLATES } from '../../domain/column-templates'
+import { createBoardOps } from '../../ops'
+import { createCard } from '../../ops/cards'
+import { createPostgresBoardStore } from '../../postgres/board-store.postgres'
+import { boardPostgresSchema } from '../../postgres/schema'
+import type { TestPostgresDatabase } from '../../testing/postgres-database'
+import { createTestPostgresDatabase } from '../../testing/postgres-database'
 import type { PromptDriver } from '../../testing/prompt-driver'
 import { createPromptDriver } from '../../testing/prompt-driver'
 import { readBinding } from '../binding'
 import type { InitOptions } from '../commands/init'
 import { AGENT_URL_MISSING_WARNING, normalizeInitOptions, planInit, registerInitCommand } from '../commands/init'
+import { registerCardCommands } from '../commands/card'
 import { registerPrimeCommand } from '../commands/prime'
+import { overridePostgresOpenerForTests } from '../postgres-board'
 import type { AgentDetection } from '../setup/agents'
 import { AGENT_IDS } from '../setup/agents'
 import { INSTRUCTION_BLOCK } from '../setup/instructions'
@@ -116,7 +127,32 @@ describe('kanbo init wizard', () => {
     setUiForTests(driver.ui)
   })
 
-  afterEach(() => {
+  /** The shared board a Postgres test hands the commands, instead of a connection. */
+  let shared: TestPostgresDatabase | null = null
+
+  /** Serve this board for every connection string; an empty PGlite when none is given (no tables yet). */
+  async function serveSharedBoard(board?: TestPostgresDatabase): Promise<TestPostgresDatabase> {
+    if (board) {
+      shared = board
+    }
+    else {
+      const client = await PGlite.create()
+      shared = { client, database: drizzle(client, { schema: boardPostgresSchema }), reset: async () => {}, dispose: async () => await client.close() }
+    }
+    const opened = shared
+    overridePostgresOpenerForTests(async () => ({
+      database: opened.database,
+      migrate: async () => {},
+      runScript: async () => {},
+      close: async () => {},
+    }))
+    return opened
+  }
+
+  afterEach(async () => {
+    overridePostgresOpenerForTests(null)
+    await shared?.dispose()
+    shared = null
     setUiForTests(null)
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
@@ -127,6 +163,7 @@ describe('kanbo init wizard', () => {
     const program = new Command().exitOverride()
     registerInitCommand(program)
     registerPrimeCommand(program)
+    registerCardCommands(program)
     return program.parseAsync(argv, { from: 'user' }).then(() => null, (error: unknown) => error)
   }
 
@@ -274,6 +311,7 @@ describe('kanbo init wizard', () => {
   })
 
   it('binds a shared Postgres board, masks the connection string, and runs nothing when the tables are declined', async () => {
+    await serveSharedBoard()
     const outcome = await wizard([
       ['Where should the board live?', d => d.press('down', 'enter')],
       ['Connection string for the shared board', typeLine('postgres://u:secret@db/x')],
@@ -294,6 +332,119 @@ describe('kanbo init wizard', () => {
       databaseUrl: 'postgres://u:secret@db/x',
     })
     expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(false)
+  })
+
+  it('joins a workspace the shared board already has: no key and no columns question', async () => {
+    const board = await serveSharedBoard(await createTestPostgresDatabase())
+    const store = createPostgresBoardStore({ database: board.database })
+    const workspace = { id: 'weather-station', identifier: 'WEA', name: 'WEA' }
+    await createBoardOps(store).applyColumnTemplate(workspace.id, COLUMN_TEMPLATES.simple, { mode: 'seed' })
+    await createCard(store, { workspace, title: 'Calibrate', statusName: 'To Do' }, { kind: 'agent', id: 'a' })
+
+    const outcome = await wizard([
+      ['Where should the board live?', d => d.press('down', 'enter')],
+      ['Connection string for the shared board', typeLine('postgres://u:secret@db/x')],
+      ['Workspace id', enter],
+      ['This board already numbers its cards WEA-001, … — new cards go on from there.', () => {}],
+      ['This workspace already has its columns.', () => {}],
+      ['Which coding agents do you use here?', enter],
+      ['Add a first card?', enter],
+      ['Write these changes?', enter],
+    ])
+
+    expect(outcome).toBeNull()
+    expect(driver.transcript()).not.toContain('Card numbers start with')
+    expect(driver.transcript()).not.toContain('Which columns should the board start with?')
+    expect(driver.transcript()).not.toContain('Create the board\'s tables')
+    expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toMatchObject({ workspaceId: 'weather-station', identifier: 'WEA' })
+    expect((await store.statuses.listByWorkspace('weather-station')).map(column => column.name)).toEqual(['To Do', 'In Progress', 'Done'])
+  })
+
+  it('asks the workspace id and the key for a board KANBO_DATABASE_URL names, with no binding yet', async () => {
+    await serveSharedBoard()
+    vi.stubEnv('KANBO_DATABASE_URL', 'postgres://u:secret@db/x')
+
+    const outcome = await wizard([
+      ['Workspace id', typeLine('station')],
+      ['Create the board\'s tables in that database now?', d => d.type('n')],
+      ['Card numbers start with', typeLine('sta')],
+      ['Which coding agents do you use here?', enter],
+      ['Write these changes?', enter],
+    ])
+
+    expect(outcome).toBeNull()
+    expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toMatchObject({
+      workspaceId: 'station',
+      identifier: 'STA',
+      databaseUrl: 'postgres://u:secret@db/x',
+    })
+  })
+
+  it('connects the agents of a project bound to a shared board without asking the workspace or the key again', async () => {
+    await serveSharedBoard()
+    expect(await kanbo('init', '--yes', '--database-url', 'postgres://u:secret@db/x', '--workspace', 'station', '--key', 'STA')).toBeNull()
+    machine.detected = ['claude']
+    driver = createPromptDriver()
+    setUiForTests(driver.ui)
+
+    const outcome = await wizard([
+      ['Which coding agents do you use here?', enter],
+      ['Connect them now?', enter],
+      ['Keep all of them?', enter],
+      ['Write these changes?', enter],
+    ])
+
+    expect(outcome).toBeNull()
+    expect(driver.transcript()).not.toContain('Workspace id')
+    expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe(`${INSTRUCTION_BLOCK}\n`)
+    expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toMatchObject({ workspaceId: 'station', identifier: 'STA' })
+  })
+
+  it('plans a bound shared board from its binding, and refuses one only the environment names', async () => {
+    await serveSharedBoard()
+    expect(await kanbo('init', '--yes', '--database-url', 'postgres://u:secret@db/x', '--workspace', 'station', '--key', 'STA')).toBeNull()
+
+    expect((await planInit(projectDir, {})).workspace).toMatchObject({ id: 'station', identifier: 'STA' })
+
+    rmSync(join(projectDir, '.kanbo'), { recursive: true })
+    vi.stubEnv('KANBO_DATABASE_URL', 'postgres://u:secret@db/x')
+    await expect(planInit(projectDir, {})).rejects.toMatchObject({ exitCode: 2 })
+    await expect(planInit(projectDir, { workspace: 'station' })).rejects.toMatchObject({ exitCode: 2 })
+    expect((await planInit(projectDir, { workspace: 'station', identifier: 'STA' })).workspace).toMatchObject({ id: 'station', identifier: 'STA' })
+  })
+
+  it('plans a workspace the shared board already has with its own key, and leaves its columns alone', async () => {
+    const board = await serveSharedBoard(await createTestPostgresDatabase())
+    const store = createPostgresBoardStore({ database: board.database })
+    const workspace = { id: 'station', identifier: 'STN', name: 'STN' }
+    await createBoardOps(store).applyColumnTemplate(workspace.id, COLUMN_TEMPLATES.simple, { mode: 'seed' })
+    await createCard(store, { workspace, title: 'Calibrate', statusName: 'To Do' }, { kind: 'agent', id: 'a' })
+
+    const plan = await planInit(projectDir, { databaseUrl: 'postgres://u:secret@db/x', workspace: 'station', migrate: true })
+
+    expect(plan.workspace).toMatchObject({ id: 'station', identifier: 'STN' })
+    expect(plan.columns).toBeNull()
+  })
+
+  it('keeps the key of a board file that is there without a binding, and asks no key or columns', async () => {
+    expect(await kanbo('init', '--yes', '--key', 'OLD')).toBeNull()
+    expect(await kanbo('card', 'create', '--title', 'Old card')).toBeNull()
+    rmSync(join(projectDir, '.kanbo', 'binding.json'))
+    driver = createPromptDriver()
+    setUiForTests(driver.ui)
+
+    const outcome = await wizard([
+      ['Where should the board live?', enter],
+      ['This board already numbers its cards OLD-001, … — new cards go on from there.', () => {}],
+      ['Which coding agents do you use here?', enter],
+      ['Add a first card?', enter],
+      ['Write these changes?', enter],
+    ])
+
+    expect(outcome).toBeNull()
+    expect(driver.transcript()).not.toContain('Card numbers start with')
+    expect(driver.transcript()).not.toContain('Which columns should the board start with?')
+    expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toMatchObject({ workspaceId: 'weather-station', identifier: 'OLD' })
   })
 
   it('asks nothing about the board of a project that has one, and connects its agents', async () => {

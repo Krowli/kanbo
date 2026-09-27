@@ -21,10 +21,13 @@ import { findBinding } from '../binding'
 import { findMissingBoardFile } from '../db-target'
 import type { InitOptions } from '../commands/init'
 import { deriveProjectSlug } from '../commands/init'
+import { describeFailure } from '../failure'
 import { CliError } from '../output'
 import type { AgentDetection, AgentId } from '../setup/agents'
 import { AGENTS } from '../setup/agents'
 import { describeManualOutcome, displayPath, explainItem, itemPath, pendingItems } from '../setup/connect-plan'
+import type { ExistingWorkspace } from '../setup/existing-workspace'
+import { inspectBoardFile, inspectPostgresWorkspace } from '../setup/existing-workspace'
 import { findGitRoot } from '../setup/git-root'
 import type { AppliedInitPlan, InitPlan } from '../setup/init-plan'
 import { describeInitPlan } from '../setup/init-plan'
@@ -97,7 +100,12 @@ export async function runInitWizard(context: InitWizardContext): Promise<InitWiz
   }
   else {
     projectDir = await askProjectDir(ui, context.cwd)
-    if (!namesBoard(options)) {
+    if (namesPostgres(options)) {
+      // A connection string came with the command or the environment: the
+      // board's home is settled, the workspace and its key are not.
+      await askBoard(context, projectDir, options, 'postgres')
+    }
+    else if (!namesBoard(options)) {
       await askBoard(context, projectDir, options)
     }
   }
@@ -136,6 +144,11 @@ export async function runInitWizard(context: InitWizardContext): Promise<InitWiz
 /** Anything the wizard tells the person, drawn where the prompts are. */
 function say(ui: Ui, text: string): void {
   ui.output.write(`${text}\n`)
+}
+
+/** Does the command line or the environment already name a shared Postgres board? */
+function namesPostgres(options: InitOptions): boolean {
+  return Boolean(options.databaseUrl?.trim() || (!options.db?.trim() && options.file === undefined && process.env.KANBO_DATABASE_URL?.trim()))
 }
 
 /** Does anything besides the wizard already say which board this is? */
@@ -210,9 +223,9 @@ async function askProjectDir(ui: Ui, cwd: string): Promise<string> {
 }
 
 /** (2)–(4) Where the board lives, what its cards are numbered with, and which columns it starts with. */
-async function askBoard(context: InitWizardContext, projectDir: string, options: InitOptions): Promise<void> {
+async function askBoard(context: InitWizardContext, projectDir: string, options: InitOptions, given?: BoardHome): Promise<void> {
   const { ui } = context
-  const home: BoardHome = options.file !== undefined
+  const home: BoardHome = given ?? (options.file !== undefined
     ? 'file'
     : await ui.select<BoardHome>({
       message: 'Where should the board live?',
@@ -220,46 +233,83 @@ async function askBoard(context: InitWizardContext, projectDir: string, options:
         { value: 'file', label: `In this project (file ${DEFAULT_BOARD_FILE_PATH.replaceAll('\\', '/')} — nothing to run or host)` },
         { value: 'postgres', label: 'In a shared Postgres database (for a team; Supabase works)' },
       ],
-    })
+    }))
 
+  let existing: ExistingWorkspace | null
   if (home === 'postgres') {
-    await askPostgres(context, projectDir, options)
+    existing = await askPostgres(context, projectDir, options)
   }
   else {
     options.file ??= true
+    const filePath = resolve(projectDir, typeof options.file === 'string' && options.file.trim() ? options.file.trim() : DEFAULT_BOARD_FILE_PATH)
+    existing = await inspectBoardFile(filePath, options.workspace?.trim() || deriveProjectSlug(projectDir))
+    // A file that is there is a board already: its columns stay as they are.
+    existing = existing ?? (existsSync(filePath) ? { key: null, hasColumns: true } : null)
   }
 
   if (options.identifier === undefined) {
-    options.identifier = await askKey(ui, projectDir)
+    if (existing?.key) {
+      options.identifier = existing.key
+      say(ui, `This board already numbers its cards ${formatIssueId(existing.key, 1)}, … — new cards go on from there.`)
+    }
+    else {
+      options.identifier = await askKey(ui, projectDir)
+    }
   }
 
-  const filePath = resolve(projectDir, typeof options.file === 'string' && options.file.trim() ? options.file.trim() : DEFAULT_BOARD_FILE_PATH)
-  const newBoard = home === 'file' ? !existsSync(filePath) : Boolean(options.migrate)
-  if (options.columns === undefined && newBoard) {
+  const newBoard = home === 'file' ? existing === null : Boolean(options.migrate)
+  if (existing?.hasColumns && home === 'postgres') {
+    say(ui, 'This workspace already has its columns.')
+  }
+  else if (options.columns === undefined && newBoard) {
     options.columns = await askColumns(ui)
   }
 }
 
-async function askPostgres(context: InitWizardContext, projectDir: string, options: InitOptions): Promise<void> {
+/**
+ * The shared board: its connection string (unless the command line or the
+ * environment gave one), the workspace id, and whether to create its tables.
+ * Returns what the board already holds for that workspace, when its tables
+ * are there — a workspace a teammate set up is joined, not set up again.
+ */
+async function askPostgres(context: InitWizardContext, projectDir: string, options: InitOptions): Promise<ExistingWorkspace | null> {
   const { ui } = context
   say(ui, 'The connection string is stored only in .kanbo/binding.json, which git never sees.')
-  options.databaseUrl = (await ui.password({
-    message: 'Connection string for the shared board',
-    validate: value => (/^postgres(?:ql)?:\/\/\S+$/.test(value?.trim() ?? '')
-      ? undefined
-      : 'Paste a postgres:// or postgresql:// connection string.'),
-  })).trim()
-  const slug = deriveProjectSlug(projectDir)
-  options.workspace = (await ui.text({
-    message: 'Workspace id — the name this project has on the shared board',
-    placeholder: slug,
-    defaultValue: slug,
-  })).trim() || slug
-  options.migrate = await ui.confirm({
-    message: 'Create the board\'s tables in that database now? (runs kanbo migrate)',
-    initialValue: true,
+  if (!options.databaseUrl?.trim() && !process.env.KANBO_DATABASE_URL?.trim()) {
+    options.databaseUrl = (await ui.password({
+      message: 'Connection string for the shared board',
+      validate: value => (/^postgres(?:ql)?:\/\/\S+$/.test(value?.trim() ?? '')
+        ? undefined
+        : 'Paste a postgres:// or postgresql:// connection string.'),
+    })).trim()
+  }
+  const url = options.databaseUrl?.trim() || process.env.KANBO_DATABASE_URL!.trim()
+  if (options.workspace === undefined) {
+    const slug = deriveProjectSlug(projectDir)
+    options.workspace = (await ui.text({
+      message: 'Workspace id — the name this project has on the shared board',
+      placeholder: slug,
+      defaultValue: slug,
+    })).trim() || slug
+  }
+  const existing = await inspectPostgresWorkspace(url, options.workspace).catch((error: unknown) => {
+    // Not reachable from here right now: the questions below still set the
+    // project up, and the board is reached when it is used.
+    say(ui, `Couldn't look into the shared board (${describeFailure(error).message.split('\n')[0]}) — asking instead.`)
+    return null
   })
+  if (existing) {
+    // The tables are there; migrating brings them up to this build and changes nothing else.
+    options.migrate ??= true
+  }
+  else {
+    options.migrate ??= await ui.confirm({
+      message: 'Create the board\'s tables in that database now? (runs kanbo migrate)',
+      initialValue: true,
+    })
+  }
   say(ui, context.agentUrlWarning)
+  return existing
 }
 
 /** (3) What card numbers start with. */
