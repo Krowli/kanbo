@@ -447,7 +447,7 @@ describe('kanbo init', () => {
       await runFile(['boards/team.db'])
 
       expect(existsSync(join(projectDir, 'boards', 'team.db'))).toBe(true)
-      expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))?.dbPath).toBe('boards/team.db')
+      expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))?.dbPath).toBe(join('boards', 'team.db'))
       // Outside .kanbo: no ignore line is written for it, and the project's own .gitignore is never touched.
       expect(existsSync(join(projectDir, '.gitignore'))).toBe(false)
     })

@@ -69,7 +69,7 @@ The trusted publisher is configured once on npmjs.com (package `kanbo-cli` → S
 ## Pull requests
 
 - Keep a pull request to one change, with tests for new behavior.
-- `npm run build && npm test && npm run typecheck` must pass; CI runs the same on Linux and macOS, Node 22 and 24.
+- `npm run build && npm test && npm run typecheck` must pass; CI runs the same on Linux, macOS and Windows (not yet required to pass), Node 22 and 24.
 - Update `docs/` when a command, flag, tool or route changes: `src/mcp/docs.test.ts` fails when a command is missing from `docs/cli.md` or a tool from `docs/mcp.md`.
 - Add a line to the `Unreleased` section of `CHANGELOG.md` for anything a user would notice.
 

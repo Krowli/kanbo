@@ -84,10 +84,10 @@ describe.each(BOARD_STORE_FACTORIES)('board runs on $name', (factory) => {
     const attached = await attachRunExecution(store, run.id, {
       chatSessionId: 'session-7',
       branch: 'kanbo/wor-001',
-      worktreePath: '/tmp/worktrees/wor-001',
+      worktreePath: '/work/worktrees/wor-001',
     })
 
-    expect(attached).toMatchObject({ chatSessionId: 'session-7', branch: 'kanbo/wor-001', worktreePath: '/tmp/worktrees/wor-001' })
+    expect(attached).toMatchObject({ chatSessionId: 'session-7', branch: 'kanbo/wor-001', worktreePath: '/work/worktrees/wor-001' })
     expect(await findRunByChatSessionId(store, 'session-7')).toMatchObject({ id: run.id })
     expect(await findRunByChatSessionId(store, 'session-nobody')).toBeNull()
 

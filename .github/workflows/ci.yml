@@ -16,10 +16,13 @@ jobs:
   test:
     name: Node ${{ matrix.node }} on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # Windows is not required to pass yet: it becomes a required job once the
+    # Windows fixes of 0.3.0 are in.
+    continue-on-error: ${{ matrix.os == 'windows-latest' }}
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
         # The package supports Node ^22.19.0 || >=24.11.0 (see "engines").
         node: [22, 24]
     steps:

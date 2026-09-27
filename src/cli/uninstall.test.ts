@@ -1,10 +1,11 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { writeRecordingBin } from '../testing/fake-bin'
 import { createPromptDriver } from '../testing/prompt-driver'
 import { registerInitCommand } from './commands/init'
 import { registerUninstallCommand } from './commands/uninstall'
@@ -40,7 +41,8 @@ describe('kanbo uninstall', () => {
     vi.stubEnv('HOME', home)
     vi.stubEnv('USERPROFILE', home)
     vi.stubEnv('CODEX_HOME', codexHome)
-    vi.stubEnv('PATH', bin)
+    // The fake `claude` below is a node script, and node is what runs it.
+    vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
     for (const name of ['KANBO_DB_PATH', 'KANBO_DATABASE_URL', 'KANBO_WORKSPACE_ID']) {
       vi.stubEnv(name, undefined)
     }
@@ -61,8 +63,7 @@ describe('kanbo uninstall', () => {
 
     // Claude Code's user-scope registration, as `claude mcp add` leaves it.
     writeFileSync(join(home, '.claude.json'), JSON.stringify({ mcpServers: { kanbo: { command: 'kanbo', args: ['mcp'] } } }))
-    writeFileSync(join(bin, 'claude'), `#!/bin/sh\necho "$@" >> "${claudeCalls}"\n`)
-    chmodSync(join(bin, 'claude'), 0o755)
+    writeRecordingBin(bin, 'claude', claudeCalls)
   })
 
   afterEach(() => {

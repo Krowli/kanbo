@@ -103,7 +103,7 @@
     "access": "public"
   },
   "scripts": {
-    "build": "tsdown --config tsdown.cli.config.ts && tsdown --config tsdown.lib.config.ts && tsdown --config tsdown.page.config.ts && cp -R drizzle-postgres dist/drizzle-postgres && cp -R drizzle-sqlite dist/drizzle-sqlite && chmod +x dist/cli.cjs",
+    "build": "tsdown --config tsdown.cli.config.ts && tsdown --config tsdown.lib.config.ts && tsdown --config tsdown.page.config.ts && node scripts/copy-build-assets.mjs",
     "test": "vitest run src",
     "typecheck": "tsc --noEmit && tsc --noEmit -p src/serve/page/tsconfig.json",
     "generate:postgres": "drizzle-kit generate --config drizzle.postgres.config.ts --name board",

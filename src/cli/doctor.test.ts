@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
@@ -8,6 +8,7 @@ import SqliteDriver from 'better-sqlite3'
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { writeFakeBin } from '../testing/fake-bin'
 import { registerDoctorCommand } from './commands/doctor'
 import { registerInitCommand } from './commands/init'
 import type { DoctorFinding } from './doctor'
@@ -33,14 +34,14 @@ describe('kanbo doctor', () => {
     root = mkdtempSync(join(tmpdir(), 'kanbo-doctor-'))
     bin = join(root, 'bin')
     projectDir = join(root, 'project')
-    kanbo = join(bin, 'kanbo')
+    kanbo = join(bin, process.platform === 'win32' ? 'kanbo.cmd' : 'kanbo')
     for (const directory of [bin, projectDir, join(root, 'home')]) {
       mkdirSync(directory, { recursive: true })
     }
     vi.stubEnv('HOME', join(root, 'home'))
     vi.stubEnv('USERPROFILE', join(root, 'home'))
     vi.stubEnv('CODEX_HOME', join(root, 'codex-home'))
-    vi.stubEnv('PATH', [bin, dirname(process.execPath), '/usr/bin', '/bin'].join(delimiter))
+    vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
     for (const name of ['KANBO_DB_PATH', 'KANBO_DATABASE_URL', 'KANBO_WORKSPACE_ID', 'KANBO_ACTOR_KIND']) {
       vi.stubEnv(name, undefined)
     }
@@ -61,14 +62,21 @@ describe('kanbo doctor', () => {
     rmSync(root, { force: true, recursive: true })
   })
 
+  /** A `kanbo` on PATH whose script is `body`, in JavaScript. */
   function installKanbo(body: string): void {
-    writeFileSync(kanbo, `#!/bin/sh\n${body}\n`)
-    chmodSync(kanbo, 0o755)
+    expect(writeFakeBin(bin, 'kanbo', body)).toBe(kanbo)
   }
 
-  /** A `kanbo` that is this package, run from source. */
+  /** A `kanbo` that is this package, run from source, with the streams and exit code passed through. */
   function installRealKanbo(): void {
-    installKanbo(`exec "${process.execPath}" "${TSX_CLI}" "${CLI_ENTRY}" "$@"`)
+    installKanbo([
+      `const result = require('node:child_process').spawnSync(`,
+      `  ${JSON.stringify(process.execPath)},`,
+      `  [${JSON.stringify(TSX_CLI)}, ${JSON.stringify(CLI_ENTRY)}, ...process.argv.slice(2)],`,
+      `  { stdio: 'inherit' },`,
+      `)`,
+      `process.exit(result.status ?? 1)`,
+    ].join('\n'))
   }
 
   async function doctor(timeoutMs = 2_000): Promise<DoctorFinding[]> {
@@ -103,7 +111,7 @@ describe('kanbo doctor', () => {
   }, 60_000)
 
   it('fails a project whose .kanbo/ has lost its binding', async () => {
-    installKanbo('exit 1')
+    installKanbo('process.exit(1)')
     rmSync(join(projectDir, '.kanbo', 'binding.json'))
 
     const binding = finding(await doctor(), 'binding')
@@ -113,7 +121,7 @@ describe('kanbo doctor', () => {
   })
 
   it('fails a stale instruction block and says how to rewrite it', async () => {
-    installKanbo('exit 1')
+    installKanbo('process.exit(1)')
     const path = join(projectDir, 'CLAUDE.md')
     writeFileSync(path, readFileSync(path, 'utf8').replace('Take a card', 'Grab a card'))
 
@@ -125,7 +133,7 @@ describe('kanbo doctor', () => {
   })
 
   it('fails an MCP registration whose command is not on PATH', async () => {
-    installKanbo('exit 1')
+    installKanbo('process.exit(1)')
     const path = join(projectDir, '.mcp.json')
     writeFileSync(path, readFileSync(path, 'utf8').replace('"command": "kanbo"', '"command": "kanbo-nowhere"'))
 
@@ -138,7 +146,7 @@ describe('kanbo doctor', () => {
   })
 
   it('fails a board file older than this build and points at kanbo migrate', async () => {
-    installKanbo('exit 1')
+    installKanbo('process.exit(1)')
     const database = new SqliteDriver(join(projectDir, '.kanbo', 'board.db'))
     database.prepare('update kanban_meta set revision = 0 where key = \'schema_epoch\'').run()
     database.close()
@@ -150,7 +158,7 @@ describe('kanbo doctor', () => {
   })
 
   it('fails the handshake when the kanbo a client would start does not answer', async () => {
-    installKanbo('echo "kanbo: broken install" >&2\nexit 1')
+    installKanbo('process.stderr.write(\'kanbo: broken install\\n\')\nprocess.exit(1)')
 
     const handshake = finding(await doctor(), 'mcp:handshake')
 
@@ -159,7 +167,7 @@ describe('kanbo doctor', () => {
   })
 
   it('warns about another kanbo earlier on PATH, and about a shell marked as an agent\'s', async () => {
-    installKanbo('exit 1')
+    installKanbo('process.exit(1)')
     vi.stubEnv('KANBO_ACTOR_KIND', 'agent')
 
     const findings = await collectDoctorFindings({ cwd: projectDir, self: join(root, 'elsewhere', 'kanbo'), handshakeTimeoutMs: 2_000 })
@@ -169,7 +177,7 @@ describe('kanbo doctor', () => {
   })
 
   it('exits 1 when a check fails, after printing every finding', async () => {
-    installKanbo('exit 1')
+    installKanbo('process.exit(1)')
     rmSync(join(projectDir, '.kanbo', 'binding.json'))
     const printed: string[] = []
     vi.spyOn(console, 'log').mockImplementation((line: unknown) => {

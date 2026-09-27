@@ -1,10 +1,11 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { writeRecordingBin } from '../testing/fake-bin'
 import { registerInitCommand } from './commands/init'
 import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK } from './setup/instructions'
 
@@ -110,8 +111,9 @@ describe('kanbo init --global', () => {
 
   it('runs claude mcp add when Claude Code is on PATH', async () => {
     const calls = join(root, 'claude-calls')
-    writeFileSync(join(bin, 'claude'), `#!/bin/sh\necho "$@" >> "${calls}"\n`)
-    chmodSync(join(bin, 'claude'), 0o755)
+    writeRecordingBin(bin, 'claude', calls)
+    // The fake is a node script, and node is what runs it.
+    vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
 
     const result = await run(['--yes', '--instructions', 'none', '--mcp', 'claude'])
 
