@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { BoardError } from '../domain/errors'
-import { describeFailure } from './failure'
+import { describeFailure, paintFailure } from './failure'
 import { CliError } from './output'
 import { SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
 
@@ -13,9 +13,45 @@ describe('what a failed command says', () => {
       .toEqual({ exitCode: 3, message: SCHEMA_OUTDATED_MESSAGE })
   })
 
-  it('names the rule a BoardError broke, with the value that broke it', () => {
-    expect(describeFailure(new BoardError('board_approval_requires_user', { actor: 'agent' })))
-      .toEqual({ exitCode: 1, message: 'board_approval_requires_user {"actor":"agent"}' })
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('says a BoardError in words, with the next step and the code behind it', () => {
+    vi.stubEnv('KANBO_DEBUG', '')
+    expect(describeFailure(new BoardError('issue_status_not_found', { statusName: 'foo', normalizedStatusName: 'foo' })))
+      .toEqual({
+        exitCode: 1,
+        code: 'issue_status_not_found',
+        message: 'No column "foo" on this board.\n  Next: kanbo columns list  [issue_status_not_found]',
+      })
+  })
+
+  it('puts the code on the same line when there is no next step', () => {
+    vi.stubEnv('KANBO_DEBUG', '')
+    expect(describeFailure(new BoardError('issue_parent_self_reference', { issueId: 'MYA-1', parentIssueId: 'MYA-1' })).message)
+      .toBe('A card can\'t be put under itself.  [issue_parent_self_reference]')
+  })
+
+  it('prints the details only with KANBO_DEBUG=1', () => {
+    vi.stubEnv('KANBO_DEBUG', '1')
+    expect(describeFailure(new BoardError('board_approval_requires_user', { issueId: 'MYA-1', actorKind: 'agent' })).message)
+      .toBe([
+        'Only a person can approve a card.',
+        '  Next: run it in your own terminal, or on the board page (kanbo serve)  [board_approval_requires_user]',
+        '  Details: {"issueId":"MYA-1","actorKind":"agent"}',
+      ].join('\n'))
+  })
+
+  it('falls back to the code and its details for a code it has no words for', () => {
+    const unknown = new BoardError('issue_not_found', { issueId: 'x' })
+    ;(unknown as { code: string }).code = 'board_something_new'
+    expect(describeFailure(unknown).message).toBe('board_something_new {"issueId":"x"}')
+  })
+
+  it('dims the code in a terminal and colours the rest', () => {
+    const painted = paintFailure({ exitCode: 1, code: 'issue_not_found', message: 'No card "X" here.\n  Next: kanbo card list  [issue_not_found]' })
+    expect(painted.replace(/\x1B\[\d+m/g, '')).toBe('No card "X" here.\n  Next: kanbo card list  [issue_not_found]')
   })
 
   it('prints what was underneath, indented, because the wrapper alone says nothing', () => {

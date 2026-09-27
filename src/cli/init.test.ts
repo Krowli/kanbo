@@ -299,7 +299,7 @@ describe('kanbo init', () => {
   it('refuses a workspace the host database does not have, instead of writing the name down as an id', async () => {
     const refusal = expect.objectContaining({
       exitCode: 2,
-      message: expect.stringContaining('No workspace in this database matches'),
+      message: expect.stringContaining('No project in the app\'s database matches'),
     })
     await expect(runExternal([
       '--database-url',
@@ -333,7 +333,7 @@ describe('kanbo init', () => {
   it('refuses to invent a card key, and says which two flags would settle it', async () => {
     const refusal = expect.objectContaining({
       exitCode: 2,
-      message: expect.stringContaining('--workspace <id> --identifier <KEY>'),
+      message: expect.stringContaining('--workspace <id> --key <KEY>'),
     })
     await expect(runWithoutHost(['--database-url', DATABASE_URL])).rejects.toThrowError(refusal)
     expect(existsSync(join(projectDir, '.kanbo', 'binding.json'))).toBe(false)

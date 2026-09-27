@@ -1,5 +1,3 @@
-import pc from 'picocolors'
-
 import type { ColumnTemplateId } from '../domain/column-templates'
 import { COLUMN_TEMPLATE_IDS, COLUMN_TEMPLATE_LABELS, COLUMN_TEMPLATES, READY_COLUMN_SLUG } from '../domain/column-templates'
 import { normalizeStatusName } from '../domain/status-name'
@@ -8,7 +6,7 @@ import { requireHumanActor } from './actor'
 import { addColumn, applyTemplate, countCardsIn, moveColumn, removeColumn, renameColumn } from './column-changes'
 import type { BoardSession } from './command'
 import { openBoardSession, runBoardCommand } from './command'
-import { describeFailure } from './failure'
+import { describeFailure, paintFailure } from './failure'
 import type { Ui } from './ui/ui'
 import { CancelledError } from './ui/ui'
 import { describeColumns, projectColumn } from './view'
@@ -54,7 +52,7 @@ export async function runColumnsMenu(ui: Ui): Promise<void> {
     catch (error) {
       showList = true
       if (!(error instanceof CancelledError)) {
-        console.error(pc.red(describeFailure(error).message))
+        console.error(paintFailure(describeFailure(error)))
       }
     }
   }

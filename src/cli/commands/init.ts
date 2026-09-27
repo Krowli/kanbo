@@ -65,14 +65,14 @@ import { initGlobal } from './init-global'
  * numbered under a guess carries that guess for the rest of its life.
  */
 const EXTERNAL_WORKSPACE_MESSAGE
-  = 'Could not tell which workspace this project is, and an external board holds no workspaces table to look '
-    + 'it up in. Run this again with --workspace <id> --identifier <KEY>, or with --db (or KANBO_DB_PATH) naming '
-    + 'a host database that knows this project.'
+  = 'Could not tell which project this is, and a shared Postgres board keeps no list of projects to look it up '
+    + 'in. Run this again with --workspace <id> --key <KEY>, or with --db (or KANBO_DB_PATH) naming the app\'s '
+    + 'database that knows this project.'
 
 /** What a person is told when a board file of the project's own and an external one are both named at once. */
 const FILE_AND_DATABASE_URL_MESSAGE
-  = 'One board at a time: pass --file for a board file of this project\'s own or --database-url for an external '
-    + 'board, not both.'
+  = 'One board at a time: pass --file for this project\'s own board file or --database-url for a shared '
+    + 'Postgres board, not both.'
 
 /**
  * What a person is told when their agents are about to reach the board as its

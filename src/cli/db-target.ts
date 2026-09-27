@@ -86,7 +86,7 @@ export function findMissingBoardFile(cwd: string): string | null {
 
 /** What a caller is told when they name both kinds of board at once. */
 export const TWO_BOARDS_MESSAGE
-  = 'One board at a time: pass --db for a board file or --database-url for an external board, not both.'
+  = 'One board at a time: pass --db for a board file or --database-url for a shared Postgres board, not both.'
 
 /** Where the board this command works on lives. */
 export type BoardTarget
@@ -156,7 +156,7 @@ function readFileOwnerAt(path: string): BoardFileOwner {
     return readBoardFileContents(path).owner
   }
   catch {
-    throw new CliError(EXIT_NOT_RESOLVED, `${path} is not a board database this tool can open.`)
+    throw new CliError(EXIT_NOT_RESOLVED, `${path} is not a board file kanbo can open.`)
   }
 }
 

@@ -261,7 +261,7 @@ describe('the board a command opens', () => {
       // own sentence and its stack where every other wrong board leaves one line.
       expect(() => resolveDbTarget({ explicitPath: path })).toThrowError(expect.objectContaining({
         exitCode: EXIT_NOT_RESOLVED,
-        message: expect.stringContaining('is not a board database this tool can open'),
+        message: expect.stringContaining('is not a board file kanbo can open'),
       }))
     })
   })

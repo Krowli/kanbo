@@ -92,7 +92,7 @@ Two migration chains ship with the package: `drizzle-sqlite/` for board files an
 
 Before every write to a board file, and before any access to a Postgres board, kanbo checks that the tables, the columns and `schema_epoch` match this build. When they do not:
 
-- a board file refuses writes (exit `3`, `Board file is older than this build. Run kanbo migrate.`) but stays readable;
-- a Postgres board refuses everything (exit `3`, `This database holds no board this build can speak for — it has none, or one an older kanbo created. Run kanbo migrate.`).
+- a board file refuses writes (exit `3`, `This board file was made by an older kanbo. Run kanbo migrate.`) but stays readable;
+- a Postgres board refuses everything (exit `3`, `This Postgres database has no kanbo board yet, or one an older kanbo made. Run kanbo migrate.`).
 
 After `kanbo migrate` on Postgres, run `kanbo roles apply` again: a migration may add a sequence the roles need a grant on.

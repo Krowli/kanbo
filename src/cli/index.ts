@@ -1,8 +1,6 @@
 import './check-node'
 
-import pc from 'picocolors'
-
-import { describeFailure } from './failure'
+import { describeFailure, paintFailure } from './failure'
 import { runKanbo } from './program'
 
 /**
@@ -16,6 +14,6 @@ import { runKanbo } from './program'
  */
 runKanbo(process.argv.slice(2)).catch((error: unknown) => {
   const failure = describeFailure(error)
-  console.error(pc.red(failure.message))
+  console.error(paintFailure(failure))
   process.exit(failure.exitCode)
 })

@@ -98,10 +98,12 @@ describe('column entry rules from a terminal', () => {
 
     expect(describeFailure(failure)).toEqual({
       exitCode: 1,
+      code: 'board_column_rules_unmet',
       message: [
-        `board_column_rules_unmet: ${card.id} cannot enter "In Review" yet:`,
+        `${card.id} can't go into "In Review" yet:`,
         '- checklist_complete: 2 of 5 unchecked',
         '- ci_green: no CI result yet',
+        '  Next: fix what is listed, or ask a person to move the card  [board_column_rules_unmet]',
       ].join('\n'),
     })
     expect((await store.issues.findById(card.id))?.statusId).toBe(card.statusId)

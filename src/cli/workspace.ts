@@ -53,29 +53,28 @@ const LOCAL_NODE_ID = 'local'
  * question they did not ask, so what to do comes first and the binding second.
  */
 const WORKSPACE_NOT_RESOLVED_MESSAGE
-  = 'Could not tell which workspace this is. Pass --workspace <name|id>, '
+  = 'Could not tell which project this is. Pass --workspace <name|id>, '
     + 'or run "kanbo init" in the project folder.'
 
 /** The same, for a board that cannot look a workspace up at all. */
 export const EXTERNAL_WORKSPACE_NOT_RESOLVED_MESSAGE
-  = 'Could not tell which workspace this is. An external board holds no workspaces table, so pass '
+  = 'Could not tell which project this is. A shared Postgres board keeps no list of projects to look it up in, so pass '
     + '--workspace <id>, set KANBO_WORKSPACE_ID, or run "kanbo init --database-url <url>" in the project folder.'
 
 /** And the one that is missing only the key a card is numbered with. */
 export const EXTERNAL_IDENTIFIER_NOT_RESOLVED_MESSAGE
-  = 'Could not tell what this workspace\'s card keys start with. An external board holds no workspaces table, '
-    + 'so the key comes from this project\'s binding: run '
-    + '"kanbo init --database-url <url> --workspace <id> --identifier <KEY>" in the project folder.'
+  = 'Could not tell what this project\'s card numbers start with. A shared Postgres board keeps them in this '
+    + 'project\'s own settings (.kanbo/binding.json): run '
+    + '"kanbo init --database-url <url> --workspace <id> --key <KEY>" in the project folder.'
 
 /** The same two, for a board file of this project's own — which holds no `workspaces` table either. */
 export const FILE_WORKSPACE_NOT_RESOLVED_MESSAGE
-  = 'Could not tell which workspace this is. A board file of this project\'s own holds no workspaces table, so '
+  = 'Could not tell which project this is. A board file keeps no list of projects to look it up in, so '
     + 'pass --workspace <id>, set KANBO_WORKSPACE_ID, or run "kanbo init --file" in the project folder.'
 
 export const FILE_IDENTIFIER_NOT_RESOLVED_MESSAGE
-  = 'Could not tell what this workspace\'s card keys start with. A board file of this project\'s own holds no '
-    + 'workspaces table, so the key comes from this project\'s binding: run "kanbo init --file --workspace <id> '
-    + '--identifier <KEY>" in the project folder.'
+  = 'Could not tell what this project\'s card numbers start with. A board file keeps them in this project\'s '
+    + 'own settings (.kanbo/binding.json): run "kanbo init --file --workspace <id> --key <KEY>" in the project folder.'
 
 /**
  * A host database's workspace, as much of one as this tool reads: the four
@@ -225,11 +224,11 @@ function findByNameOrId(rows: HostWorkspaceRow[], nameOrId: string): HostWorkspa
 
   const byName = rows.filter(row => row.name.toLowerCase() === nameOrId.toLowerCase())
   if (byName.length > 1) {
-    throw new CliError(EXIT_NOT_RESOLVED, `More than one workspace is called "${nameOrId}": `
+    throw new CliError(EXIT_NOT_RESOLVED, `More than one project in the app's database is called "${nameOrId}": `
       + `${byName.map(row => row.id).join(', ')}. Name the one you mean by its id.`)
   }
   if (byName.length === 0) {
-    throw new CliError(EXIT_NOT_RESOLVED, `No workspace in this database matches "${nameOrId}".`)
+    throw new CliError(EXIT_NOT_RESOLVED, `No project in the app's database matches "${nameOrId}".`)
   }
   return byName[0]
 }

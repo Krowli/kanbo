@@ -231,7 +231,7 @@ export async function requireCard(session: BoardSession, reference: string): Pro
   const number = readCardNumber(session, trimmed)
   const byNumber = number === null ? null : await session.store.issues.findByNumber(session.workspace.id, number)
   if (!byNumber) {
-    throw new CliError(EXIT_NOT_RESOLVED, `No card "${reference}" on this board.`)
+    throw new CliError(EXIT_NOT_RESOLVED, `No card "${reference}" on this board.\n  Next: kanbo card list`)
   }
   return byNumber
 }

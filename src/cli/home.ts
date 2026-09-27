@@ -2,7 +2,6 @@ import { isAbsolute, relative } from 'node:path'
 
 import type { Command } from 'commander'
 import { CommanderError } from 'commander'
-import pc from 'picocolors'
 
 import { cardDisplayTitle } from '../domain/card-display-title'
 import { READY_COLUMN_SLUG } from '../domain/column-templates'
@@ -17,7 +16,7 @@ import { DEFAULT_SERVE_OPTIONS, startServe, waitForInterrupt } from './commands/
 import type { BoardTarget } from './db-target'
 import { BoardFileMissingError, BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE, resolveDbTarget } from './db-target'
 import { findKanboProject } from './doctor'
-import { describeFailure } from './failure'
+import { describeFailure, paintFailure } from './failure'
 import { AGENT_IDS, AGENTS, detectAgents } from './setup/agents'
 import { tildify } from './tildify'
 import type { Ui } from './ui/ui'
@@ -161,7 +160,7 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
       // and the menu is back.
       // Commander has already said what was wrong with the words it was given.
       if (!(error instanceof CancelledError) && !(error instanceof CommanderError)) {
-        console.error(pc.red(describeFailure(error).message))
+        console.error(paintFailure(describeFailure(error)))
       }
     }
   }

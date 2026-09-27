@@ -1,7 +1,8 @@
+import pc from 'picocolors'
+
 import { maskDatabaseUrls } from '../domain/database-url'
-import type { ColumnRefusalDetails } from '../domain/entry-rules'
-import { describeColumnRefusal } from '../domain/entry-rules'
 import { BoardError } from '../domain/errors'
+import { humanizeBoardError } from './humanize'
 import { CliError } from './output'
 
 /**
@@ -15,15 +16,26 @@ import { CliError } from './output'
 /** How far down a chain of causes is still worth reading. */
 const CAUSE_DEPTH_LIMIT = 5
 
+/** What a failed command prints and leaves with; `code` is the board's name for it, when it has one. */
+export interface DescribedFailure {
+  message: string
+  exitCode: number
+  code?: string
+}
+
 /**
  * What to say about a failure, and what to leave with.
  *
  * A `CliError` already carries both. A `BoardError` is a rule of the board the
- * caller broke: its code is the honest name of what happened, and its details
- * say which value did it, so both are printed rather than translated into a
- * sentence that could drift away from the rule. The one exception is a card
- * held at a column's door: its details are a list, and a person reads it as
- * one line per rule the card does not meet yet (`describeColumnRefusal`).
+ * caller broke: a person reads it as a sentence and the command that gets them
+ * further (`humanize.ts`), with the code in brackets behind it — the honest
+ * name of what happened, for a search or a script:
+ *
+ *     No column "foo" on this board.
+ *       Next: kanbo columns list  [issue_status_not_found]
+ *
+ * The values that caused it (`details`) are printed only with `KANBO_DEBUG=1`;
+ * a code the table does not know yet falls back to the code and its details.
  *
  * Whatever it is, its causes are printed under it. A driver's failure arrives
  * wrapped — `Failed query: create schema …` with the connection refused
@@ -31,24 +43,50 @@ const CAUSE_DEPTH_LIMIT = 5
  * Every line goes through the masking on its way out, because a message this
  * tool did not write is free to carry the whole connection string in it.
  */
-export function describeFailure(error: unknown): { message: string, exitCode: number } {
-  const { message, exitCode } = readFailure(error)
+export function describeFailure(error: unknown): DescribedFailure {
+  const { message, exitCode, code } = readFailure(error)
   const causes = describeCauses(error, 1)
-  return { message: maskDatabaseUrls([message, ...causes].join('\n')), exitCode }
+  const described: DescribedFailure = { message: maskDatabaseUrls([message, ...causes].join('\n')), exitCode }
+  return code === undefined ? described : { ...described, code }
 }
 
-function readFailure(error: unknown): { message: string, exitCode: number } {
+/** The failure as a terminal shows it: red, with the code in brackets dimmed. */
+export function paintFailure(failure: DescribedFailure): string {
+  if (failure.code === undefined) {
+    return pc.red(failure.message)
+  }
+  const bracketed = `[${failure.code}]`
+  return pc.red(failure.message.replace(bracketed, pc.dim(bracketed)))
+}
+
+function readFailure(error: unknown): DescribedFailure {
   if (error instanceof CliError) {
     return { message: error.message, exitCode: error.exitCode }
   }
-  if (error instanceof BoardError && error.code === 'board_column_rules_unmet') {
-    return { message: describeColumnRefusal(error.details as unknown as ColumnRefusalDetails), exitCode: 1 }
-  }
   if (error instanceof BoardError) {
-    const details = error.details ? ` ${JSON.stringify(error.details)}` : ''
-    return { message: `${error.code}${details}`, exitCode: 1 }
+    return { message: describeBoardError(error), exitCode: 1, code: error.code }
   }
   return { message: error instanceof Error ? error.message : String(error), exitCode: 1 }
+}
+
+function describeBoardError(error: BoardError): string {
+  const details = error.details ? JSON.stringify(error.details) : null
+  const humanized = humanizeBoardError(error.code, error.details)
+  if (!humanized) {
+    return details ? `${error.code} ${details}` : error.code
+  }
+  const lines = humanized.next === undefined
+    ? [`${humanized.text}  [${error.code}]`]
+    : [humanized.text, `  Next: ${humanized.next}  [${error.code}]`]
+  if (details && isDebugging()) {
+    lines.push(`  Details: ${details}`)
+  }
+  return lines.join('\n')
+}
+
+function isDebugging(): boolean {
+  const value = process.env.KANBO_DEBUG?.trim()
+  return value !== undefined && value !== '' && value !== '0' && value.toLowerCase() !== 'false'
 }
 
 /**

@@ -27,6 +27,7 @@ These change what the column operations of `createBoardOps(...)` do. Signatures 
 - The orchestrator guide names no column but To Do by its slug; `kanbo prime` says which column is for what. `kanbo columns rename` says that agents pick the new name up from `kanbo prime`.
 - `kanbo columns` menu: "Nothing to remove — To Do always stays." when To Do is the only column.
 - On Postgres, removing a column locks its row first; a card put into it meanwhile waits, and a card that still arrives refuses the removal rather than losing its column.
+- Error messages are plain sentences. A board refusal prints what went wrong, the command to run next, and its code in brackets (`No column "foo" on this board.` / `  Next: kanbo columns list  [issue_status_not_found]`) instead of the code and its details as JSON; `KANBO_DEBUG=1` adds the details. Exit codes are unchanged. Messages that said "workspace", "binding", "host database" or "external board" now say "project", "this project's settings", "the app's database" and "shared Postgres board".
 
 ## [0.2.1] — 2026-09-27
 

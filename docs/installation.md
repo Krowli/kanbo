@@ -55,7 +55,7 @@ npm install -g kanbo-cli@latest
 
 A newer build may add columns or tables to the board. When it does:
 
-- **A board file** (`kanbo init --file`) keeps working for reads; writes are refused with exit `3` and `Board file is older than this build. Run kanbo migrate.` Run `kanbo migrate` in the project.
+- **A board file** (`kanbo init --file`) keeps working for reads; writes are refused with exit `3` and `This board file was made by an older kanbo. Run kanbo migrate.` Run `kanbo migrate` in the project.
 - **An external Postgres board** is refused entirely (exit `3`) until you run `kanbo migrate`, and then `kanbo roles apply`, with the owner's connection string. See [storage](storage.md#migrations).
 
 `kanbo migrate` applies only what is pending and is safe to run again. The [changelog](../CHANGELOG.md) says when an upgrade needs it.

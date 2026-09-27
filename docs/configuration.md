@@ -12,6 +12,7 @@ kanbo has no configuration file of its own beyond the per-project binding. Every
 | `KANBO_ACTOR_ID` | every writing command, `kanbo mcp`, `kanbo serve` | The name writes are filed under. Defaults to the operating-system user name. |
 | `KANBO_ACTOR_KIND` | every command | `agent` marks the shell as an agent's: person-only commands exit `4`, no question is asked, column entry rules refuse instead of warning, and a Postgres binding's `agentDatabaseUrl` is used. `person` marks it as a person's even when an agent tool's mark is there (see [Agent shells kanbo recognises](#agent-shells-kanbo-recognises)). Unset, the marks decide. |
 | `KANBO_SERVE_TOKEN` | `kanbo serve` | Bearer token the HTTP server requires (same as `--token`, but not visible in `ps`). Unset on loopback, a token is generated for the run. |
+| `KANBO_DEBUG` | every command | `1` adds the values that caused a board refusal (`Details: {…}`) under its message. |
 
 ## Agent shells kanbo recognises
 

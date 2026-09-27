@@ -166,7 +166,8 @@ describe('kanbo columns', () => {
     it('refuses a name another column answers to', async () => {
       const outcome = await kanbo('columns', 'rename', 'backlog', 'done')
 
-      expect(message(outcome)).toBe('Another column, Done, already has that name (same slug). Pick another name.')
+      expect(message(outcome)).toBe('Another column, Done, already has that name (same slug). Pick another name.\n'
+        + '  Next: kanbo columns list  [board_column_name_taken]')
       expect(await names()).toEqual(STANDARD)
     })
 
@@ -174,7 +175,7 @@ describe('kanbo columns', () => {
       const outcome = await kanbo('columns', 'rename', 'to_do', 'Ready')
 
       expect(message(outcome)).toBe('To Do can\'t be renamed to "Ready": kanbo ready takes work from To Do, and agents '
-        + 'would find no cards to take. Another spelling of To Do (To-do, TO DO) is fine.')
+        + 'would find no cards to take. Another spelling of To Do (To-do, TO DO) is fine.  [board_column_ready_protected]')
       expect(await names()).toEqual(STANDARD)
     })
   })
@@ -214,8 +215,9 @@ describe('kanbo columns', () => {
 
       const outcome = await kanbo('columns', 'remove', 'in_review')
 
-      expect(message(outcome)).toBe('In Review holds 2 cards. Say where they go: kanbo columns remove in_review --move-cards-to <column>')
-      expect((outcome as { exitCode: number }).exitCode).toBe(1)
+      expect(message(outcome)).toBe('In Review holds 2 cards. Say where they go.\n'
+        + '  Next: kanbo columns remove in_review --move-cards-to <column>  [board_column_not_empty]')
+      expect(describeFailure(outcome).exitCode).toBe(1)
       expect(await names()).toEqual(STANDARD)
       expect(await columnOf(cards[0]!)).toBe('In Review')
       expect(await readChangeSeq(store)).toBe(before)
@@ -245,7 +247,7 @@ describe('kanbo columns', () => {
     it('never removes To Do', async () => {
       const outcome = await kanbo('columns', 'remove', 'to_do')
 
-      expect(message(outcome)).toBe('To Do can\'t be removed: kanbo ready takes work from To Do, and agents would find no cards to take.')
+      expect(message(outcome)).toBe('To Do can\'t be removed: kanbo ready takes work from To Do, and agents would find no cards to take.  [board_column_ready_protected]')
       expect(await names()).toEqual(STANDARD)
     })
 

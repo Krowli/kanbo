@@ -7,15 +7,14 @@ import type { SqliteDatabase } from '../sqlite/transaction'
 import { CliError, EXIT_SCHEMA_OUTDATED } from './output'
 
 export const SCHEMA_OUTDATED_MESSAGE
-  = 'This database is older than the board schema. Let the app it belongs to apply its migrations first.'
+  = 'The app\'s database is older than this kanbo. Let the app it belongs to update it first.'
 
 /** The same, for a board file this package created and migrates itself. */
 export const FILE_SCHEMA_OUTDATED_MESSAGE
-  = 'Board file is older than this build. Run kanbo migrate.'
+  = 'This board file was made by an older kanbo. Run kanbo migrate.'
 
 export const SCHEMA_NOT_INSTALLED_MESSAGE
-  = 'This database holds no board this build can speak for — it has none, or one an '
-    + 'older kanbo created. Run kanbo migrate.'
+  = 'This Postgres database has no kanbo board yet, or one an older kanbo made. Run kanbo migrate.'
 
 /**
  * Refuse to write to a board file this build cannot speak for.

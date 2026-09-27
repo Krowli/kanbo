@@ -79,7 +79,7 @@ async function uninstall(options: UninstallOptions): Promise<void> {
   const withProject = both || Boolean(options.project)
   const withGlobal = both || Boolean(options.global)
   if (options.purge && !withProject) {
-    throw new CliError(1, '--purge removes a project\'s binding and board; run it without --global, in the project.')
+    throw new CliError(1, '--purge removes this project\'s board settings and board; run it without --global, in the project.')
   }
 
   const projectRoot = withProject ? (findKanboProject(process.cwd())?.root ?? process.cwd()) : null

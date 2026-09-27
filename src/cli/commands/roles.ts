@@ -32,7 +32,7 @@ import { openPostgresBoard } from '../postgres-board'
 
 /** What a person is told when there is no external board to apply the roles to. */
 export const ROLES_NEED_A_DATABASE_MESSAGE
-  = 'The board roles belong to an external Postgres board. A board file is protected by whoever can open it — '
+  = 'The board roles are for a shared Postgres board. A board file is protected by whoever can open it — '
     + 'pass --database-url or set KANBO_DATABASE_URL.'
 
 export function registerRolesCommands(program: Command): void {

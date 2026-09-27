@@ -29,8 +29,8 @@ import { openPostgresBoard } from '../postgres-board'
 
 /** What a person is told when they point this at a host app's own database file. */
 export const BOARD_FILE_NOT_MIGRATED_MESSAGE
-  = 'This database file belongs to the app the board lives in, and that app migrates it. Pass --database-url, set '
-    + 'KANBO_DATABASE_URL, or point --db at a board file of this project\'s own (kanbo init --file).'
+  = 'This database file belongs to the app the board lives in, and that app updates it. Pass --database-url, set '
+    + 'KANBO_DATABASE_URL, or point --db at this project\'s own board file (kanbo init --file).'
 
 export function registerMigrateCommand(program: Command): void {
   withTargetOptions(program

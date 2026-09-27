@@ -134,7 +134,7 @@ describe('kanbo init --global', () => {
   })
 
   it('refuses the flags that bind a project', async () => {
-    await expect(run(['--yes', '--file'])).rejects.toThrowError(/--global binds no board/)
+    await expect(run(['--yes', '--file'])).rejects.toThrowError(/--global connects no board/)
     expect(readdirSync(projectDir)).toEqual([])
   })
 })

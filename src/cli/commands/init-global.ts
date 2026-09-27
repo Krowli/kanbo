@@ -58,7 +58,7 @@ export async function initGlobal(options: InitOptions): Promise<void> {
   const format = readFormat(options)
   const given = PROJECT_ONLY_FLAGS.filter(([key]) => options[key] !== undefined).map(([, flag]) => flag)
   if (given.length > 0) {
-    throw new CliError(1, `--global binds no board; ${given.join(', ')} ${given.length === 1 ? 'is' : 'are'} for a project. `
+    throw new CliError(1, `--global connects no board; ${given.join(', ')} ${given.length === 1 ? 'is' : 'are'} for a project. `
       + 'Run kanbo init in the project for that.')
   }
 

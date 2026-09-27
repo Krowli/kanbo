@@ -1,6 +1,5 @@
 import type { ColumnTemplateId } from '../domain/column-templates'
 import { COLUMN_TEMPLATE_IDS, COLUMN_TEMPLATE_LABELS, COLUMN_TEMPLATES, findCatalogueColumn, ownColumn } from '../domain/column-templates'
-import { BoardError } from '../domain/errors'
 import { normalizeStatusName } from '../domain/status-name'
 import type { ColumnPosition } from '../ops/columns'
 import type { BoardActor } from '../ops/types'
@@ -60,13 +59,13 @@ export async function addColumn(session: BoardSession, request: AddColumnRequest
   const anchor = anchorName === undefined ? null : await requireNamedColumn(session, anchorName)
 
   const spec = findCatalogueColumn(name) ?? ownColumn(name, null)
-  const created = await explainRefusal(session.ops.addColumn(workspaceId, {
+  const created = await session.ops.addColumn(workspaceId, {
     name,
     description: request.description?.trim() || spec.description,
     color: spec.color,
     category: request.category ?? spec.category,
     position: anchor ? (request.after !== undefined ? { after: anchor.id } : { before: anchor.id }) : undefined,
-  }, actor))
+  }, actor)
   return await changed(session, `Added ${created.name} (slug ${normalizeStatusName(created.name)}).`, { added: projectColumn(created) })
 }
 
@@ -75,7 +74,7 @@ export const RENAME_NOTE = 'Agents read column names from kanbo prime; rename is
 
 export async function renameColumn(session: BoardSession, column: string, newName: string, actor: BoardActor): Promise<CliResult> {
   const before = await requireNamedColumn(session, column)
-  const renamed = await explainRefusal(session.ops.renameColumn(session.workspace.id, before.id, newName, actor))
+  const renamed = await session.ops.renameColumn(session.workspace.id, before.id, newName, actor)
   const message = before.name === renamed.name
     ? `${renamed.name} already has that name.`
     : `Renamed ${before.name} to ${renamed.name} (slug ${normalizeStatusName(renamed.name)}).\n${RENAME_NOTE}`
@@ -120,7 +119,7 @@ export async function removeColumn(session: BoardSession, column: string, moveCa
   if (moveCardsTo !== null) {
     await requireNamedColumn(session, moveCardsTo)
   }
-  const result = await explainRefusal(session.ops.removeColumn(session.workspace.id, removing.id, { moveCardsTo }, actor))
+  const result = await session.ops.removeColumn(session.workspace.id, removing.id, { moveCardsTo }, actor)
   // The same warning `kanbo card move` leaves when a person's move skips a column's entry rules.
   for (const card of result.unmetRules ?? []) {
     for (const item of card.unmet) {
@@ -167,37 +166,6 @@ export async function requireNamedColumn(session: BoardSession, nameOrId: string
     throw new CliError(1, `This board has no column "${nameOrId}". See kanbo columns list.`)
   }
   return column
-}
-
-/** The board's refusals of a column change, as sentences a person can act on. */
-async function explainRefusal<T>(work: Promise<T>): Promise<T> {
-  try {
-    return await work
-  }
-  catch (error) {
-    if (!(error instanceof BoardError)) {
-      throw error
-    }
-    const details = (error.details ?? {}) as Record<string, string | number | undefined>
-    switch (error.code) {
-      case 'board_column_name_taken':
-        throw new CliError(1, `Another column, ${details.takenBy}, already has that name (same slug). Pick another name.`)
-      case 'board_column_ready_protected':
-        throw new CliError(1, details.newName === undefined
-          ? `${details.statusName} can't be removed: kanbo ready takes work from To Do, and agents would find no cards to take.`
-          : `${details.statusName} can't be renamed to "${details.newName}": kanbo ready takes work from To Do, and agents `
-            + 'would find no cards to take. Another spelling of To Do (To-do, TO DO) is fine.')
-      case 'board_column_not_empty':
-        throw new CliError(1, `${details.statusName} holds ${describeCount(Number(details.cardCount))}. Say where they go: `
-          + `kanbo columns remove ${normalizeStatusName(String(details.statusName))} --move-cards-to <column>`)
-      case 'issue_status_name_empty':
-        throw new CliError(1, 'Give the column a name.')
-      case 'board_column_remove_target_invalid':
-        throw new CliError(1, `Cards can't move into ${details.statusName}: it is the column being removed.`)
-      default:
-        throw error
-    }
-  }
 }
 
 function describeCount(count: number): string {

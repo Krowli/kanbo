@@ -21,6 +21,7 @@ import { registerCardCommands } from './commands/card'
 import { registerReadyCommand } from './commands/ready'
 import { registerRunCommands } from './commands/run'
 import { registerSprintCommands } from './commands/sprint'
+import { describeFailure } from './failure'
 
 const WORKSPACE: BoardWorkspaceIdentity = { id: 'workspace', identifier: 'WOR', name: 'Workspace' }
 const USER: BoardActor = { kind: 'user', id: '__self__' }
@@ -78,6 +79,25 @@ describe('board commands', () => {
       .find(candidate => candidate.id === moved?.statusId)
     expect(normalizeStatusName(column?.name ?? '')).toBe('in_progress')
     expect(await readChangeSeq(store)).toBe(before + 1)
+  })
+
+  it('says a column the board has not got in plain words, with what to run next', async () => {
+    vi.stubEnv('KANBO_DEBUG', '')
+    const card = await createCardIn('Card', 'To Do')
+
+    const outcome = await run(['card', 'move', card.id, 'foo']).then(() => undefined, (error: unknown) => error)
+
+    expect(describeFailure(outcome)).toEqual({
+      exitCode: 1,
+      code: 'issue_status_not_found',
+      message: 'No column "foo" on this board.\n  Next: kanbo columns list  [issue_status_not_found]',
+    })
+  })
+
+  it('says a card the board has not got, with what to run next', async () => {
+    const outcome = await run(['card', 'move', '999', 'done']).then(() => undefined, (error: unknown) => error)
+
+    expect(describeFailure(outcome)).toEqual({ exitCode: 2, message: 'No card "999" on this board.\n  Next: kanbo card list' })
   })
 
   it('offers a card nobody is working on, and stops offering it once a run starts', async () => {
@@ -254,7 +274,7 @@ describe('board commands', () => {
     // The two cards carry the same number in their own workspaces, so a key read
     // for its digits alone would move this board's card on the other's say-so.
     expect(theirs.number).toBe(mine.number)
-    const refusal = expect.objectContaining({ exitCode: 2, message: `No card "${theirs.id}" on this board.` })
+    const refusal = expect.objectContaining({ exitCode: 2, message: `No card "${theirs.id}" on this board.\n  Next: kanbo card list` })
     await expect(run(['card', 'move', theirs.id, 'in_progress'])).rejects.toThrowError(refusal)
     await expect(run(['card', 'get', theirs.id])).rejects.toThrowError(refusal)
 

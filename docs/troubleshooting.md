@@ -13,7 +13,7 @@ The project's binding is gone or damaged. Run `kanbo init --file` (or `kanbo ini
 **`sqlite` fail: `better-sqlite3 cannot be loaded`**
 See `Could not load better-sqlite3 …` below.
 
-**`board` fail: `Board file is older than this build. Run kanbo migrate.`**
+**`board` fail: `This board file was made by an older kanbo. Run kanbo migrate.`**
 Run `kanbo migrate` in the project.
 
 **`instructions` warn: `block was written by an older kanbo`**
@@ -42,6 +42,15 @@ The `kanbo` a client would start fails before answering. The detail is its first
 
 ## Messages
 
+A refusal from the board reads as a sentence, the command to run next, and the error's code in brackets — the code is what to search for:
+
+```text
+No column "foo" on this board.
+  Next: kanbo columns list  [issue_status_not_found]
+```
+
+Set `KANBO_DEBUG=1` to also print the values that caused it (`Details: {…}`).
+
 **`This folder has no kanbo board yet. Run kanbo to set one up (or kanbo init --yes for the defaults).` (exit 2)**
 No flag (`--db`, `--database-url`), environment variable (`KANBO_DB_PATH`, `KANBO_DATABASE_URL`) or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo` in the project root, or `cd` into the project. In an agent's shell the message ends `Ask a person to run kanbo here.` instead. For an MCP client, check that it starts `kanbo mcp` in the project directory.
 
@@ -57,25 +66,25 @@ The native module kanbo reads board files with is missing or does not load on th
 **`kanbo needs Node ^22.19.0 || >=24.11.0; this is Node …`**
 Install a current Node from https://nodejs.org (or with your version manager) and run kanbo again.
 
-**`… is not a board database this tool can open.` (exit 2)**
+**`… is not a board file kanbo can open.` (exit 2)**
 `--db` or the binding points at a file that is not a SQLite database.
 
-**`Could not tell which workspace this is …` / `Could not tell what this workspace's card keys start with …` (exit 2)**
+**`Could not tell which project this is …` / `Could not tell what this project's card numbers start with …` (exit 2)**
 The binding has no workspace or no `identifier`. Rerun `kanbo init --file --workspace <id> --identifier <KEY>` (or `--database-url …`), or pass `--workspace`.
 
-**`Board file is older than this build. Run kanbo migrate.` (exit 3)**
+**`This board file was made by an older kanbo. Run kanbo migrate.` (exit 3)**
 You upgraded kanbo. Run `kanbo migrate` in the project. Reads keep working until then.
 
-**`This database holds no board this build can speak for …` (exit 3)**
+**`This Postgres database has no kanbo board yet, or one an older kanbo made …` (exit 3)**
 The Postgres database has no board yet, or an older one. Run `kanbo migrate --database-url <owner url>`, then `kanbo roles apply` with the same URL.
 
 **`Approval is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent).` (exit 4)**
 `KANBO_ACTOR_KIND=agent` is set in this shell. Approve from your own terminal, where it is not set — check your shell profile if it is set there. The same message with `(CLAUDECODE=1)`, `(GEMINI_CLI=1)` or `(CURSOR_AGENT)` means an agent tool marked the shell; in your own terminal, set `KANBO_ACTOR_KIND=person`.
 
-**`One board at a time: pass --db for a board file or --database-url for an external board, not both.` (exit 1)**
+**`One board at a time: pass --db for a board file or --database-url for a shared Postgres board, not both.` (exit 1)**
 Give only one of the two flags.
 
-**`board_column_rules_unmet: … cannot enter "…" yet:` (exit 1)**
+**`… can't go into "…" yet:` … `[board_column_rules_unmet]` (exit 1)**
 The column has entry rules the card does not meet; the lines below say which. Fix the card (tick the checklist, link the pull request) or ask a person to move it.
 
 **`kanbo: agents in this project will reach the board with the connection string you gave, which owns it.`**
