@@ -16,21 +16,14 @@ import { resolveDbTarget } from './db-target'
 import { describeFailure } from './failure'
 import { openPostgresBoard } from './postgres-board'
 import { assertInstalledBoard, FILE_SCHEMA_OUTDATED_MESSAGE, SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
+import type { AgentId } from './setup/agents'
+import { AGENT_IDS, AGENTS, instructionPaths } from './setup/agents'
+import { readMcpEntry } from './setup/connect-plan'
 import type { InstructionBlockState } from './setup/instructions'
 import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, readInstructionBlockState } from './setup/instructions'
-import { MCP_ARGS, MCP_COMMAND, readCodexMcpEntry, readJsonMcpEntry } from './setup/mcp-config'
+import { MCP_ARGS, MCP_COMMAND } from './setup/mcp-config'
 import { resolveShimTarget } from './setup/npm-shim'
-import type { McpClient } from './setup/paths'
-import {
-  findAllOnPath,
-  findOnPath,
-  GLOBAL_INSTRUCTION_CLIENTS,
-  globalInstructionPath,
-  globalMcpConfigPath,
-  MCP_CLIENTS,
-  PROJECT_INSTRUCTION_FILES,
-  projectMcpConfigPath,
-} from './setup/paths'
+import { findAllOnPath, findOnPath } from './setup/paths'
 
 /**
  * `kanbo doctor` — the checks for the ways kanbo can be set up wrong without
@@ -75,7 +68,7 @@ export interface ProjectState {
 
 /** One MCP registration found in a tool's configuration. */
 interface Registration {
-  client: McpClient
+  client: AgentId
   path: string
   /** The project's shared file, or the person's own configuration. */
   scope: 'project' | 'user'
@@ -266,20 +259,14 @@ async function checkPostgresBoard(url: string): Promise<DoctorFinding> {
  */
 function checkInstructions(root: string | null): DoctorFinding[] {
   const findings: DoctorFinding[] = []
-  if (root) {
-    for (const [target, name] of Object.entries(PROJECT_INSTRUCTION_FILES)) {
-      const path = join(root, name)
-      const state = readInstructionBlockState(path, INSTRUCTION_BLOCK)
+  const scopes = [...(root ? [{ scope: 'project' as const, root, block: INSTRUCTION_BLOCK }] : []), { scope: 'user' as const, root: root ?? process.cwd(), block: GLOBAL_INSTRUCTION_BLOCK }]
+  for (const { scope, root: folder, block } of scopes) {
+    for (const { path, agents } of instructionPaths(scope, folder)) {
+      const state = readInstructionBlockState(path, block)
       if (state !== null) {
-        findings.push(blockFinding(path, state, `cd ${root} && kanbo connect ${target === 'claude' ? 'claude' : 'codex'} --project --no-mcp`))
+        const command = `kanbo connect ${agents[0]} ${scope === 'project' ? '--project' : '--global'} --no-mcp`
+        findings.push(blockFinding(path, state, scope === 'project' ? `cd ${folder} && ${command}` : command))
       }
-    }
-  }
-  for (const client of GLOBAL_INSTRUCTION_CLIENTS) {
-    const path = globalInstructionPath(client)
-    const state = readInstructionBlockState(path, GLOBAL_INSTRUCTION_BLOCK)
-    if (state !== null) {
-      findings.push(blockFinding(path, state, `kanbo connect ${client} --global --no-mcp`))
     }
   }
   if (findings.length === 0) {
@@ -322,15 +309,13 @@ function blockFinding(path: string, state: InstructionBlockState, command: strin
 /** Every `kanbo` registration in the project's and the person's own tool configuration. */
 function findRegistrations(root: string | null): Registration[] {
   const found: Registration[] = []
-  for (const client of MCP_CLIENTS) {
-    const paths = [
-      ...(root ? [{ path: projectMcpConfigPath(root, client), scope: 'project' as const }] : []),
-      { path: globalMcpConfigPath(client), scope: 'user' as const },
-    ]
-    for (const { path, scope } of paths) {
-      const entry = client === 'codex' ? readCodexMcpEntry(path) : readJsonMcpEntry(path)
+  for (const client of AGENT_IDS) {
+    const scopes = [...(root ? ['project' as const] : []), 'user' as const]
+    for (const scope of scopes) {
+      const target = AGENTS[client].mcpTarget(scope, root ?? process.cwd())
+      const entry = readMcpEntry(target)
       if (entry !== undefined) {
-        found.push({ client, path, scope, ...entry })
+        found.push({ client, path: target.path, scope, ...entry })
       }
     }
   }
@@ -347,7 +332,7 @@ function checkRegistrations(registrations: Registration[], platform: NodeJS.Plat
     }]
   }
   return registrations.map((registration) => {
-    const { client, path, command, args } = registration
+    const { client, path, command } = registration
     const check = `mcp:${client}`
     if (command === null) {
       return { check, status: 'warn', detail: `${path}: the kanbo entry names no command.`, fix: `Set "command" to kanbo in ${path}.` }
@@ -493,7 +478,7 @@ function isWindowsAbsolute(command: string): boolean {
 }
 
 /** The command that registers kanbo with this client again, in the same scope. */
-function connectCommand(client: McpClient, scope: Registration['scope']): string {
+function connectCommand(client: AgentId, scope: Registration['scope']): string {
   return `kanbo connect ${client} ${scope === 'project' ? '--project' : '--global'}`
 }
 

@@ -41,7 +41,7 @@ export const PORTABLE_MCP_LAUNCH: McpLaunch = { command: 'kanbo', args: ['mcp'] 
 
 export const WINDOWS_PROJECT_MCP_WARNING
   = 'On Windows, `kanbo` in a project file starts only in clients that run programs through a shell; '
-    + 'Codex does not. Register kanbo in your own settings instead (kanbo init --global).'
+    + 'Codex does not. Register kanbo in your own settings instead: kanbo connect <agent> without --project.'
 
 export function mcpLaunchSpec(input: McpLaunchInput): McpLaunchSpec {
   const platform = input.platform ?? process.platform

@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { basename, join, relative, resolve } from 'node:path'
+import { basename, relative, resolve } from 'node:path'
 
 import type { Command } from 'commander'
 
@@ -19,11 +19,11 @@ import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
 import type { FileOutcome } from '../setup/file-change'
 import type { AppliedInitPlan, InitFileChange, InitPlan } from '../setup/init-plan'
 import { applyInitPlan, assertOwnBoardFile, describeInitPlan } from '../setup/init-plan'
-import { INSTRUCTION_BLOCK, planInstructionBlockAsking } from '../setup/instructions'
-import { planCodexMcpServer, planJsonMcpServer } from '../setup/mcp-config'
+import { planConnect } from '../setup/connect-plan'
+import { INSTRUCTION_BLOCK } from '../setup/instructions'
 import { mcpLaunchSpec } from '../setup/mcp-launch'
 import type { McpClient, ProjectInstructionTarget } from '../setup/paths'
-import { MCP_CLIENTS, PROJECT_INSTRUCTION_FILES, projectMcpConfigPath } from '../setup/paths'
+import { MCP_CLIENTS } from '../setup/paths'
 import { canPrompt } from '../ui/environment'
 import { getUi } from '../ui/ui'
 import { resolveWorkspace } from '../workspace'
@@ -139,7 +139,7 @@ async function planInit(projectDir: string, options: InitOptions): Promise<InitP
   const { target, workspace, boardFile } = await resolveBoard(projectDir, options)
   const fileChanges = [
     ...await planInstructions(projectDir, options),
-    ...planMcpServers(projectDir, await askMcpClientsUnlessGiven(options)),
+    ...await planMcpServers(projectDir, await askMcpClientsUnlessGiven(options)),
   ]
   return {
     projectDir,
@@ -466,11 +466,13 @@ async function planInstructions(projectDir: string, options: InitOptions): Promi
   if (target === 'none') {
     return []
   }
-  const planned = await planInstructionBlockAsking(join(projectDir, PROJECT_INSTRUCTION_FILES[target]), INSTRUCTION_BLOCK, options)
-  if (planned.note) {
-    console.error(planned.note)
+  // CLAUDE.md is Claude Code's; AGENTS.md is the one Codex and Cursor read.
+  const agent = target === 'claude' ? 'claude' : 'codex'
+  const plan = await planConnect([{ agent, instructions: 'project', mcp: null }], { projectDir, yes: options.yes })
+  for (const note of plan.notes) {
+    console.error(note)
   }
-  return [{ kind: 'instructions', change: planned.change }]
+  return plan.items.flatMap(item => (item.kind === 'instructions' ? [{ kind: 'instructions' as const, change: item.change }] : []))
 }
 
 async function askInstructionTarget(options: InitOptions): Promise<InstructionTarget> {
@@ -501,21 +503,19 @@ function showBlock(options: InitOptions): void {
 }
 
 /**
- * Tell the tools the person uses about the board's MCP server.
+ * Tell the tools the person uses about the board's MCP server, in the project's
+ * own files — what `kanbo connect <clients> --project --no-instructions` does.
  *
  * Only the ones they named, and only when the tool does not already know: a
  * `kanbo` entry that is already there belongs to them — it may point at
- * a different binary or carry arguments of its own — and overwriting it would
- * be this command deciding something it was not asked to decide.
+ * a different binary or carry arguments of its own — and is rewritten only
+ * when it is kanbo's own and no longer starts.
  *
  * A project file is shared across machines, so it gets the portable form on every system.
  */
-function planMcpServers(projectDir: string, clients: McpClient[]): InitFileChange[] {
-  const launch = mcpLaunchSpec({ scope: 'project' })
-  return clients.map((client) => {
-    const path = projectMcpConfigPath(projectDir, client)
-    return { kind: 'mcp', change: client === 'codex' ? planCodexMcpServer(path, launch) : planJsonMcpServer(path, launch) }
-  })
+async function planMcpServers(projectDir: string, clients: McpClient[]): Promise<InitFileChange[]> {
+  const plan = await planConnect(clients.map(agent => ({ agent, instructions: null, mcp: 'project' })), { projectDir })
+  return plan.items.flatMap(item => (item.kind === 'mcp' ? [{ kind: 'mcp' as const, change: item.change }] : []))
 }
 
 async function askMcpClientsUnlessGiven(options: InitOptions): Promise<McpClient[]> {

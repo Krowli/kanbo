@@ -32,7 +32,7 @@ npm install --save-dev kanbo-cli better-sqlite3
 npx kanbo init --file
 ```
 
-`npx kanbo …` then runs the project's copy. MCP registrations written by `kanbo init --mcp` call `kanbo`, so it must be on the `PATH` of the agent — either install globally or change the `command` in the registration to `npx` with `args: ["kanbo", "mcp"]`.
+`npx kanbo …` then runs the project's copy. MCP registrations written by `kanbo connect` (or `kanbo init --mcp`) call `kanbo`, so it must be on the `PATH` of the agent — either install globally or change the `command` in the registration to `npx` with `args: ["kanbo", "mcp"]`.
 
 ## From source
 

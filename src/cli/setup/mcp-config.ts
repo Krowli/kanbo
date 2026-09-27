@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs'
+import { isAbsolute } from 'node:path'
+
 import { CliError } from '../output'
 import type { FileChange } from './file-change'
 import type { McpLaunch } from './mcp-launch'
@@ -51,21 +54,36 @@ const TOML_ARGS_PATTERN = /^\s*args\s*=\s*\[(.*)\]\s*$/m
 /** One string in a TOML array, either spelling. */
 const TOML_STRING_PATTERN = /"(?:[^"\\]|\\.)*"|'[^']*'/g
 
+/** How a registration is written. */
+export interface McpWriteOptions {
+  /**
+   * Replace a `kanbo` entry that is already there. Only for one of kanbo's own
+   * that no longer starts (`isStaleMcpEntry`): any other belongs to the person.
+   */
+  replace?: boolean
+  /** Write `"type": "stdio"` (Claude Code, Cursor); Gemini CLI's entries have no `type`. Defaults to true. */
+  withType?: boolean
+}
+
 /**
  * The `mcpServers` map, merged rather than replaced: the file may already
  * describe servers that have nothing to do with this board. A `kanbo` entry
  * that is already there belongs to the person — it may point at a different
- * binary or carry arguments of its own — and is left as it is.
+ * binary or carry arguments of its own — and is left as it is, unless it is
+ * kanbo's own gone stale and the caller says `replace`.
  */
-export function planJsonMcpServer(path: string, launch: McpLaunch = PORTABLE_MCP_LAUNCH): FileChange {
+export function planJsonMcpServer(path: string, launch: McpLaunch = PORTABLE_MCP_LAUNCH, options: McpWriteOptions = {}): FileChange {
   return planTextFile(path, (text) => {
     const existing = readJsonConfig(path, text)
-    if (existing.mcpServers && MCP_SERVER_NAME in existing.mcpServers) {
+    if (existing.mcpServers && MCP_SERVER_NAME in existing.mcpServers && !options.replace) {
       return null
     }
+    const entry = options.withType === false
+      ? { command: launch.command, args: [...launch.args] }
+      : { type: 'stdio', command: launch.command, args: [...launch.args] }
     const next = {
       ...existing,
-      mcpServers: { ...existing.mcpServers, [MCP_SERVER_NAME]: { type: 'stdio', command: launch.command, args: [...launch.args] } },
+      mcpServers: { ...existing.mcpServers, [MCP_SERVER_NAME]: entry },
     }
     return `${JSON.stringify(next, null, 2)}\n`
   })
@@ -121,17 +139,49 @@ export function readJsonMcpEntry(path: string): McpEntry | undefined {
 /**
  * Codex keeps its servers in TOML tables, so the table is appended rather than
  * merged. A Windows path is written as a TOML literal string (`'…'`), which
- * takes its backslashes as they are.
+ * takes its backslashes as they are. With `replace`, a stale `kanbo` table and
+ * its subtables are swapped for the new one where they stood.
  */
-export function planCodexMcpServer(path: string, launch: McpLaunch = PORTABLE_MCP_LAUNCH): FileChange {
+export function planCodexMcpServer(path: string, launch: McpLaunch = PORTABLE_MCP_LAUNCH, options: Pick<McpWriteOptions, 'replace'> = {}): FileChange {
   return planTextFile(path, (text) => {
     const existing = text ?? ''
-    if (findCodexSections(existing).length > 0) {
-      return null
-    }
+    const sections = findCodexSections(existing)
     const table = `[mcp_servers.${MCP_SERVER_NAME}]\ncommand = ${tomlString(launch.command)}\nargs = [${launch.args.map(tomlString).join(', ')}]\n`
+    if (sections.length > 0) {
+      if (!options.replace) {
+        return null
+      }
+      const lines = existing.split('\n')
+      const removed = new Set(sections.flatMap(({ start, end }) => range(start, end)))
+      const before = lines.slice(0, sections[0]!.start).join('\n').replace(/\s*$/, '')
+      const after = lines.slice(sections[0]!.start).filter((_, offset) => !removed.has(sections[0]!.start + offset)).join('\n').trim()
+      return [before, table.trimEnd(), after].filter(part => part.length > 0).join('\n\n') + '\n'
+    }
     return existing.trim() ? `${existing.replace(/\s*$/, '')}\n\n${table}` : table
   })
+}
+
+/**
+ * A `kanbo` registration of kanbo's own that no longer starts, and that
+ * `kanbo connect` may therefore rewrite: one that names its program by full
+ * path when that program — or a script among its arguments — is gone (a Node
+ * upgrade, a reinstall elsewhere), or, on Windows, one of the person's own that
+ * names a bare command, which there is npm's `kanbo.cmd` shim.
+ */
+export function isStaleMcpEntry(entry: McpEntry, scope: 'project' | 'user', platform: NodeJS.Platform = process.platform): boolean {
+  const { command, args } = entry
+  if (command === null) {
+    return false
+  }
+  if (isAbsolutePath(command)) {
+    return [command, ...args.filter(isAbsolutePath)].some(file => !existsSync(file))
+  }
+  return platform === 'win32' && scope === 'user'
+}
+
+/** A full path on either system: `/…`, `C:\\…` or `\\\\server\\…`. */
+function isAbsolutePath(value: string): boolean {
+  return isAbsolute(value) || /^(?:[a-z]:[\\/]|\\\\)/i.test(value)
 }
 
 /**

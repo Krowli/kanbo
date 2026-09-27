@@ -1,20 +1,9 @@
 import type { CliResult } from '../output'
 import { CliError, printResult, readFormat } from '../output'
 import { confirmPlan } from '../setup/confirm'
-import type { FileChange } from '../setup/file-change'
-import { applyFileChange } from '../setup/file-change'
-import { GLOBAL_INSTRUCTION_BLOCK, planInstructionBlockAsking } from '../setup/instructions'
-import {
-  claudeUserAddArgv,
-  displayCommand,
-  planCodexMcpServer,
-  planJsonMcpServer,
-  readClaudeUserMcpCommand,
-  runClaudeMcp,
-} from '../setup/mcp-config'
-import { mcpLaunchSpec } from '../setup/mcp-launch'
+import { applyConnectPlan, describeConnectPlan, pendingItems, planConnect } from '../setup/connect-plan'
 import type { GlobalInstructionClient, McpClient } from '../setup/paths'
-import { GLOBAL_INSTRUCTION_CLIENTS, globalInstructionPath, globalMcpConfigPath, MCP_CLIENTS } from '../setup/paths'
+import { GLOBAL_INSTRUCTION_CLIENTS, MCP_CLIENTS } from '../setup/paths'
 import type { InitOptions } from './init'
 
 /**
@@ -27,7 +16,8 @@ import type { InitOptions } from './init'
  * starts, which resolves the board from the folder the client starts it in —
  * on Windows spelled as this Node and this kanbo's script (`mcp-launch.ts`).
  *
- * Every change is worked out first and shown; nothing is written until the
+ * It plans what `kanbo connect <agents> --global` plans (`setup/connect-plan.ts`),
+ * for the agents its flags name. Every change is worked out first and shown; nothing is written until the
  * person says yes (or said `--yes`), and a file that already says it is
  * reported `unchanged`.
  */
@@ -73,84 +63,47 @@ export async function initGlobal(options: InitOptions): Promise<void> {
   const instructionClients = parseGlobalInstructions(options.instructions)
   const mcpClients = options.mcp ?? [...MCP_CLIENTS]
 
-  // One at a time: a block the person changed is asked about on its own.
-  const instructionChanges: { client: GlobalInstructionClient, change: FileChange }[] = []
-  for (const client of instructionClients) {
-    const planned = await planInstructionBlockAsking(globalInstructionPath(client), GLOBAL_INSTRUCTION_BLOCK, options)
-    if (planned.note) {
-      console.error(planned.note)
-    }
-    instructionChanges.push({ client, change: planned.change })
+  // What `kanbo connect <agents> --global` plans, with this command's own choice of agents.
+  const plan = await planConnect([
+    ...instructionClients.map(agent => ({ agent, instructions: 'user' as const, mcp: null })),
+    ...mcpClients.map(agent => ({ agent, instructions: null, mcp: 'user' as const })),
+  ], { projectDir: process.cwd(), yes: options.yes })
+  for (const note of plan.notes) {
+    console.error(note)
   }
-  const fileMcpChanges = mcpClients.filter(client => client !== 'claude').map(client => ({
-    client,
-    change: planGlobalMcpFile(client),
-  }))
-  const claudeNeeded = mcpClients.includes('claude') && readClaudeUserMcpCommand() === undefined
 
-  const pending = [...instructionChanges, ...fileMcpChanges].filter(({ change }) => change.next !== null)
-  let confirmed = true
-  if (pending.length > 0 || claudeNeeded) {
-    confirmed = await confirmPlan({
-      preview: describePlan(pending.map(({ change }) => change), claudeNeeded),
+  if (pendingItems(plan).length > 0) {
+    const confirmed = await confirmPlan({
+      preview: describeConnectPlan(plan, 'kanbo init --global will:').replace(
+        'Nothing else is changed.',
+        'No board is created. Narrow this with --instructions and --mcp, or use kanbo connect <agents> --global.',
+      ),
       question: 'Make these changes?',
       yes: options.yes,
       machineOutput: Boolean(options.json || format),
       command: 'kanbo init --global',
     })
-  }
-  if (!confirmed) {
-    throw new CliError(1, 'Nothing was changed.')
+    if (!confirmed) {
+      throw new CliError(1, 'Nothing was changed.')
+    }
   }
 
-  const instructions: GlobalInstructionOutcome[] = instructionChanges.map(({ client, change }) => ({
-    client,
-    ...applyFileChange(change),
-  }))
-  const mcp: GlobalMcpOutcome[] = mcpClients.map((client) => {
-    if (client === 'claude') {
-      return registerWithClaude(claudeNeeded)
-    }
-    const planned = fileMcpChanges.find(entry => entry.client === client)!
-    return { client, ...applyFileChange(planned.change) }
-  })
+  const outcomes = applyConnectPlan(plan)
+  const instructions: GlobalInstructionOutcome[] = outcomes
+    .filter(outcome => outcome.kind === 'instructions')
+    .map(({ agents, path, state }) => ({ client: agents[0] as GlobalInstructionClient, path, state: state as GlobalInstructionOutcome['state'] }))
+  const mcp: GlobalMcpOutcome[] = outcomes
+    .filter(outcome => outcome.kind !== 'instructions')
+    .map(({ agents, path, state, command, reason }) => ({
+      client: agents[0] as McpClient,
+      path,
+      // `claude mcp add` having run is the registration written.
+      state: state === 'ran' ? 'written' : state,
+      ...(command ? { command } : {}),
+      ...(reason ? { reason } : {}),
+    }))
 
   printResult(describeResult(instructions, mcp), options)
-}
-
-/** The line `claude mcp add` gets for this person's own registration. */
-function claudeUserAdd(): string[] {
-  return claudeUserAddArgv(mcpLaunchSpec({ scope: 'user' }))
-}
-
-function planGlobalMcpFile(client: Exclude<McpClient, 'claude'>): FileChange {
-  const path = globalMcpConfigPath(client)
-  const launch = mcpLaunchSpec({ scope: 'user' })
-  return client === 'codex' ? planCodexMcpServer(path, launch) : planJsonMcpServer(path, launch)
-}
-
-/** Claude Code's user-scope registration goes through its own command, never an edit of `~/.claude.json`. */
-function registerWithClaude(needed: boolean): GlobalMcpOutcome {
-  const path = globalMcpConfigPath('claude')
-  if (!needed) {
-    return { client: 'claude', path, state: 'unchanged' }
-  }
-  const outcome = runClaudeMcp(claudeUserAdd())
-  return outcome.state === 'ran'
-    ? { client: 'claude', path, state: 'written', command: outcome.command }
-    : { client: 'claude', path, state: 'manual', command: outcome.command, reason: outcome.reason }
-}
-
-function describePlan(changes: FileChange[], claudeNeeded: boolean): string {
-  const lines = ['kanbo init --global will:']
-  for (const change of changes) {
-    lines.push(`  write  ${change.path}`)
-  }
-  if (claudeNeeded) {
-    lines.push(`  run    ${displayCommand(claudeUserAdd())}`)
-  }
-  lines.push('No board is created. Narrow this with --instructions and --mcp.')
-  return lines.join('\n')
 }
 
 function describeResult(instructions: GlobalInstructionOutcome[], mcp: GlobalMcpOutcome[]): CliResult {

@@ -64,15 +64,6 @@ export function globalMcpConfigPath(client: McpClient): string {
   }
 }
 
-/** The project-level MCP configuration of each tool. */
-export function projectMcpConfigPath(projectDir: string, client: McpClient): string {
-  switch (client) {
-    case 'claude': return join(projectDir, '.mcp.json')
-    case 'codex': return join(projectDir, '.codex', 'config.toml')
-    case 'cursor': return join(projectDir, '.cursor', 'mcp.json')
-  }
-}
-
 /** What a `PATH` lookup reads: the OS it follows the rules of, and the environment. Both default to this process's. */
 export interface PathLookup {
   platform?: NodeJS.Platform

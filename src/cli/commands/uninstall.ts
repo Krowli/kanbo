@@ -7,6 +7,7 @@ import { BINDING_FILE_PATH } from '../binding'
 import { findKanboProject } from '../doctor'
 import { CliError } from '../output'
 import { confirmPlan } from '../setup/confirm'
+import { AGENT_IDS, AGENTS, instructionPaths } from '../setup/agents'
 import type { FileChange } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
 import { removeWithRetry } from '../setup/fs-retry'
@@ -18,16 +19,10 @@ import {
   readClaudeUserMcpCommand,
   runClaudeMcp,
 } from '../setup/mcp-config'
-import type { McpClient } from '../setup/paths'
+import type { McpScope } from '../setup/mcp-launch'
+import { globalMcpConfigPath } from '../setup/paths'
 import { canPrompt } from '../ui/environment'
 import { CancelledError, getUi } from '../ui/ui'
-import {
-  GLOBAL_INSTRUCTION_CLIENTS,
-  globalInstructionPath,
-  globalMcpConfigPath,
-  PROJECT_INSTRUCTION_FILES,
-  projectMcpConfigPath,
-} from '../setup/paths'
 
 /**
  * `kanbo uninstall` — take out what `kanbo init` wrote, and nothing else.
@@ -88,8 +83,8 @@ async function uninstall(options: UninstallOptions): Promise<void> {
 
   const projectRoot = withProject ? (findKanboProject(process.cwd())?.root ?? process.cwd()) : null
   const edits = [
-    ...(projectRoot ? planProjectEdits(projectRoot) : []),
-    ...(withGlobal ? planGlobalEdits() : []),
+    ...(projectRoot ? planEdits('project', projectRoot) : []),
+    ...(withGlobal ? planEdits('user', process.cwd()) : []),
   ].filter(edit => edit.change.next !== null)
   const claudeUser = withGlobal && readClaudeUserMcpCommand() !== undefined
   const bindingPath = projectRoot && options.purge ? join(projectRoot, BINDING_FILE_PATH) : null
@@ -129,35 +124,26 @@ async function uninstall(options: UninstallOptions): Promise<void> {
   printActions(actions, options)
 }
 
-function planProjectEdits(root: string): PlannedEdit[] {
+/**
+ * Every file of every agent in the registry (`setup/agents.ts`) that kanbo may
+ * have written in this scope: each instruction file once, and each MCP file.
+ * Claude Code's `~/.claude.json` is its own state file: `claude mcp remove`
+ * edits it, not this.
+ */
+function planEdits(scope: McpScope, root: string): PlannedEdit[] {
   return [
-    ...Object.values(PROJECT_INSTRUCTION_FILES).map(name => ({
-      change: planInstructionBlockRemoval(join(root, name)),
+    ...instructionPaths(scope, root).map(({ path }) => ({
+      change: planInstructionBlockRemoval(path),
       what: 'kanbo instruction block',
     })),
-    ...(['claude', 'codex', 'cursor'] as const).map(client => ({
-      change: planMcpRemoval(projectMcpConfigPath(root, client), client),
-      what: 'kanbo MCP server',
-    })),
+    ...AGENT_IDS.map(agent => AGENTS[agent].mcpTarget(scope, root)).flatMap((target) => {
+      if (target.format === 'claude-cli') {
+        return []
+      }
+      const change = target.format === 'toml' ? planCodexMcpServerRemoval(target.path) : planJsonMcpServerRemoval(target.path)
+      return [{ change, what: 'kanbo MCP server' }]
+    }),
   ]
-}
-
-function planGlobalEdits(): PlannedEdit[] {
-  return [
-    ...GLOBAL_INSTRUCTION_CLIENTS.map(client => ({
-      change: planInstructionBlockRemoval(globalInstructionPath(client)),
-      what: 'kanbo instruction block',
-    })),
-    // Claude Code's `~/.claude.json` is its own state file: `claude mcp remove` edits it, not this.
-    ...(['codex', 'cursor'] as const).map(client => ({
-      change: planMcpRemoval(globalMcpConfigPath(client), client),
-      what: 'kanbo MCP server',
-    })),
-  ]
-}
-
-function planMcpRemoval(path: string, client: McpClient): FileChange {
-  return client === 'codex' ? planCodexMcpServerRemoval(path) : planJsonMcpServerRemoval(path)
 }
 
 /**
