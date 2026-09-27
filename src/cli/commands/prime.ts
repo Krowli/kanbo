@@ -17,7 +17,7 @@ import { COMMAND_SHEET } from '../setup/instructions'
 export function registerPrimeCommand(program: Command): void {
   withBoardOptions(program
     .command('prime')
-    .description('print the columns of this board and the rules a card travels by'))
+    .description('Print the board\'s columns and rules for an agent to read first'))
     .action(async (options: BoardCommandOptions) => {
       await runBoardCommand(options, 'read', async (session) => {
         const text = `${await session.ops.buildPrimeText(session.workspace.id)}\n\n${COMMAND_SHEET}`

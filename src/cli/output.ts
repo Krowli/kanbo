@@ -3,9 +3,10 @@
  *
  * The contract is deliberately small: a command hands back a value and — when
  * there is a good way to say it in one breath — the text a person should read.
- * `--format` chooses between the two machine shapes, and `--json <fields>` is
- * the agent's shortcut: the same value with only the named fields kept, so a
- * script can ask for `title,column` and get exactly that.
+ * `--format` chooses between the two machine shapes, and `--json [fields]` is
+ * the agent's shortcut: bare, the whole value as JSON; with fields, the same
+ * value with only the named fields kept, so a script can ask for
+ * `title,column` and get exactly that.
  *
  * The exit codes live here too, because a failure is output as much as a
  * result is: the board tool promises `2` for "I could not find what to work
@@ -32,8 +33,8 @@ export type CliFormat = 'json' | 'pretty'
 
 /** The output flags every board command carries. */
 export interface CliOutputOptions {
-  /** Comma-separated field names; printing keeps only these. */
-  json?: string
+  /** `--json` alone (`true`): the whole value as JSON. With comma-separated field names, printing keeps only these. */
+  json?: string | true
   format?: string
 }
 
@@ -93,8 +94,8 @@ export function readFormat(options: CliOutputOptions): CliFormat | null {
  * one-breath form.
  */
 export function printResult(result: CliResult, options: CliOutputOptions): void {
-  const fields = readFields(options.json)
-  const format = readFormat(options)
+  const fields = options.json === true ? null : readFields(options.json)
+  const format = readFormat(options) ?? (options.json === true ? 'pretty' : null)
 
   if (fields) {
     warnUnknownFields(fields, result)

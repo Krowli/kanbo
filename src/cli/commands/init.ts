@@ -128,27 +128,26 @@ export function registerInitCommand(program: Command): void {
   // spelled the same as everywhere else.
   program
     .command('init')
-    .description('set up a board for this project and connect its agents (a wizard in a terminal)')
-    .option('--db <path>', 'host database file to read this project\'s workspace from')
-    .option('--database-url <url>', 'external Postgres board to bind this project to')
-    .option('--file [path]', `use a board file of this project's own instead of a host database or an `
-    + `external board (default ${DEFAULT_BOARD_FILE_PATH})`)
-    .option('--workspace <nameOrId>', 'workspace this project is')
-    .option('--json <fields>', 'print only these comma-separated fields, as JSON')
-    .option('--format <format>', 'output format: json or pretty')
-    .option('--board <id>', 'the board inside the workspace, when it has more than one')
-    .option('--identifier <key>', 'what this workspace\'s card keys start with, for an external board')
-    .option('--key <KEY>', 'what card numbers start with, e.g. MYA for MYA-001 (the same as --identifier)', parseKey)
+    .description('Set up a board for this project and connect your agents (asks step by step)')
+    .option('--db <path>', 'the app\'s database file to find this project in')
+    .option('--database-url <url>', 'use a shared Postgres board for this project')
+    .option('--file [path]', `keep the board in a file in this project (default ${DEFAULT_BOARD_FILE_PATH})`)
+    .option('--workspace <nameOrId>', 'the project\'s id on a shared board')
+    .option('--json [fields]', 'print the result as JSON; name comma-separated fields to print only those')
+    .option('--format <format>', 'print JSON: json (one line) or pretty (indented)')
+    .option('--board <id>', 'which board, when the project has more than one')
+    .option('--identifier <key>', 'the same as --key')
+    .option('--key <KEY>', 'what card numbers start with, e.g. MYA for MYA-001', parseKey)
     .option('--columns <columns>', `the columns a new board starts with: ${COLUMN_TEMPLATE_IDS.join(', ')}, or a `
     + 'comma-separated list that includes To Do', parseColumns)
     .option('--connect <agents>', `connect these agents, as kanbo connect does: ${CONNECT_VALUES}`, parseConnect)
     .option('--first-card <title>', 'put a first card in To Do')
-    .option('--migrate', 'create the board\'s tables in the external Postgres database now')
-    .option('--agent-url <url>', 'the connection string agents get, when it is not the one above')
-    .option('--instructions <file>', 'where to write the instruction block: claude, agents or none; with '
+    .option('--migrate', 'create the board\'s tables in the Postgres database now')
+    .option('--agent-url <url>', 'a separate connection string for agents (with fewer rights)')
+    .option('--instructions <agent>', 'where to write the agent instructions: claude, agents or none; with '
     + '--global, a comma-separated list of claude, codex, gemini, or none')
-    .option('--mcp <clients>', `register the board's MCP server with ${MCP_CLIENTS.join(', ')}`, parseMcpClients)
-    .option('--global', 'set up your own agent tools for every project instead of binding this one; binds no board')
+    .option('--mcp <clients>', `add the board's MCP server to ${MCP_CLIENTS.join(', ')}`, parseMcpClients)
+    .option('--global', 'set up your agents for every project instead of this one; creates no board')
     .option('--yes', 'take the defaults instead of asking')
     .action(async (options: InitOptions) => {
       if (options.global) {

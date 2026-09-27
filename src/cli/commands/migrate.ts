@@ -35,7 +35,7 @@ export const BOARD_FILE_NOT_MIGRATED_MESSAGE
 export function registerMigrateCommand(program: Command): void {
   withTargetOptions(program
     .command('migrate')
-    .description('create or update the board schema in an external Postgres database, or a board file of its own'))
+    .description('Create or update the board\'s tables after an upgrade (board file or Postgres)'))
     .action(async (options: BoardTargetCommandOptions) => {
       readFormat(options)
       const target = resolveDbTarget({

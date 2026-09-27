@@ -72,11 +72,11 @@ interface ColumnRulesOptions extends BoardCommandOptions {
 export function registerColumnsCommands(program: Command): void {
   const columns = program
     .command('columns')
-    .description('the columns of this board; alone, a menu to change them (the list when nobody can be asked)')
+    .description('See and change the board\'s columns (alone: a menu)')
 
   withBoardOptions(columns
     .command('list')
-    .description('every column in board order, with the slug a card is moved by'))
+    .description('List the columns in order, with the short name to move cards by'))
     .action(async (options: BoardCommandOptions) => {
       await runBoardCommand(options, 'read', async (session) => {
         const views = (await session.ops.listColumns(session.workspace.id)).map(projectColumn)
@@ -86,7 +86,7 @@ export function registerColumnsCommands(program: Command): void {
 
   withBoardOptions(columns
     .command('describe')
-    .description('say in one line when a card belongs in a column')
+    .description('Say in one line when a card belongs in a column')
     .argument('<column>', 'the column, by slug, name or id')
     .requiredOption('--text <text>', 'what the column means'))
     .action(async (column: string, options: DescribeColumnOptions) => {
@@ -99,7 +99,7 @@ export function registerColumnsCommands(program: Command): void {
 
   withBoardOptions(columns
     .command('rules')
-    .description('set what a card must satisfy before an agent may move it into a column')
+    .description('Set what a card needs before an agent may move it into a column')
     .argument('<column>', 'the column, by slug, name or id')
     .option('--require <rules>', `comma-separated: ${ENTRY_RULES.join(', ')}`)
     .option('--clear', 'ask nothing of a card entering the column'))
@@ -118,7 +118,7 @@ export function registerColumnsCommands(program: Command): void {
 
   withBoardOptions(columns
     .command('add')
-    .description('add a column; with no place given it goes before Done')
+    .description('Add a column (before Done unless you say where)')
     .argument('<name>', 'what the column is called')
     .option('--after <column>', 'put it right after this column')
     .option('--before <column>', 'put it right before this column')
@@ -131,7 +131,7 @@ export function registerColumnsCommands(program: Command): void {
 
   withBoardOptions(columns
     .command('rename')
-    .description('give a column a new name; its slug follows the name (To Do keeps its slug)')
+    .description('Rename a column')
     .argument('<column>', 'the column, by slug, name or id')
     .argument('<name>', 'the new name'))
     .action(async (column: string, name: string, options: BoardCommandOptions) => {
@@ -141,7 +141,7 @@ export function registerColumnsCommands(program: Command): void {
 
   withBoardOptions(columns
     .command('move')
-    .description('move a column to the start or the end, or next to another column')
+    .description('Move a column to the start, the end, or next to another column')
     .argument('<column>', 'the column, by slug, name or id')
     .option('--first', 'to the start of the board')
     .option('--last', 'to the end of the board')
@@ -155,7 +155,7 @@ export function registerColumnsCommands(program: Command): void {
 
   withBoardOptions(columns
     .command('remove')
-    .description('remove a column; the cards in it move to another column')
+    .description('Remove a column; its cards move to another column')
     .argument('<column>', 'the column, by slug, name or id')
     .option('--move-cards-to <column>', 'where the cards in it go; asked at a terminal when it holds any'))
     .action(async (column: string, options: RemoveColumnOptions) => {
@@ -174,7 +174,7 @@ export function registerColumnsCommands(program: Command): void {
 
   withBoardOptions(columns
     .command('template')
-    .description('put a column template on the board: standard, simple or review-qa')
+    .description('Set up columns from a template: standard, simple or review-qa')
     .argument('<template>', COLUMN_TEMPLATE_IDS.join(', '))
     .option('--add-missing', 'on a board that has columns, add the ones of the template it lacks'))
     .action(async (template: string, options: TemplateOptions) => {
@@ -185,7 +185,7 @@ export function registerColumnsCommands(program: Command): void {
 
   withBoardOptions(columns
     .command('add-standard')
-    .description('add any of the standard columns this board is missing (kanbo columns template standard --add-missing)'))
+    .description('Add the standard columns this board is missing'))
     .action(async (options: BoardCommandOptions) => {
       const actor = requireHumanActor('columns add-standard')
       await runBoardCommand(options, 'write', async (session) => {

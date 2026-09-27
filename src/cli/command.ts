@@ -73,16 +73,16 @@ const EXECUTION_MODES = ['worktree', 'main'] as const
 /** Add the options that name a board and shape the answer, wherever the command sits in the tree. */
 export function withTargetOptions(command: Command): Command {
   return command
-    .option('--db <path>', 'board database file to open')
-    .option('--database-url <url>', 'external Postgres board to work on instead of a board file')
-    .option('--json <fields>', 'print only these comma-separated fields, as JSON')
-    .option('--format <format>', 'output format: json or pretty')
+    .option('--db <path>', 'the board file to open')
+    .option('--database-url <url>', 'a shared Postgres board to use instead of a board file')
+    .option('--json [fields]', 'print the result as JSON; name comma-separated fields to print only those')
+    .option('--format <format>', 'print JSON: json (one line) or pretty (indented)')
 }
 
 /** The same, plus the workspace: the options every command about cards carries. */
 export function withBoardOptions(command: Command): Command {
   return withTargetOptions(command)
-    .option('--workspace <nameOrId>', 'workspace the command is about')
+    .option('--workspace <nameOrId>', 'the project, when this folder is not bound to one')
 }
 
 /**

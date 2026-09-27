@@ -56,11 +56,11 @@ interface WaitApprovalOptions extends BoardCommandOptions {
 export function registerCardCommands(program: Command): void {
   const card = program
     .command('card')
-    .description('the cards on this board')
+    .description('Add, change, move and read cards')
 
   withBoardOptions(card
     .command('list')
-    .description('cards in board order')
+    .description('List cards in board order')
     .option('--column <column>', 'only cards in this column, by slug, name or id')
     .option('--limit <count>', 'how many cards to print', parseCount))
     .action(async (options: ListOptions) => {
@@ -84,7 +84,7 @@ export function registerCardCommands(program: Command): void {
 
   withBoardOptions(card
     .command('get')
-    .description('one card, by key or number')
+    .description('Show one card')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12'))
     .action(async (reference: string, options: BoardCommandOptions) => {
       await runBoardCommand(options, 'read', async (session) => {
@@ -94,12 +94,12 @@ export function registerCardCommands(program: Command): void {
 
   withBoardOptions(card
     .command('create')
-    .description('put a new card on the board')
-    .option('--title <title>', 'what the card is called; the card\'s own key when absent')
+    .description('Add a card to the board')
+    .option('--title <title>', 'what the card is called (its number when left out)')
     .option('--description <text>', 'what the card is about')
     .option('--column <column>', 'the column to put it in, by slug, name or id')
-    .option('--parent <card>', 'the card this one belongs under')
-    .option('--execution-mode <mode>', 'worktree or main', parseExecutionMode))
+    .option('--parent <card>', 'the card this one is part of')
+    .option('--execution-mode <mode>', 'where the work happens: worktree (its own checkout) or main', parseExecutionMode))
     .action(async (options: CreateOptions) => {
       await runBoardCommand(options, 'write', async (session) => {
         const parent = options.parent ? await requireCard(session, options.parent) : null
@@ -117,13 +117,13 @@ export function registerCardCommands(program: Command): void {
 
   withBoardOptions(card
     .command('update')
-    .description('change a card\'s fields')
+    .description('Change a card\'s title, description, priority or labels')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
     .option('--title <title>', 'what the card is called')
     .option('--description <text>', 'what the card is about')
     .option('--priority <priority>', `one of ${PRIORITIES.join(', ')}`, parsePriority)
     .option('--labels <labels>', 'comma-separated labels, replacing the ones the card has', parseLabels)
-    .option('--execution-mode <mode>', 'worktree or main', parseExecutionMode))
+    .option('--execution-mode <mode>', 'where the work happens: worktree (its own checkout) or main', parseExecutionMode))
     .action(async (reference: string, options: UpdateOptions) => {
       await runBoardCommand(options, 'write', async (session) => {
         const input = readUpdateInput(options)
@@ -134,7 +134,7 @@ export function registerCardCommands(program: Command): void {
 
   withBoardOptions(card
     .command('move')
-    .description('move a card to another column')
+    .description('Move a card to another column')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
     .argument('<column>', 'the column, by slug, name or id'))
     .action(async (reference: string, column: string, options: BoardCommandOptions) => {
@@ -146,7 +146,7 @@ export function registerCardCommands(program: Command): void {
 
   withBoardOptions(card
     .command('status-line')
-    .description('say what the card is doing right now')
+    .description('Say in one line what is happening on a card right now')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
     .requiredOption('--text <text>', 'one sentence, present tense'))
     .action(async (reference: string, options: TextOptions) => {
@@ -158,7 +158,7 @@ export function registerCardCommands(program: Command): void {
 
   withBoardOptions(card
     .command('comment')
-    .description('write a finding, a decision or a question on the card')
+    .description('Leave a comment on a card: a finding, a decision or a question')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
     .requiredOption('--content <text>', 'what to say'))
     .action(async (reference: string, options: ContentOptions) => {
@@ -174,7 +174,7 @@ export function registerCardCommands(program: Command): void {
 
   withBoardOptions(card
     .command('wait-approval')
-    .description('hand the card to a person and end your turn')
+    .description('Ask a person to review a card, and stop working on it')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
     .option('--text <text>', 'the status line to leave, saying what you need'))
     .action(async (reference: string, options: WaitApprovalOptions) => {
@@ -219,11 +219,11 @@ function describePullRequest(link: PullRequestView): string {
 function registerPullRequestCommands(card: Command): void {
   const pr = card
     .command('pr')
-    .description('the pull requests a card names')
+    .description('Link pull requests to a card')
 
   withBoardOptions(pr
     .command('add')
-    .description('link a pull request to the card; linking it again changes nothing')
+    .description('Link a pull request to a card (linking it twice is fine)')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
     .argument('<url>', 'the pull request, as https://github.com/<owner>/<repo>/pull/<n> or <owner>/<repo>#<n>'))
     .action(async (reference: string, url: string, options: BoardCommandOptions) => {
@@ -240,7 +240,7 @@ function registerPullRequestCommands(card: Command): void {
 
   withBoardOptions(pr
     .command('list')
-    .description('the pull requests linked to the card, in the order they were linked')
+    .description('List the pull requests linked to a card')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12'))
     .action(async (reference: string, options: BoardCommandOptions) => {
       await runBoardCommand(options, 'read', async (session) => {
@@ -256,9 +256,9 @@ function registerPullRequestCommands(card: Command): void {
 
   withBoardOptions(pr
     .command('remove')
-    .description('unlink a pull request from the card')
+    .description('Unlink a pull request from a card')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
-    .argument('<linkId>', 'the link, by the id `kanbo card pr list` prints'))
+    .argument('<linkId>', 'the link id, as kanbo card pr list prints it'))
     .action(async (reference: string, linkId: string, options: BoardCommandOptions) => {
       await runBoardCommand(options, 'write', async (session) => {
         const existing = await requireCard(session, reference)

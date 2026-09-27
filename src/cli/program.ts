@@ -18,7 +18,7 @@ import { getUi } from './ui/ui'
 export function createKanboProgram(): Command {
   const program = new Command()
     .name('kanbo')
-    .description('A board for people and their agents, from a terminal. Reads and writes the board directly; no server needed.')
+    .description('kanbo — a kanban board your coding agents work on and you approve. Run `kanbo` to start.')
     .version(KANBO_PACKAGE_VERSION)
   registerKanboCommands(program)
   return program

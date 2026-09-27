@@ -300,4 +300,18 @@ describe('kanbo doctor', () => {
     const report = JSON.parse(printed.join('\n')) as { findings: DoctorFinding[] }
     expect(finding(report.findings, 'binding').status).toBe('fail')
   })
+
+  it('prints only the fields --json names, as every other command does', async () => {
+    installKanbo('process.exit(1)')
+    const printed: string[] = []
+    vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+      printed.push(String(line))
+    })
+
+    const program = new Command().exitOverride()
+    registerDoctorCommand(program)
+    await program.parseAsync(['doctor', '--json', 'version'], { from: 'user' }).catch(() => undefined)
+
+    expect(Object.keys(JSON.parse(printed.join('\n')) as object)).toEqual(['version'])
+  })
 })

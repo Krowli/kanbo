@@ -1,0 +1,97 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`kanbo --help > explains init 1`] = `
+"Usage: kanbo init [options]
+
+Set up a board for this project and connect your agents (asks step by step)
+
+Options:
+  --db <path>             the app's database file to find this project in
+  --database-url <url>    use a shared Postgres board for this project
+  --file [path]           keep the board in a file in this project (default
+                          .kanbo/board.db)
+  --workspace <nameOrId>  the project's id on a shared board
+  --json [fields]         print the result as JSON; name comma-separated fields
+                          to print only those
+  --format <format>       print JSON: json (one line) or pretty (indented)
+  --board <id>            which board, when the project has more than one
+  --identifier <key>      the same as --key
+  --key <KEY>             what card numbers start with, e.g. MYA for MYA-001
+  --columns <columns>     the columns a new board starts with: standard, simple,
+                          review-qa, or a comma-separated list that includes To
+                          Do
+  --connect <agents>      connect these agents, as kanbo connect does: claude,
+                          codex, cursor, gemini, all or none
+  --first-card <title>    put a first card in To Do
+  --migrate               create the board's tables in the Postgres database now
+  --agent-url <url>       a separate connection string for agents (with fewer
+                          rights)
+  --instructions <agent>  where to write the agent instructions: claude, agents
+                          or none; with --global, a comma-separated list of
+                          claude, codex, gemini, or none
+  --mcp <clients>         add the board's MCP server to claude, codex, cursor
+  --global                set up your agents for every project instead of this
+                          one; creates no board
+  --yes                   take the defaults instead of asking
+  -h, --help              display help for command
+"
+`;
+
+exports[`kanbo --help > groups the commands and says what each is for 1`] = `
+"Usage: kanbo [options] [command]
+
+kanbo — a kanban board your coding agents work on and you approve. Run \`kanbo\`
+to start.
+
+Options:
+  -V, --version                        output the version number
+  -h, --help                           display help for command
+
+Get started:
+  init [options]                       Set up a board for this project and
+                                       connect your agents (asks step by step)
+  connect|setup [options] [agents...]  Connect your coding agents to the board:
+                                       instructions and MCP server
+  instructions [options] [kind]        Print the instructions to give your agent
+                                       (to paste yourself)
+  doctor [options]                     Check that kanbo, this project's board
+                                       and your agents' setup work
+  uninstall [options]                  Disconnect kanbo from your agents; the
+                                       board stays unless --purge
+
+Your board:
+  board [options]                      Show the board here: columns, cards, what
+                                       each is doing, what waits for you
+  card                                 Add, change, move and read cards
+  columns                              See and change the board's columns
+                                       (alone: a menu)
+  approve [options] <card>             Approve the work on a card that is
+                                       waiting for you
+  return [options] <card>              Send a card back to the previous column,
+                                       saying why
+  ready [options]                      Cards ready to start: in To Do, not
+                                       taken, not waiting for a person
+  prime [options]                      Print the board's columns and rules for
+                                       an agent to read first
+  sprint                               Group cards into time-boxed sprints
+  serve [options]                      Open the board in your browser
+
+For agents and integrations:
+  mcp [options]                        Run the board's MCP server for an agent
+                                       (it starts this itself)
+  run                                  Record when an agent starts and finishes
+                                       work on a card
+  capabilities [options]               List what kanbo offers agents: tools,
+                                       commands, rules and limits (no board
+                                       needed)
+
+Shared Postgres boards:
+  migrate [options]                    Create or update the board's tables after
+                                       an upgrade (board file or Postgres)
+  roles                                Set up the Postgres logins that keep
+                                       agents from approving their own work
+
+Commands:
+  help [command]                       display help for command
+"
+`;

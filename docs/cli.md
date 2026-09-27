@@ -8,11 +8,11 @@ Unless a command's own section says otherwise, it takes these:
 
 | Option | Meaning |
 | --- | --- |
-| `--db <path>` | Board database file to open. |
-| `--database-url <url>` | External Postgres board to work on instead of a board file. Only one of `--db` and `--database-url` may be given (exit `1` otherwise). |
-| `--workspace <nameOrId>` | Workspace the command is about. On a board file or Postgres board this is the workspace id. |
-| `--json <fields>` | Print only these comma-separated fields, as JSON (`--json id,title,column`). An unknown field prints a warning on stderr and is skipped. |
-| `--format <format>` | Output format: `json` or `pretty`. |
+| `--db <path>` | The board file to open. |
+| `--database-url <url>` | A shared Postgres board to use instead of a board file. Only one of `--db` and `--database-url` may be given (exit `1` otherwise). |
+| `--workspace <nameOrId>` | The project, when this folder is not bound to one. On a board file or Postgres board this is the project's (workspace) id. |
+| `--json [fields]` | Print the result as JSON. With comma-separated fields, print only those (`--json id,title,column`); an unknown field prints a warning on stderr and is skipped. `doctor`, `uninstall`, `capabilities`, `connect` and `init` take the same `--json [fields]`. |
+| `--format <format>` | Print JSON: `json` (one line) or `pretty` (indented). |
 
 Without `--json` or `--format`, commands print text meant for a person. How the board and the workspace are chosen when no flag names them is described in [configuration](configuration.md#how-a-command-finds-its-board).
 
@@ -30,18 +30,20 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 
 ## Commands
 
+`kanbo --help` lists them in four groups: *Get started* (`init`, `connect`, `instructions`, `doctor`, `uninstall`), *Your board* (`board`, `card`, `columns`, `approve`, `return`, `ready`, `prime`, `sprint`, `serve`), *For agents and integrations* (`mcp`, `run`, `capabilities`) and *Shared Postgres boards* (`migrate`, `roles`).
+
 | Command | What it does |
 | --- | --- |
 | `kanbo` | Where to start: the init wizard in a folder with no board, the home screen in one with a board, a short hint with nobody to ask. Exits `0` after the hint, and when you leave the home screen (Exit, or Ctrl-C at the menu); in the wizard, Ctrl-C at any question or No at the last one ("Write these changes?") exits `1` with nothing written. A board file the project is bound to that has gone missing is said so (exit `2` with nobody to ask; in a terminal the wizard offers a new empty board in its place). |
 | `kanbo init` | Set up a board for this project and connect its agents — a wizard in a terminal, defaults with `--yes`. With `--global`, set up your own agent tools for every project instead. |
 | `kanbo connect [agents...]` | Connect your agents (`claude`, `codex`, `cursor`, `gemini`, or `all`) to kanbo: the kanbo section in their instructions and the board's MCP server. `--check` shows what is connected, `--remove` takes it out. Alias `kanbo setup`. |
 | `kanbo instructions [kind]` | Print the text to give an agent: `agent` (default, the full rules), `short`, `global`, `orchestrator`, `mcp` or `board`. `--copy` also puts it on the clipboard. No board needed except for `board`. |
-| `kanbo doctor` | Check this install, this project's binding and board, instruction blocks and MCP registrations. |
+| `kanbo doctor` | Check that kanbo, this project's board and your agents' setup work: the install, `.kanbo/binding.json`, the board, instruction blocks and MCP registrations. |
 | `kanbo uninstall` | Remove what `kanbo init` wrote: instruction blocks and `kanbo` MCP entries. Boards stay unless `--purge`. |
-| `kanbo capabilities` | The board's tools, commands, rules and limits — machine-readable, no board needed. |
-| `kanbo prime` | Print the columns of this board and the rules a card travels by. |
+| `kanbo capabilities` | List what kanbo offers agents: tools, commands, rules and limits — machine-readable, no board needed. |
+| `kanbo prime` | Print the board's columns and rules for an agent to read first. |
 | `kanbo board` | The board in this terminal: each column with its count, the cards with their status lines, what waits for you and what an agent is working on. |
-| `kanbo ready` | Cards that are spelled out, unclaimed and nobody else's turn. |
+| `kanbo ready` | Cards ready to start: in To Do, not taken, not waiting for a person. |
 | `kanbo columns` | At a terminal, the columns and a small menu to change them (add, rename, move, remove, apply a template); with nobody to ask, the same list as `columns list`. |
 | `kanbo columns list` | Every column in board order, with the slug a card is moved by. |
 | `kanbo columns describe <column>` | Say in one line when a card belongs in a column. |
@@ -65,18 +67,18 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo card pr remove <card> <linkId>` | Unlink a pull request from the card. |
 | `kanbo approve <card>` | Accept the work on a card that is waiting for you. **Person only.** |
 | `kanbo return <card>` | Send a card back a column, with the reason on it. **Person only.** |
-| `kanbo run start <card>` | Say that you are working on a card. |
-| `kanbo run attach-session <runId> <ref>` | Say which of your own logs a run is; a run keeps the first one named. |
-| `kanbo run clear-session <runId>` | Say that the log a run names is not its log. **Person only.** |
-| `kanbo run finish <runId>` | Say how a run ended. |
-| `kanbo sprint list` | Every milestone of this board by start date, the current sprint marked `*`. |
-| `kanbo sprint create` | Create a sprint: a milestone with a start and a due date. |
-| `kanbo sprint close <id>` | Close a sprint, carrying its unfinished cards to another open milestone. **Person only.** |
-| `kanbo migrate` | Create or update the board schema in an external Postgres database, or a board file of its own. |
-| `kanbo roles print` | Print the SQL that creates the roles and the rules they live under. |
-| `kanbo roles apply` | Run that SQL against the external board, as its owner. |
-| `kanbo mcp` | Serve this board to an MCP client over stdio. |
-| `kanbo serve` | Serve this board over HTTP, with a board page for the browser. |
+| `kanbo run start <card>` | Say that you started working on a card. |
+| `kanbo run attach-session <runId> <ref>` | Say which agent session did this work; the first one given stays. |
+| `kanbo run clear-session <runId>` | Remove the session given for this work. **Person only.** |
+| `kanbo run finish <runId>` | Say how the work ended. |
+| `kanbo sprint list` | List sprints by start date; the current one is marked `*`. |
+| `kanbo sprint create` | Start a sprint with a first and a last day. |
+| `kanbo sprint close <id>` | Close a sprint and move its unfinished cards on to another open sprint. **Person only.** |
+| `kanbo migrate` | Create or update the board's tables after an upgrade — a board file or a shared Postgres board. |
+| `kanbo roles print` | Print the SQL that creates the Postgres logins that keep agents from approving their own work, and their rights. |
+| `kanbo roles apply` | Run that SQL on the shared board, as its owner. |
+| `kanbo mcp` | Run the board's MCP server for an agent, over stdio (the agent starts it itself). |
+| `kanbo serve` | Open the board in your browser: serves it over HTTP, with a board page. |
 
 **Person only** commands refuse with exit `4` in an agent's shell: `KANBO_ACTOR_KIND=agent`, or a mark Claude Code, Gemini CLI or Cursor leaves ([configuration](configuration.md#agent-shells-kanbo-recognises)). `KANBO_ACTOR_KIND=person` overrides the mark — meant for your own terminal that an agent tool marked, but nothing stops an agent from setting it too: this check keeps an honest agent from approving its own work, it does not stop one that tries. Real enforcement needs a shared Postgres board with agents on the agent role ([storage](storage.md#roles)). See [agents](agents.md#agents-and-people).
 
@@ -149,11 +151,11 @@ No questions. When nothing names a board — no `--db`/`--database-url`, no `KAN
 | `--first-card <title>` | Put a first card in To Do. |
 | `--agent-url <url>` | The connection string agents get, when it is not the one above (see [storage](storage.md#roles)). |
 | `--board <id>` | The board inside the workspace, when it has more than one. |
-| `--instructions <file>` | Where to write the instruction block: `claude` (`CLAUDE.md`), `agents` (`AGENTS.md`) or `none`. With `--global`: a comma-separated list of `claude`, `codex`, `gemini`, or `none`. |
+| `--instructions <agent>` | Where to write the instruction block: `claude` (`CLAUDE.md`), `agents` (`AGENTS.md`) or `none`. With `--global`: a comma-separated list of `claude`, `codex`, `gemini`, or `none`. |
 | `--mcp <clients>` | Register the board's MCP server with `claude` (`.mcp.json`), `codex` (`.codex/config.toml`), `cursor` (`.cursor/mcp.json`); comma-separated. |
 | `--global` | Set up your own agent tools for every project instead of binding this one (see below). Binds no board. |
 | `--yes` | Take the defaults instead of asking. |
-| `--json <fields>`, `--format <format>` | Output, as everywhere. No wizard. |
+| `--json [fields]`, `--format <format>` | Output, as everywhere. No wizard. |
 
 The wizard's answers and the equivalent flags plan exactly the same changes. The instruction block sits between `<!-- KANBO_START v2 h=… -->` and `<!-- KANBO_END -->` and is replaced in place on a later run when kanbo wrote it — see [which blocks and entries kanbo changes](#what-kanbo-changes-and-what-it-leaves-alone). An MCP entry named `kanbo` that already exists is left alone, unless it is kanbo's own and no longer starts. `--instructions` and `--mcp` plan the same changes as `kanbo connect <agent> --project` (`agents` is the `AGENTS.md` Codex and Cursor read).
 
@@ -242,7 +244,7 @@ When a `kanbo` entry in Claude Code's user settings is rewritten, kanbo runs `cl
 
 | Option | Meaning |
 | --- | --- |
-| `--json` | Print `{ version, findings: [{ check, status, detail, fix? }] }`. |
+| `--json [fields]` | Print `{ version, findings: [{ check, status, detail, fix? }] }`; with fields, only those (`--json findings`). |
 
 Checks, each `ok`, `warn` or `fail`, with a `fix` on everything that is not `ok`:
 
@@ -268,7 +270,7 @@ Exits `1` when any check fails; warnings alone exit `0`. Nothing is written.
 | `--global` | Only your own user-level files. Neither flag: both. |
 | `--purge` | Also delete this project's `.kanbo/binding.json`, and its board file after a confirmation that names it. |
 | `--yes` | Do it without asking. Never deletes a board file. |
-| `--json` | Print `{ actions: [{ path, action, note? }] }`. |
+| `--json [fields]` | Print `{ actions: [{ path, action, note? }], notes }`; with fields, only those. |
 
 Removes the marked instruction block and the `kanbo` MCP entry from every file `kanbo connect` writes, for every agent: `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` (project) and `~/.claude/CLAUDE.md`, `$CODEX_HOME/AGENTS.md`, `~/.gemini/GEMINI.md` (global); `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `.gemini/settings.json` (project) and `~/.cursor/mcp.json`, `$CODEX_HOME/config.toml`, `~/.gemini/settings.json` (global). To disconnect one agent, use `kanbo connect <agent> --remove`. Everything else in those files — your own text, other MCP servers, other TOML tables — stays. Files stay even when nothing is left in them: kanbo does not record which files it created. Claude Code's user-scope registration is removed with `claude mcp remove kanbo --scope user`, or the line is printed when `claude` is not on `PATH`. A block or `kanbo` entry that is not in the shape kanbo writes is asked about first (`--yes` answers it); a file whose markers do not pair up is left exactly as it is.
 
@@ -278,7 +280,7 @@ Boards are never touched without `--purge`. With it, only the binding and a boar
 
 | Option | Meaning |
 | --- | --- |
-| `--json` | Print the manifest as JSON. |
+| `--json [fields]` | Print the manifest as JSON; with fields, only those (`--json tools,commands`). |
 | `--markdown` | Print the manifest as Markdown (the default). |
 
 Opens no board.
@@ -400,7 +402,7 @@ Run `kanbo migrate` before `kanbo roles apply`. See [storage](storage.md#roles).
 
 | Option | Meaning |
 | --- | --- |
-| `--db <path>` | Board database file to open. |
+| `--db <path>` | The board file to open. |
 | `--database-url <url>` | External Postgres board to serve instead of a board file. |
 | `--workspace <nameOrId>` | Workspace the board tools are about. |
 
@@ -412,7 +414,7 @@ Serves all sixteen tools and the `kanbo://capabilities` resources over stdio. Th
 | --- | --- |
 | `--port <port>` | Port to listen on (default `4318`). |
 | `--host <host>` | Address to bind (default `127.0.0.1`); anything but loopback needs a token. |
-| `--db <path>` | Board database file to open. |
+| `--db <path>` | The board file to open. |
 | `--database-url <url>` | External Postgres board to serve instead of a board file. |
 | `--workspace <nameOrId>` | Workspace the server is about. |
 | `--token <token>` | Bearer token every request must carry (or set `KANBO_SERVE_TOKEN`). On loopback without one, a token is generated for the run. |

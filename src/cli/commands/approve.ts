@@ -20,9 +20,9 @@ interface ApproveOptions extends BoardCommandOptions {
 export function registerApproveCommand(program: Command): void {
   withBoardOptions(program
     .command('approve')
-    .description('accept the work on a card that is waiting for you')
+    .description('Approve the work on a card that is waiting for you')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
-    .option('--comment <text>', 'what to say alongside the decision'))
+    .option('--comment <text>', 'a note to leave on the card'))
     .action(async (reference: string, options: ApproveOptions) => {
       const actor = requireHumanActor('approve')
 

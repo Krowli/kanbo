@@ -2,7 +2,7 @@ import type { Command } from 'commander'
 
 import { buildCapabilitiesManifest } from '../../capabilities/manifest'
 import { renderCapabilitiesMarkdown } from '../../capabilities/markdown'
-import { CliError } from '../output'
+import { CliError, printResult } from '../output'
 
 /**
  * `kanbo capabilities` — the board's tools, commands, rules and limits, for
@@ -16,22 +16,27 @@ import { CliError } from '../output'
  * from the same `buildCapabilitiesManifest`.
  */
 interface CapabilitiesOptions {
-  json?: boolean
+  /** `--json` alone: the whole manifest; with fields, only those. */
+  json?: string | true
   markdown?: boolean
 }
 
 export function registerCapabilitiesCommand(program: Command): void {
   program
     .command('capabilities')
-    .description('the board\'s tools, commands, rules and limits — machine-readable, no board needed')
-    .option('--json', 'print the manifest as JSON')
-    .option('--markdown', 'print the manifest as Markdown (the default)')
+    .description('List what kanbo offers agents: tools, commands, rules and limits (no board needed)')
+    .option('--json [fields]', 'print it as JSON; name comma-separated fields to print only those')
+    .option('--markdown', 'print it as Markdown (the default)')
     .action((options: CapabilitiesOptions) => {
-      if (options.json && options.markdown) {
+      if (options.json !== undefined && options.markdown) {
         throw new CliError(1, 'Pass --json or --markdown, not both.')
       }
 
       const manifest = buildCapabilitiesManifest()
-      console.log(options.json ? JSON.stringify(manifest, null, 2) : renderCapabilitiesMarkdown(manifest))
+      if (options.json !== undefined) {
+        printResult({ value: manifest }, { json: options.json })
+        return
+      }
+      console.log(renderCapabilitiesMarkdown(manifest))
     })
 }

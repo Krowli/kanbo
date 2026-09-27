@@ -47,11 +47,11 @@ function parseDate(value: string, end: boolean): number {
 export function registerSprintCommands(program: Command): void {
   const sprint = program
     .command('sprint')
-    .description('milestones read as sprints: a start date, a due date, and the cards under them')
+    .description('Group cards into time-boxed sprints')
 
   withBoardOptions(sprint
     .command('list')
-    .description('every milestone of this board by start date, the current sprint marked *'))
+    .description('List sprints by start date; the current one is marked *'))
     .action(async (options: BoardCommandOptions) => {
       await runBoardCommand(options, 'read', async (session) => {
         const views = (await session.ops.listSprints(session.workspace.id)).map(projectSprint)
@@ -61,7 +61,7 @@ export function registerSprintCommands(program: Command): void {
 
   withBoardOptions(sprint
     .command('create')
-    .description('create a sprint: a milestone with a start and a due date')
+    .description('Start a sprint with a first and a last day')
     .requiredOption('--title <title>', 'what the sprint is called')
     .requiredOption('--start <date>', 'first day, as YYYY-MM-DD (UTC) or unix seconds', value => parseDate(value, false))
     .requiredOption('--due <date>', 'last day, as YYYY-MM-DD (UTC, through its end) or unix seconds', value => parseDate(value, true))
@@ -83,9 +83,9 @@ export function registerSprintCommands(program: Command): void {
 
   withBoardOptions(sprint
     .command('close')
-    .description('close a sprint, carrying its unfinished cards to another open milestone (a person\'s decision)')
-    .argument('<id>', 'the milestone to close')
-    .option('--carry-to <id>', 'the open milestone unfinished cards move to; without it they leave the milestone'))
+    .description('Close a sprint and move its unfinished cards on (a person only)')
+    .argument('<id>', 'the sprint to close')
+    .option('--carry-to <id>', 'the open sprint unfinished cards move to; without it they leave the sprint'))
     .action(async (id: string, options: CloseOptions) => {
       const actor = requireHumanActor('sprint close')
 

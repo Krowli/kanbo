@@ -64,10 +64,10 @@ export interface InstructionsCommandDependencies {
 export function registerInstructionsCommand(program: Command, dependencies: InstructionsCommandDependencies = {}): void {
   program
     .command('instructions')
-    .description('print the text to give an agent: agent (default), short, global, orchestrator, mcp or board')
+    .description('Print the instructions to give your agent (to paste yourself)')
     .argument('[kind]', 'which version: agent, short, global, orchestrator, mcp or board', 'agent')
     .option('--copy', 'also put the text on the clipboard')
-    .option('--markers', 'wrap the text in the kanbo section markers, which say which text it is; kanbo connect keeps any but short and global')
+    .option('--markers', 'wrap the text in kanbo\'s start and end markers, so kanbo connect can update it later')
     .action(async (kind: string, options: InstructionsOptions) => {
       const found = parseKind(kind)
       const body = await readInstructionText(found)

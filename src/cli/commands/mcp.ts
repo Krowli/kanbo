@@ -35,13 +35,13 @@ interface McpOptions {
 export function registerMcpCommand(program: Command): void {
   program
     .command('mcp')
-    .description('serve this board to an MCP client over stdio')
+    .description('Run the board\'s MCP server for an agent (it starts this itself)')
     // The output options every other command carries are absent on purpose:
     // stdout is the protocol here, and anything printed on it is a broken
     // session rather than a badly formatted one.
-    .option('--db <path>', 'board database file to open')
-    .option('--database-url <url>', 'external Postgres board to serve instead of a board file')
-    .option('--workspace <nameOrId>', 'workspace the board tools are about')
+    .option('--db <path>', 'the board file to open')
+    .option('--database-url <url>', 'a shared Postgres board to use instead of a board file')
+    .option('--workspace <nameOrId>', 'the project, when this folder is not bound to one')
     .action(async (options: McpOptions) => {
       const board = await openMcpBoard({
         dbPath: options.db,

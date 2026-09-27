@@ -25,10 +25,10 @@ interface ReturnOptions extends BoardCommandOptions {
 export function registerReturnCommand(program: Command): void {
   withBoardOptions(program
     .command('return')
-    .description('send a card back a column, with the reason on it')
+    .description('Send a card back to the previous column, saying why')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
     .requiredOption('--comment <text>', 'why the card is coming back')
-    .option('--to <column>', 'the column to send it to, by slug, name or id'))
+    .option('--to <column>', 'send it to this column instead, by slug, name or id'))
     .action(async (reference: string, options: ReturnOptions) => {
       const actor = requireHumanActor('return')
 

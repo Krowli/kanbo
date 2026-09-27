@@ -29,25 +29,35 @@ import { registerUninstallCommand } from './uninstall'
  * which walks the program to check that every command has a row in the docs
  * — a check that is worth nothing if the list it walks is a second copy of
  * this one.
+ *
+ * The order is the order `kanbo --help` lists them in, under the heading of
+ * the group each belongs to.
  */
 export function registerKanboCommands(program: Command): void {
+  program.commandsGroup('Get started:')
   registerInitCommand(program)
   registerConnectCommand(program)
   registerInstructionsCommand(program)
   registerDoctorCommand(program)
   registerUninstallCommand(program)
-  registerCapabilitiesCommand(program)
-  registerPrimeCommand(program)
-  registerReadyCommand(program)
-  registerColumnsCommands(program)
+
+  program.commandsGroup('Your board:')
   registerBoardCommand(program)
   registerCardCommands(program)
+  registerColumnsCommands(program)
   registerApproveCommand(program)
   registerReturnCommand(program)
-  registerRunCommands(program)
+  registerReadyCommand(program)
+  registerPrimeCommand(program)
   registerSprintCommands(program)
+  registerServeCommand(program)
+
+  program.commandsGroup('For agents and integrations:')
+  registerMcpCommand(program)
+  registerRunCommands(program)
+  registerCapabilitiesCommand(program)
+
+  program.commandsGroup('Shared Postgres boards:')
   registerMigrateCommand(program)
   registerRolesCommands(program)
-  registerMcpCommand(program)
-  registerServeCommand(program)
 }

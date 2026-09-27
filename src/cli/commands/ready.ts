@@ -18,7 +18,7 @@ interface ReadyOptions extends BoardCommandOptions {
 export function registerReadyCommand(program: Command): void {
   withBoardOptions(program
     .command('ready')
-    .description('cards that are spelled out, unclaimed and nobody else\'s turn')
+    .description('Cards ready to start: in To Do, not taken, not waiting for a person')
     .option('--limit <count>', 'how many cards to print', parseCount))
     .action(async (options: ReadyOptions) => {
       await runBoardCommand(options, 'read', async (session) => {

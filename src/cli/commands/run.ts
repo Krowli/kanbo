@@ -38,16 +38,16 @@ interface FinishOptions extends BoardCommandOptions {
 export function registerRunCommands(program: Command): void {
   const run = program
     .command('run')
-    .description('the launches of a card')
+    .description('Record when an agent starts and finishes work on a card')
 
   withBoardOptions(run
     .command('start')
-    .description('say that you are working on a card')
+    .description('Say that you started working on a card')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
-    .requiredOption('--agent <name>', 'what to call whoever is working')
+    .requiredOption('--agent <name>', 'your name, e.g. claude')
     .option('--branch <branch>', 'the branch the work happens on')
-    .option('--execution-mode <mode>', 'worktree or main; defaults to what the card says', parseExecutionMode)
-    .option('--session <ref>', 'your own log of this run: claude:<session id> or codex:<session id>'))
+    .option('--execution-mode <mode>', 'where the work happens: worktree or main (default: what the card says)', parseExecutionMode)
+    .option('--session <ref>', 'your session, to find it later: claude:<session id> or codex:<session id>'))
     .action(async (reference: string, options: StartOptions) => {
       await runBoardCommand(options, 'write', async (session) => {
         const card = await requireCard(session, reference)
@@ -65,10 +65,10 @@ export function registerRunCommands(program: Command): void {
 
   withBoardOptions(run
     .command('attach-session')
-    .description('say which of your own logs a run is, while it runs or after it ended; a run keeps the first one named')
-    .argument('<runId>', 'the run, as `kanbo run start` printed it')
+    .description('Say which agent session did this work (the first one given stays)')
+    .argument('<runId>', 'the run id kanbo run start printed')
     .argument('<ref>', 'claude:<session id> or codex:<session id>')
-    .option('--replace', 'put this log in place of the one the run names; a person\'s own terminal only'))
+    .option('--replace', 'replace the session already given (a person only)'))
     .action(async (runId: string, ref: string, options: AttachSessionOptions) => {
       // Checked before the board is opened, the same as `approve`.
       const actor = options.replace ? requireHumanActor('run attach-session --replace') : null
@@ -84,7 +84,7 @@ export function registerRunCommands(program: Command): void {
 
   withBoardOptions(run
     .command('clear-session')
-    .description('say that the log a run names is not its log; the run then names none')
+    .description('Remove the session given for this work (a person only)')
     .argument('<runId>', 'the run, as `kanbo run start` printed it'))
     .action(async (runId: string, options: BoardCommandOptions) => {
       const actor = requireHumanActor('run clear-session')
@@ -98,7 +98,7 @@ export function registerRunCommands(program: Command): void {
 
   withBoardOptions(run
     .command('finish')
-    .description('say how a run ended')
+    .description('Say how the work ended')
     .argument('<runId>', 'the run, as `kanbo run start` printed it')
     .requiredOption('--state <state>', `one of ${RUN_STATES.join(', ')}`, parseRunState)
     .option('--error-text <text>', 'what went wrong, for a failed run'))

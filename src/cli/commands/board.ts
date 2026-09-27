@@ -7,11 +7,9 @@ import { runBoardCommand } from '../command'
 import { CliError } from '../output'
 import { projectCard } from '../view'
 
-interface BoardOptions extends Omit<BoardCommandOptions, 'json'> {
+interface BoardOptions extends BoardCommandOptions {
   column?: string
   all?: boolean
-  /** `--json` alone: the whole result; `--json a,b`: only those fields of each column. */
-  json?: string | boolean
 }
 
 /** How wide a board is drawn when the output is not a terminal that says. */
@@ -27,20 +25,16 @@ const DEFAULT_WIDTH = 80
 export function registerBoardCommand(program: Command): void {
   program
     .command('board')
-    .description('the board in this terminal: columns, cards, status lines, what waits for you')
+    .description('Show the board here: columns, cards, what each is doing, what waits for you')
     .option('--column <column>', 'only this column, by slug, name or id')
-    .option('--all', 'every card of Done and Canceled, not just the last few')
-    .option('--db <path>', 'board database file to open')
-    .option('--database-url <url>', 'external Postgres board to work on instead of a board file')
-    .option('--workspace <nameOrId>', 'workspace the command is about')
-    .option('--json [fields]', 'print the sections as JSON, or only these comma-separated fields of each')
-    .option('--format <format>', 'output format: json or pretty')
+    .option('--all', 'every card in Done and Canceled, not just the last few')
+    .option('--db <path>', 'the board file to open')
+    .option('--database-url <url>', 'a shared Postgres board to use instead of a board file')
+    .option('--workspace <nameOrId>', 'the project, when this folder is not bound to one')
+    .option('--json [fields]', 'print the columns as JSON; name comma-separated fields to print only those of each')
+    .option('--format <format>', 'print JSON: json (one line) or pretty (indented)')
     .action(async (options: BoardOptions) => {
-      const output = options.json === true
-        ? { ...options, json: undefined, format: options.format ?? 'pretty' }
-        : { ...options, json: typeof options.json === 'string' ? options.json : undefined }
-
-      await runBoardCommand(output, 'read', async (session) => {
+      await runBoardCommand(options, 'read', async (session) => {
         const workspaceId = session.workspace.id
         const columns = await session.ops.listColumns(workspaceId)
         const wanted = options.column ? await session.ops.findColumn(workspaceId, options.column) : null

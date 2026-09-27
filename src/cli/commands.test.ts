@@ -113,6 +113,16 @@ describe('board commands', () => {
     expect(offered).not.toContain(launched.id)
   })
 
+  it('prints the whole card as JSON for --json alone', async () => {
+    await createCardIn('Card', 'To Do')
+
+    const printed = JSON.parse(await run(['card', 'list', '--json'])) as Array<Record<string, unknown>>
+
+    expect(printed).toHaveLength(1)
+    expect(printed[0]).toMatchObject({ title: 'Card', column: 'To Do', columnSlug: 'to_do' })
+    expect(Object.keys(printed[0]!)).toEqual(expect.arrayContaining(['id', 'number', 'statusLine', 'waitingFor', 'attemptCount']))
+  })
+
   it('prints only the fields --json names', async () => {
     await createCardIn('Card', 'To Do')
 

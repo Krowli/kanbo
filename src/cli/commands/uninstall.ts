@@ -5,7 +5,7 @@ import type { Command } from 'commander'
 
 import { BINDING_FILE_PATH } from '../binding'
 import { findKanboProject } from '../doctor'
-import { CliError } from '../output'
+import { CliError, printResult } from '../output'
 import { confirmPlan } from '../setup/confirm'
 import { AGENT_IDS, AGENTS, instructionPaths } from '../setup/agents'
 import type { FileChange } from '../setup/file-change'
@@ -43,7 +43,8 @@ interface UninstallOptions {
   global?: boolean
   purge?: boolean
   yes?: boolean
-  json?: boolean
+  /** `--json` alone: everything done, as JSON; with fields, only those. */
+  json?: string | true
 }
 
 /** One thing the command did, or left for the person. */
@@ -63,12 +64,12 @@ interface PlannedEdit {
 export function registerUninstallCommand(program: Command): void {
   program
     .command('uninstall')
-    .description('remove what kanbo init wrote: instruction blocks and kanbo MCP entries; boards stay unless --purge')
+    .description('Disconnect kanbo from your agents; the board stays unless --purge')
     .option('--project', 'only this project\'s files')
-    .option('--global', 'only your own user-level files')
-    .option('--purge', 'also remove this project\'s .kanbo/binding.json, and its board file after a confirmation naming it')
+    .option('--global', 'only your own files, for every project')
+    .option('--purge', 'also remove this project\'s board settings, and its board file after you confirm')
     .option('--yes', 'do it without asking (never deletes a board file)')
-    .option('--json', 'print what was done as JSON')
+    .option('--json [fields]', 'print what was done as JSON; name comma-separated fields to print only those')
     .action(async (options: UninstallOptions) => {
       await uninstall(options)
     })
@@ -101,7 +102,7 @@ async function uninstall(options: UninstallOptions): Promise<void> {
       preview: describePlan(edits, claudeUser, purgeBinding ? bindingPath : null, boardFile, notes),
       question: 'Remove these?',
       yes: options.yes,
-      machineOutput: Boolean(options.json),
+      machineOutput: options.json !== undefined,
       command: 'kanbo uninstall',
     })
     if (!confirmed) {
@@ -220,8 +221,8 @@ function describePlan(edits: PlannedEdit[], claudeUser: boolean, bindingPath: st
 }
 
 function printActions(actions: UninstallAction[], notes: string[], options: UninstallOptions): void {
-  if (options.json) {
-    console.log(JSON.stringify({ actions, notes }, null, 2))
+  if (options.json !== undefined) {
+    printResult({ value: { actions, notes } }, { json: options.json })
     return
   }
   if (actions.length === 0) {

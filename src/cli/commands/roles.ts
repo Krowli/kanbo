@@ -38,18 +38,18 @@ export const ROLES_NEED_A_DATABASE_MESSAGE
 export function registerRolesCommands(program: Command): void {
   const roles = program
     .command('roles')
-    .description('the two database roles an external board is worked through')
+    .description('Set up the Postgres logins that keep agents from approving their own work')
 
   roles
     .command('print')
-    .description('print the SQL that creates the roles and the rules they live under')
+    .description('Print the SQL that creates the logins and their rights')
     .action(() => {
       console.log(BOARD_ROLE_SQL)
     })
 
   withTargetOptions(roles
     .command('apply')
-    .description('run that SQL against the external board, as its owner'))
+    .description('Run that SQL on the shared board, as its owner'))
     .action(async (options: BoardTargetCommandOptions) => {
       readFormat(options)
       const target = resolveDbTarget({

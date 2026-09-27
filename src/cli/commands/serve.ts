@@ -40,14 +40,14 @@ export interface ServeCommandOptions {
 export function registerServeCommand(program: Command): void {
   program
     .command('serve')
-    .description('serve this board over HTTP, with a board page for the browser')
+    .description('Open the board in your browser')
     .option('--port <port>', 'port to listen on', String(DEFAULT_SERVE_PORT))
-    .option('--host <host>', 'address to bind; anything but loopback needs a token', DEFAULT_SERVE_HOST)
-    .option('--db <path>', 'board database file to open')
-    .option('--database-url <url>', 'external Postgres board to serve instead of a board file')
-    .option('--workspace <nameOrId>', 'workspace the server is about')
-    .option('--token <token>', 'bearer token every request must carry (or set KANBO_SERVE_TOKEN); made up for the run on loopback when absent')
-    .option('--cors-origin <origin>', 'let a browser call from this exact origin; repeat for more', collect, [])
+    .option('--host <host>', 'address to listen on; anything but this computer needs a token', DEFAULT_SERVE_HOST)
+    .option('--db <path>', 'the board file to open')
+    .option('--database-url <url>', 'a shared Postgres board to use instead of a board file')
+    .option('--workspace <nameOrId>', 'the project, when this folder is not bound to one')
+    .option('--token <token>', 'a password every request must carry (or set KANBO_SERVE_TOKEN); made up for you when left out')
+    .option('--cors-origin <origin>', 'let pages from this web address call the board; repeat for more', collect, [])
     .option('--no-open', 'print the board page link without opening it in the browser')
     .action(async (options: ServeCommandOptions) => {
       const running = await startServe(options, { status: line => console.error(line), page: line => console.log(line) })

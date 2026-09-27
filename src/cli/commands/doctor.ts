@@ -3,7 +3,7 @@ import type { Command } from 'commander'
 import { KANBO_PACKAGE_VERSION } from '../../package-version'
 import type { DoctorFinding } from '../doctor'
 import { collectDoctorFindings } from '../doctor'
-import { CliError } from '../output'
+import { CliError, printResult } from '../output'
 
 /**
  * `kanbo doctor` — check this install, this project and the agent tools that
@@ -11,7 +11,8 @@ import { CliError } from '../output'
  * fails; a warning alone does not.
  */
 interface DoctorOptions {
-  json?: boolean
+  /** `--json` alone: every finding, as JSON; with fields, only those. */
+  json?: string | true
 }
 
 /** How long `kanbo mcp` may take to answer `initialize`. */
@@ -22,8 +23,8 @@ const MARKS: Record<DoctorFinding['status'], string> = { ok: 'ok  ', warn: 'warn
 export function registerDoctorCommand(program: Command): void {
   program
     .command('doctor')
-    .description('check this install, this project\'s binding and board, instruction blocks and MCP registrations')
-    .option('--json', 'print the findings as JSON')
+    .description('Check that kanbo, this project\'s board and your agents\' setup work')
+    .option('--json [fields]', 'print the findings as JSON; name comma-separated fields to print only those')
     .action(async (options: DoctorOptions) => {
       const findings = await collectDoctorFindings({
         cwd: process.cwd(),
@@ -31,8 +32,8 @@ export function registerDoctorCommand(program: Command): void {
         handshakeTimeoutMs: HANDSHAKE_TIMEOUT_MS,
       })
 
-      if (options.json) {
-        console.log(JSON.stringify({ version: KANBO_PACKAGE_VERSION, findings }, null, 2))
+      if (options.json !== undefined) {
+        printResult({ value: { version: KANBO_PACKAGE_VERSION, findings } }, { json: options.json })
       }
       else {
         for (const finding of findings) {
