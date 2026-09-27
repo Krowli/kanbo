@@ -221,7 +221,7 @@ describe('kanbo init wizard', () => {
     expect(readdirSync(projectDir)).toEqual(['.kanbo'])
   })
 
-  it('builds custom columns: To Do kept, QA picked, one of the person\'s own before Done', async () => {
+  it('builds custom columns: To Do kept, QA picked, Blocked typed in its own place, one of the person\'s own before Done', async () => {
     const outcome = await wizard([
       ['Where should the board live?', enter],
       ['Card numbers start with', enter],
@@ -241,11 +241,36 @@ describe('kanbo init wizard', () => {
     prime.mockClear()
     await kanbo('prime')
     const printed = prime.mock.calls.map(([line]) => String(line)).join('\n')
-    const names = ['Backlog', 'To Do', 'In Progress', 'In Review', 'QA', 'Design', 'Blocked', 'Done', 'Canceled']
+    const names = ['Backlog', 'To Do', 'In Progress', 'In Review', 'QA', 'Blocked', 'Design', 'Done', 'Canceled']
     const positions = names.map(name => printed.indexOf(`- ${name} (`))
     expect(positions.every(position => position >= 0), printed).toBe(true)
     expect(positions).toEqual([...positions].sort((a, b) => a - b))
     expect(printed).toContain('Being sketched before anyone builds it')
+  })
+
+  it('takes a ready-made column typed by name as that column, in its place, with no question about it', async () => {
+    const outcome = await wizard([
+      ['Where should the board live?', enter],
+      ['Card numbers start with', enter],
+      ['Which columns should the board start with?', d => d.press('down', 'down', 'down', 'enter')],
+      // Untick Backlog (first) and Canceled (last), then type both back in.
+      ['Pick the columns', d => d.press('space', 'down', 'down', 'down', 'down', 'down', 'down', 'down', 'space', 'enter')],
+      ['Any columns of your own?', typeLine('canceled, Backlog')],
+      ['Which coding agents do you use here?', enter],
+      ['Add a first card?', enter],
+      ['Write these changes?', enter],
+    ])
+
+    expect(outcome).toBeNull()
+    expect(driver.transcript()).not.toContain('One line about')
+    const prime = vi.mocked(console.log)
+    prime.mockClear()
+    await kanbo('prime')
+    const printed = prime.mock.calls.map(([line]) => String(line)).join('\n')
+    const names = ['Backlog', 'To Do', 'In Progress', 'In Review', 'Done', 'Canceled']
+    const positions = names.map(name => printed.indexOf(`- ${name} (`))
+    expect(positions.every(position => position >= 0), printed).toBe(true)
+    expect(positions).toEqual([...positions].sort((a, b) => a - b))
   })
 
   it('binds a shared Postgres board, masks the connection string, and runs nothing when the tables are declined', async () => {

@@ -261,13 +261,14 @@ async function askCustomColumns(ui: Ui): Promise<ColumnSpec[]> {
     options: COLUMN_CATALOGUE.map(column => ({ value: column.name, label: column.name, hint: column.description ?? undefined })),
     initialValues: COLUMN_TEMPLATES.standard.map(column => column.name),
   }))
-  const chosen = COLUMN_CATALOGUE.filter(column => picked.has(column.name) || normalizeStatusName(column.name) === READY_COLUMN_SLUG)
-  if (!chosen.every(column => picked.has(column.name))) {
+  const ready = COLUMN_CATALOGUE.find(column => normalizeStatusName(column.name) === READY_COLUMN_SLUG)!
+  if (!picked.has(ready.name)) {
     say(ui, 'To Do stays on the board: agents take their work from it.')
+    picked.add(ready.name)
   }
 
   const typed = await ui.text({ message: 'Any columns of your own? Comma-separated, or Enter for none' })
-  const taken = new Set(chosen.map(column => normalizeStatusName(column.name)))
+  const taken = new Set([...picked].map(name => normalizeStatusName(name)))
   const own: ColumnSpec[] = []
   for (const name of typed.split(',').map(each => each.trim()).filter(Boolean)) {
     const slug = normalizeStatusName(name)
@@ -275,15 +276,16 @@ async function askCustomColumns(ui: Ui): Promise<ColumnSpec[]> {
       continue
     }
     taken.add(slug)
+    // A ready-made column typed by name is that column, in its own place.
     const known = findCatalogueColumn(name)
     if (known) {
-      own.push(known)
+      picked.add(known.name)
       continue
     }
     const description = await ui.text({ message: `One line about "${name}" — when does a card belong there? (agents read this)` })
     own.push(ownColumn(name, description))
   }
-  return insertOwnColumns(chosen, own)
+  return insertOwnColumns(COLUMN_CATALOGUE.filter(column => picked.has(column.name)), own)
 }
 
 /** (5) The agents this person uses; the ones found here are ticked already. */
