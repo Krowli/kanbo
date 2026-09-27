@@ -38,7 +38,9 @@ Without a terminal (a script, CI, an agent's shell), `kanbo` asks nothing: it pr
 ```bash
 kanbo init --yes --key APP --columns standard --connect claude --first-card "Add rate limiting"
 kanbo doctor                    # checks the binding, board, instructions and MCP setup
+kanbo board                     # the board in this terminal
 kanbo serve                     # opens the board in your browser
+kanbo columns                   # change the columns (a small menu)
 ```
 
 Your agent reads the kanbo section in its instructions, runs `kanbo prime`, takes a card from `kanbo ready`, and works it. When it runs `kanbo card wait-approval`, you answer with `kanbo approve <card>` or `kanbo return <card> --comment "..."` — or with the buttons on the board page.

@@ -40,6 +40,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo uninstall` | Remove what `kanbo init` wrote: instruction blocks and `kanbo` MCP entries. Boards stay unless `--purge`. |
 | `kanbo capabilities` | The board's tools, commands, rules and limits — machine-readable, no board needed. |
 | `kanbo prime` | Print the columns of this board and the rules a card travels by. |
+| `kanbo board` | The board in this terminal: each column with its count, the cards with their status lines, what waits for you and what an agent is working on. |
 | `kanbo ready` | Cards that are spelled out, unclaimed and nobody else's turn. |
 | `kanbo columns` | At a terminal, the columns and a small menu to change them (add, rename, move, remove, apply a template); with nobody to ask, the same list as `columns list`. |
 | `kanbo columns list` | Every column in board order, with the slug a card is moved by. |
@@ -86,7 +87,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 - **A person at a terminal, no board here:** the init wizard — exactly `kanbo init` (below).
 - **A person at a terminal, a board here:** the home screen. A header (`kanbo · weather-station (WST) · .kanbo/board.db`), one line with the number of cards in each column (Canceled only when it has cards), `N cards waiting for you` when any are, and your agents — those found on this machine or already connected — with how each is connected (`Claude Code ✓ instructions + MCP · Codex ✓ MCP only · Cursor — not connected`, from the same check as `kanbo connect --check`). Then **What next?**, where every item shows the command it runs:
   - *Review the cards waiting for you* (only when there are any) — one card at a time: its key, title, column, status line and last comment, then *Approve*, *Send back with a comment* (asks for it; the agent reads it first), *Skip* or *Stop reviewing*. The same as `kanbo approve` and `kanbo return`.
-  - *Show the board here* — `kanbo board`; until that command is in your version, `kanbo card list`.
+  - *Show the board here* — `kanbo board` (below).
   - *Open the board in your browser* — `kanbo serve`.
   - *Add a card* — asks what it is about and puts it in To Do (`kanbo card create`).
   - *Connect an agent* — `kanbo connect`. *Get the agent instructions* — `kanbo instructions`.
@@ -291,6 +292,35 @@ Print the columns of this board and the rules a card travels by, then the comman
 | `--limit <count>` | How many cards to print. |
 
 Lists To Do cards with no run and nobody's turn but the agent's, in board order.
+
+## `kanbo board`
+
+The board in the terminal, one column after another in board order (stacked, so it reads the same in a narrow terminal or a Windows console):
+
+```
+In Progress (1)
+  WOR-002  Add a dark theme that follows the system setting…  [running: claude]
+           writing the toggle; the colours are done, the Settings page is next…
+
+In Review (1)
+  WOR-003  Fix the login form  [waiting for you]
+           login fixed, please check
+
+Done (7)
+  WOR-006  Finished task 3
+  …
+  … 2 more — kanbo board --all
+```
+
+Each card is its key and title (the first line of its description when it has no title of its own), its status line dimmed under it, `[waiting for you]` when it waits for a person and `[running: <agent>]` while a run is going on. Lines are cut to the terminal's width (80 when the output is not a terminal). An empty Canceled column is left out; Done and Canceled show the 5 cards changed last. Colour only in a terminal, never with `NO_COLOR`.
+
+| Option | |
+| --- | --- |
+| `--column <column>` | Only this column, by slug, name or id. |
+| `--all` | Every card of Done and Canceled. |
+| `--json [fields]` | The same sections as JSON — `name`, `slug`, `category`, `count` (every card in the column) and `cards` (those shown, as `card list --json` prints them); with a list, only those fields of each section. |
+
+Plus `--db`, `--database-url`, `--workspace` and `--format`.
 
 ## `kanbo columns …`
 

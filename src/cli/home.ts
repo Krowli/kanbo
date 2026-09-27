@@ -156,7 +156,7 @@ function menuOptions(board: HomeBoard): { value: MenuChoice, label: string }[] {
 
 /** What the items that are a command of their own run. */
 const MENU_COMMANDS = {
-  board: ['card', 'list'],
+  board: ['board'],
   columns: ['columns'],
 } as const satisfies Record<'board' | 'columns', readonly string[]>
 

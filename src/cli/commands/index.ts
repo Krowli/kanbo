@@ -1,6 +1,7 @@
 import type { Command } from 'commander'
 
 import { registerApproveCommand } from './approve'
+import { registerBoardCommand } from './board'
 import { registerCapabilitiesCommand } from './capabilities'
 import { registerCardCommands } from './card'
 import { registerColumnsCommands } from './columns'
@@ -39,6 +40,7 @@ export function registerKanboCommands(program: Command): void {
   registerPrimeCommand(program)
   registerReadyCommand(program)
   registerColumnsCommands(program)
+  registerBoardCommand(program)
   registerCardCommands(program)
   registerApproveCommand(program)
   registerReturnCommand(program)

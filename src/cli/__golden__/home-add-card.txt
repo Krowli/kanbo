@@ -4,7 +4,7 @@ Backlog 0 · To Do 0 · In Progress 0 · In Review 0 · Done 0
 Agents: Claude Code — not connected
 │
 ◆  What next?
-│  ● Show the board here — kanbo card list
+│  ● Show the board here — kanbo board
 │  ○ Open the board in your browser — kanbo serve
 │  ○ Add a card — kanbo card create
 │  ○ Connect an agent — kanbo connect
@@ -14,7 +14,7 @@ Agents: Claude Code — not connected
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm
 └
-│  ○ Show the board here — kanbo card list
+│  ○ Show the board here — kanbo board
 │  ● Open the board in your browser — kanbo serve
 │  ○ Add a card — kanbo card create
 │  ○ Connect an agent — kanbo connect
@@ -51,7 +51,7 @@ Backlog 0 · To Do 1 · In Progress 0 · In Review 0 · Done 0
 Agents: Claude Code — not connected
 │
 ◆  What next?
-│  ● Show the board here — kanbo card list
+│  ● Show the board here — kanbo board
 │  ○ Open the board in your browser — kanbo serve
 │  ○ Add a card — kanbo card create
 │  ○ Connect an agent — kanbo connect
@@ -61,7 +61,7 @@ Agents: Claude Code — not connected
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm
 └
-│  ○ Show the board here — kanbo card list
+│  ○ Show the board here — kanbo board
 │  ● Open the board in your browser — kanbo serve
 │  ○ Add a card — kanbo card create
 │  ○ Connect an agent — kanbo connect

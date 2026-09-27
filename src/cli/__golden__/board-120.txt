@@ -1,0 +1,21 @@
+Backlog (0)
+  no cards
+
+To Do (1)
+  WOR-001  Write the README
+
+In Progress (1)
+  WOR-002  Add a dark theme that follows the system setting, with a toggle in Settings for people w…  [running: claude]
+           writing the toggle; the colours are done, the Settings page is next and then the tests
+
+In Review (1)
+  WOR-003  Fix the login form  [waiting for you]
+           login fixed, please check
+
+Done (7)
+  WOR-006  Finished task 3
+  WOR-007  Finished task 4
+  WOR-008  Finished task 5
+  WOR-009  Finished task 6
+  WOR-010  Finished task 7
+  … 2 more — kanbo board --all
