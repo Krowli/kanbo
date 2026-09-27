@@ -36,8 +36,8 @@ import { CliError, EXIT_NOT_RESOLVED } from './output'
 export const DATABASE_NOT_FOUND_MESSAGE
   = 'This folder has no kanbo board yet. Run kanbo to set one up (or kanbo init --yes for the defaults).'
 
-/** The same, in an agent's shell: setting a board up is a person's call. */
-export const DATABASE_NOT_FOUND_AGENT_MESSAGE = 'This folder has no kanbo board yet. Ask a person to run kanbo init here.'
+/** The same, in an agent's shell: setting a board up is a person's call. Every agent-facing "no board" says exactly this. */
+export const DATABASE_NOT_FOUND_AGENT_MESSAGE = 'This folder has no kanbo board yet. Ask a person to run kanbo here.'
 
 /**
  * Nothing names a board here — not a board that failed to open. Its own class

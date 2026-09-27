@@ -20,7 +20,7 @@ When a client connects, the server sends `instructions` in its MCP initialize re
 
 The text is static (about 1.3k characters) and names no column, so it is valid before a board is resolved; the board's own columns come from `kanbo_prime`. Its rule sentences are the same ones `kanbo prime` uses. `kanbo/mcp` exports it as `KANBO_MCP_INSTRUCTIONS`; `createKanboMcpServer` sends it, `registerKanboTools` does not — a server of your own decides its own instructions.
 
-`kanbo mcp` sends them in a folder with no board too: the server starts, and every tool answers "This folder has no kanbo board. Ask a person to run `kanbo` here to set one up." until a board is set up in that folder. `createDbTransport` itself is unchanged and still fails when no board resolves.
+`kanbo mcp` sends them in a folder with no board too: the server starts, and every tool answers "This folder has no kanbo board yet. Ask a person to run kanbo here." until a board is set up in that folder. `createDbTransport` itself is unchanged and still fails when no board resolves.
 
 ## Resources
 

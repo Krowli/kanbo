@@ -43,7 +43,7 @@ The `kanbo` a client would start fails before answering. The detail is its first
 ## Messages
 
 **`This folder has no kanbo board yet. Run kanbo to set one up (or kanbo init --yes for the defaults).` (exit 2)**
-No flag (`--db`, `--database-url`), environment variable (`KANBO_DB_PATH`, `KANBO_DATABASE_URL`) or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo` in the project root, or `cd` into the project. In an agent's shell the message ends `Ask a person to run kanbo init here.` instead. For an MCP client, check that it starts `kanbo mcp` in the project directory.
+No flag (`--db`, `--database-url`), environment variable (`KANBO_DB_PATH`, `KANBO_DATABASE_URL`) or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo` in the project root, or `cd` into the project. In an agent's shell the message ends `Ask a person to run kanbo here.` instead. For an MCP client, check that it starts `kanbo mcp` in the project directory.
 
 **`kanbo` prints `This folder has no kanbo board yet.` and `kanbo init --yes` instead of starting the setup**
 `kanbo` asks questions only when it runs in a terminal it can draw in: not when its input or output is piped or redirected, `CI` is set, `TERM=dumb`, or the shell belongs to an agent (`KANBO_ACTOR_KIND=agent`, or a mark such as `CLAUDECODE=1` — see the `actor` finding above). Run it in your own terminal, or run the printed `kanbo init --yes` (add `--connect claude` to connect Claude Code as well).

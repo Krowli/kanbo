@@ -67,6 +67,8 @@ describe('kanbo mcp in a folder with no board', () => {
         expect(result.isError, name).toBe(true)
         expect(textOf(result), name).toBe(NO_BOARD_FOR_AGENT_MESSAGE)
       }
+      // One wording for an agent everywhere: the shell, bare kanbo and this server.
+      expect(NO_BOARD_FOR_AGENT_MESSAGE).toBe('This folder has no kanbo board yet. Ask a person to run kanbo here.')
     }
     finally {
       await close()

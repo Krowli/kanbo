@@ -73,7 +73,7 @@ A project without `.kanbo/` has no board: ignore this section there, and do not 
 <!-- KANBO_END -->
 ```
 
-`kanbo mcp` resolves the board from the directory the client starts it in, so one global registration serves every project that has run `kanbo init`. In a folder with no board the server still starts and the client connects, and every tool answers "This folder has no kanbo board. Ask a person to run `kanbo` here to set one up." Once a board is set up in that folder, the next tool call finds it — no restart needed.
+`kanbo mcp` resolves the board from the directory the client starts it in, so one global registration serves every project that has run `kanbo init`. In a folder with no board the server still starts and the client connects, and every tool answers "This folder has no kanbo board yet. Ask a person to run kanbo here." Once a board is set up in that folder, the next tool call finds it — no restart needed.
 
 Run `kanbo connect --check --global` or `kanbo doctor` afterwards to check it. `kanbo uninstall --global` takes it all out again. After upgrading kanbo, `kanbo doctor` warns about a block written by the old version; run `kanbo connect <agent> --global --yes` to rewrite it.
 

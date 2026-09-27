@@ -2,6 +2,7 @@ import { homedir } from 'node:os'
 import { isAbsolute, relative } from 'node:path'
 
 import type { Command } from 'commander'
+import { CommanderError } from 'commander'
 import pc from 'picocolors'
 
 import { cardDisplayTitle } from '../domain/card-display-title'
@@ -13,7 +14,7 @@ import { isAgentShell, requireHumanActor } from './actor'
 import { openBoardSession } from './command'
 import { checkAgent } from './commands/connect'
 import type { BoardTarget } from './db-target'
-import { BoardNotFoundError, resolveDbTarget } from './db-target'
+import { BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE, resolveDbTarget } from './db-target'
 import { findKanboProject } from './doctor'
 import { describeFailure } from './failure'
 import { AGENT_IDS, AGENTS, detectAgents } from './setup/agents'
@@ -91,7 +92,7 @@ export const NO_BOARD_HINT = [
   'Also connect Claude Code:  kanbo init --yes --connect claude',
 ] as const
 
-export const NO_BOARD_AGENT_FIRST_LINE = 'This folder has no kanbo board yet. Ask a person to run kanbo here.'
+export const NO_BOARD_AGENT_FIRST_LINE = DATABASE_NOT_FOUND_AGENT_MESSAGE
 
 /** No board and nobody to ask: the commands that set one up. */
 function describeNoBoard(): string {
@@ -131,7 +132,8 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
     catch (error) {
       // A question inside an item cancelled, or its command failed: say so,
       // and the menu is back.
-      if (!(error instanceof CancelledError)) {
+      // Commander has already said what was wrong with the words it was given.
+      if (!(error instanceof CancelledError) && !(error instanceof CommanderError)) {
         console.error(pc.red(describeFailure(error).message))
       }
     }

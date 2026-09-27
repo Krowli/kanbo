@@ -34,10 +34,29 @@ export async function runKanbo(args: string[], program: () => Command = createKa
     await runBareKanbo({
       ui: getUi(),
       interactive: canPrompt(),
-      createProgram: () => program().exitOverride(),
+      createProgram: () => throwInsteadOfExiting(program()),
       updateNotice: null,
     })
     return
   }
   await program().parseAsync(args, { from: 'user' })
+}
+
+/**
+ * A program that throws where commander would end the process: the home menu
+ * runs one on each item, and a mistake inside an item — a missing argument, an
+ * unknown option of a subcommand — has to come back to the menu, not end kanbo.
+ *
+ * Every command in the tree gets it, with the program's own output settings:
+ * commander copies both into a subcommand only when it is created, and these
+ * commands were registered before this is called.
+ */
+function throwInsteadOfExiting(program: Command): Command {
+  const output = program.configureOutput()
+  const apply = (command: Command): void => {
+    command.exitOverride().configureOutput(output)
+    command.commands.forEach(apply)
+  }
+  apply(program)
+  return program
 }

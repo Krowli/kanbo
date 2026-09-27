@@ -1,7 +1,7 @@
 import type { KanboDbTransport, KanboDbTransportInput } from '../mcp/db-transport'
 import { createDbTransport } from '../mcp/db-transport'
 import type { KanboToolTransport } from '../mcp/transport'
-import { BoardNotFoundError } from './db-target'
+import { BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE } from './db-target'
 import { CliError, EXIT_NOT_RESOLVED } from './output'
 
 /**
@@ -21,8 +21,7 @@ import { CliError, EXIT_NOT_RESOLVED } from './output'
  */
 
 /** What every tool answers in a folder with no board. */
-export const NO_BOARD_FOR_AGENT_MESSAGE
-  = 'This folder has no kanbo board. Ask a person to run `kanbo` here to set one up.'
+export const NO_BOARD_FOR_AGENT_MESSAGE = DATABASE_NOT_FOUND_AGENT_MESSAGE
 
 /** Every method of the tool transport, listed so the stand-in forwards each — a new one is a type error here. */
 const TRANSPORT_METHODS: Record<keyof KanboToolTransport, true> = {

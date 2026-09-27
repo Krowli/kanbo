@@ -12,7 +12,7 @@ import type { PromptDriver } from '../testing/prompt-driver'
 import { createPromptDriver } from '../testing/prompt-driver'
 import { openBoardSession } from './command'
 import { registerKanboCommands } from './commands'
-import { runKanbo } from './program'
+import { createKanboProgram, runKanbo } from './program'
 import type { AgentDetection } from './setup/agents'
 import { CancelledError, createUi, setUiForTests } from './ui/ui'
 
@@ -296,6 +296,30 @@ describe('kanbo with no words', () => {
     exitMenu(driver)
 
     expect(await running).toBeNull()
+  })
+
+  it('comes back to the menu when commander refuses the words of a menu item, instead of ending kanbo', async () => {
+    await createBoard()
+    const exit = vi.spyOn(process, 'exit').mockImplementation((code?: string | number | null) => {
+      throw new Error(`process.exit(${code})`)
+    })
+    // The real program, with its commands already registered — and a `board`
+    // that now wants a word the menu does not give it.
+    const strict = (): Command => {
+      const created = createKanboProgram().configureOutput({ writeErr: text => printed.push(text), writeOut: text => printed.push(text) })
+      created.commands.find(command => command.name() === 'board')!.argument('<which>')
+      return created
+    }
+
+    const running = runKanbo([], strict).then(() => null, (error: unknown) => error)
+    await driver.waitFor('What next?')
+    driver.press('enter') // Show the board here
+    await driver.waitFor('What next?') // back at the menu
+    exitMenu(driver)
+
+    expect(await running).toBeNull()
+    expect(exit).not.toHaveBeenCalled()
+    expect(printed.join('')).toContain('error: missing required argument \'which\'')
   })
 
   it('leaves quietly with exit 0 on Ctrl-C at the menu', async () => {
