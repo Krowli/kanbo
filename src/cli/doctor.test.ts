@@ -59,7 +59,8 @@ describe('kanbo doctor', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
-    rmSync(root, { force: true, recursive: true })
+    // On Windows the server the handshake started may still be letting go of its folder.
+    rmSync(root, { force: true, recursive: true, maxRetries: 20, retryDelay: 250 })
   })
 
   /** A `kanbo` on PATH whose script is `body`, in JavaScript. */

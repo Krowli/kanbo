@@ -42,7 +42,8 @@ describe('findAllOnPath', () => {
     expect(findAllOnPath(join(first, 'kanbo'), { platform: 'win32', env })).toEqual([join(first, 'kanbo.cmd')])
   })
 
-  it('elsewhere finds the executable of that exact name only', () => {
+  // POSIX rules on a POSIX file system: a `C:\` path cannot sit in a `:`-separated PATH, and Windows has no executable bit.
+  it.skipIf(process.platform === 'win32')('elsewhere finds the executable of that exact name only', () => {
     const env = { PATH: `${first}:${second}` }
 
     expect(findAllOnPath('kanbo', { platform: 'linux', env })).toEqual([join(first, 'kanbo')])

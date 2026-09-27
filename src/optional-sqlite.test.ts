@@ -88,7 +88,7 @@ afterAll(() => {
 
 /** Run node with the native module hidden, and hand back what it printed. */
 function withoutBetterSqlite3(args: string[]): string {
-  return execFileSync(process.execPath, ['--import', hide, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+  return execFileSync(process.execPath, ['--import', pathToFileURL(hide).href, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
 }
 
 describe.skipIf(!built)('the library and the binary without better-sqlite3', () => {
