@@ -1,0 +1,74 @@
+kanbo — set up a board for this project
+This project already has a board: .kanbo/board.db (cards WEA-001, WEA-002, …). It stays as it is; this sets up your agents.
+│
+◆  Which coding agents do you use here?
+│  ◼ Claude Code (found ~/.claude)
+│  ◻ Codex
+│  ◻ Cursor
+│  ◻ Gemini CLI
+│  ↑/↓ to navigate • Space: select • Enter: confirm
+└
+◇  Which coding agents do you use here?
+│  Claude Code (found ~/.claude)
+│
+◆  Connect them now?
+│  ● Yes — show exactly which files change, then ask
+│  ○ Not now — set up the board only; no other file is touched (later: kanbo
+│  connect)
+│  ○ I'll paste the instructions myself (prints them; nothing is written)
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  Connect them now?
+│  Yes — show exactly which files change, then ask
+│
+◆  These files change so your agents know the board. Keep all of them?
+│  ◼ CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs
+│   kanbo prime before a task)
+│  ◼ .mcp.json (lets Claude Code call the board's tools in this project)
+│  ↑/↓ to navigate • Space: select • Enter: confirm
+└
+◇  These files change so your agents know the board. Keep all of them?
+│  CLAUDE.md, .mcp.json
+The kanbo section your agents get:
+
+<!-- KANBO_START v2 h=4842e336 -->
+## Kanbo board
+
+This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
+Take work with `kanbo ready`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
+<!-- KANBO_END -->
+
+│
+◆  Add a first card? (optional — Enter to skip)
+│  e.g. Add a README
+└
+◇  Add a first card? (optional — Enter to skip)
+│
+kanbo init will:
+  write   .kanbo/binding.json (binds this project to WEA)
+  write   CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs kanbo prime before a task)
+  write   .mcp.json (lets Claude Code call the board's tools in this project)
+Nothing else is changed.
+│
+◆  Write these changes?
+│  ● Yes / ○ No
+└
+◇  Write these changes?
+│  Yes
+✔ Board: .kanbo/board.db (kept as it is)
+✔ Card numbers: WEA-001, WEA-002, …
+✔ Claude Code: CLAUDE.md (written)
+✔ Claude Code: .mcp.json (written)
+
+Next: start Claude Code in this folder and say "take the next card from kanbo".
+See the board: kanbo board · in your browser: kanbo serve
+Run kanbo any time to come back here.
+
+--- exit 0
+--- files in <project>:
+.kanbo/
+.kanbo/.gitignore
+.kanbo/binding.json
+.kanbo/board.db
+.mcp.json
+CLAUDE.md

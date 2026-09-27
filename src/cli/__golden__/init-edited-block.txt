@@ -1,0 +1,62 @@
+kanbo — set up a board for this project
+This project already has a board: .kanbo/board.db (cards WST-001, WST-002, …). It stays as it is; this sets up your agents.
+│
+◆  Which coding agents do you use here?
+│  ◼ Claude Code (found ~/.claude)
+│  ◻ Codex
+│  ◻ Cursor
+│  ◻ Gemini CLI
+│  ↑/↓ to navigate • Space: select • Enter: confirm
+└
+◇  Which coding agents do you use here?
+│  Claude Code (found ~/.claude)
+│
+◆  Connect them now?
+│  ● Yes — show exactly which files change, then ask
+│  ○ Not now — set up the board only; no other file is touched (later: kanbo
+│  connect)
+│  ○ I'll paste the instructions myself (prints them; nothing is written)
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  Connect them now?
+│  Yes — show exactly which files change, then ask
+│
+◆  You changed the kanbo section in CLAUDE.md. Replace it with the current one?
+│  ○ Yes / ● No
+└
+◇  You changed the kanbo section in CLAUDE.md. Replace it with the current one?
+│  No
+│
+◆  Add a first card? (optional — Enter to skip)
+│  e.g. Add a README
+└
+◇  Add a first card? (optional — Enter to skip)
+│
+kanbo init will:
+  write   .kanbo/binding.json (binds this project to WST)
+Note: CLAUDE.md: you changed the kanbo section, so it was left as it is.
+Nothing else is changed.
+│
+◆  Write these changes?
+│  ● Yes / ○ No
+└
+◇  Write these changes?
+│  Yes
+✔ Board: .kanbo/board.db (kept as it is)
+✔ Card numbers: WST-001, WST-002, …
+✔ Claude Code: CLAUDE.md (unchanged)
+✔ Claude Code: .mcp.json (unchanged)
+Note: CLAUDE.md: you changed the kanbo section, so it was left as it is.
+
+Next: start Claude Code in this folder and say "take the next card from kanbo".
+See the board: kanbo board · in your browser: kanbo serve
+Run kanbo any time to come back here.
+
+--- exit 0
+--- files in <project>:
+.kanbo/
+.kanbo/.gitignore
+.kanbo/binding.json
+.kanbo/board.db
+.mcp.json
+CLAUDE.md

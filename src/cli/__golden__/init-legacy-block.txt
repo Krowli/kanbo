@@ -1,0 +1,102 @@
+kanbo — set up a board for this project
+│
+◆  Where should the board live?
+│  ● In this project (file .kanbo/board.db — nothing to run or host)
+│  ○ In a shared Postgres database (for a team; Supabase works)
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  Where should the board live?
+│  In this project (file .kanbo/board.db — nothing to run or host)
+│
+◆  Card numbers start with
+│  WST
+└
+◇  Card numbers start with
+│  WST
+→ cards will be WST-001, WST-002, …
+│
+◆  Which columns should the board start with?
+│  ● Standard: Backlog → To Do → In Progress → In Review → Done · Canceled
+│  ○ Simple: To Do → In Progress → Done
+│  ○ Review + QA: … In Review → QA → Done
+│  ○ Custom: pick from a list and add your own
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  Which columns should the board start with?
+│  Standard: Backlog → To Do → In Progress → In Review → Done · Canceled
+│
+◆  Which coding agents do you use here?
+│  ◼ Claude Code (found ~/.claude)
+│  ◻ Codex
+│  ◻ Cursor
+│  ◻ Gemini CLI
+│  ↑/↓ to navigate • Space: select • Enter: confirm
+└
+◇  Which coding agents do you use here?
+│  Claude Code (found ~/.claude)
+│
+◆  Connect them now?
+│  ● Yes — show exactly which files change, then ask
+│  ○ Not now — set up the board only; no other file is touched (later: kanbo
+│  connect)
+│  ○ I'll paste the instructions myself (prints them; nothing is written)
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  Connect them now?
+│  Yes — show exactly which files change, then ask
+│
+◆  These files change so your agents know the board. Keep all of them?
+│  ◼ CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs
+│   kanbo prime before a task)
+│  ◼ .mcp.json (lets Claude Code call the board's tools in this project)
+│  ↑/↓ to navigate • Space: select • Enter: confirm
+└
+◇  These files change so your agents know the board. Keep all of them?
+│  CLAUDE.md, .mcp.json
+The kanbo section your agents get:
+
+<!-- KANBO_START v2 h=4842e336 -->
+## Kanbo board
+
+This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
+Take work with `kanbo ready`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
+<!-- KANBO_END -->
+
+│
+◆  Add a first card? (optional — Enter to skip)
+│  e.g. Add a README
+└
+│  W█│  Wr█│  Wri█│  Writ█│  Write█│  Write █│  Write t█│  Write th█│  Write the█│  Write the █│  Write the R█│  Write the RE█│  Write the REA█│  Write the READ█│  Write the READM█│  Write the README█◇  Add a first card? (optional — Enter to skip)
+│  Write the README
+kanbo init will:
+  create  .kanbo/board.db (a board file of this project's own, with the columns Backlog, To Do, In Progress, In Review, Done, Canceled)
+  write   .kanbo/binding.json (binds this project to WST)
+  write   CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs kanbo prime before a task)
+  write   .mcp.json (lets Claude Code call the board's tools in this project)
+  add     a first card to To Do: Write the README
+Nothing else is changed.
+│
+◆  Write these changes?
+│  ● Yes / ○ No
+└
+◇  Write these changes?
+│  Yes
+✔ Board: .kanbo/board.db
+✔ Columns: Backlog, To Do, In Progress, In Review, Done, Canceled
+✔ Card numbers: WST-001, WST-002, …
+✔ Claude Code: CLAUDE.md (written)
+✔ Claude Code: .mcp.json (written)
+✔ First card: WST-001 Write the README
+
+Next: start Claude Code in this folder and say "take the next card from kanbo".
+See the board: kanbo board · in your browser: kanbo serve
+Run kanbo any time to come back here.
+
+--- exit 0
+--- files in <project>:
+.kanbo/
+.kanbo/.gitignore
+.kanbo/binding.json
+.kanbo/board.db
+.mcp.json
+CLAUDE.md

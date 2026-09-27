@@ -26,21 +26,20 @@ Requires Node.js `^22.19.0` or `>=24.11.0`. See [installation](docs/installation
 
 ```bash
 npm install -g kanbo-cli
-
-cd your-project
-kanbo init --file --identifier APP --instructions claude --mcp claude
-kanbo doctor                    # checks the binding, board, instructions and MCP setup
+cd your-project && kanbo init
 ```
 
-This creates `.kanbo/board.db`, binds the project to it in `.kanbo/binding.json` (kept out of git), adds a kanbo block to `CLAUDE.md`, and registers `kanbo mcp` in `.mcp.json`. Then add a card and look at the board:
+`kanbo init` asks a few questions in the terminal: where the board lives (a file in the project, or a shared Postgres database), what card numbers start with, which columns the board starts with, and which of your coding agents to connect. It shows exactly which files it will write and writes nothing until you say yes. Then tell your agent: **"take the next card from kanbo"**.
+
+Without a terminal (a script, CI), or with `--yes`, it takes the defaults: a board file with the standard columns, and no agent files. The same answers as flags:
 
 ```bash
-kanbo card create --column to_do --title "Add rate limiting" --description "60 requests per minute per client"
-kanbo ready
+kanbo init --yes --key APP --columns standard --connect claude --first-card "Add rate limiting"
+kanbo doctor                    # checks the binding, board, instructions and MCP setup
 kanbo serve                     # opens the board in your browser
 ```
 
-Now start your agent in the project. It reads the instruction block, runs `kanbo prime`, takes a card from `kanbo ready`, and works it. When it runs `kanbo card wait-approval`, you answer with `kanbo approve <card>` or `kanbo return <card> --comment "..."` — or with the buttons on the board page.
+Your agent reads the kanbo section in its instructions, runs `kanbo prime`, takes a card from `kanbo ready`, and works it. When it runs `kanbo card wait-approval`, you answer with `kanbo approve <card>` or `kanbo return <card> --comment "..."` — or with the buttons on the board page.
 
 ## How it works
 

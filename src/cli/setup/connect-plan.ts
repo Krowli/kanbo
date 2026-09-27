@@ -120,7 +120,7 @@ export async function planConnect(
       continue
     }
     const block = scope === 'project' ? INSTRUCTION_BLOCK : GLOBAL_INSTRUCTION_BLOCK
-    const asked = await planInstructionBlockAsking(path, block, { yes: context.yes })
+    const asked = await planInstructionBlockAsking(path, block, { yes: context.yes, label: displayPath(plan, path) })
     if (asked.note) {
       plan.notes.push(asked.note)
     }

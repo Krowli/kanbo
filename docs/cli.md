@@ -32,7 +32,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 
 | Command | What it does |
 | --- | --- |
-| `kanbo init` | Bind this project to a board, and tell its agents about it. With `--global`, set up your own agent tools for every project instead. |
+| `kanbo init` | Set up a board for this project and connect its agents — a wizard in a terminal, defaults with `--yes`. With `--global`, set up your own agent tools for every project instead. |
 | `kanbo connect [agents...]` | Connect your agents (`claude`, `codex`, `cursor`, `gemini`, or `all`) to kanbo: the kanbo section in their instructions and the board's MCP server. `--check` shows what is connected, `--remove` takes it out. Alias `kanbo setup`. |
 | `kanbo instructions [kind]` | Print the text to give an agent: `agent` (default, the full rules), `short`, `global`, `orchestrator`, `mcp` or `board`. `--copy` also puts it on the clipboard. No board needed except for `board`. |
 | `kanbo doctor` | Check this install, this project's binding and board, instruction blocks and MCP registrations. |
@@ -74,28 +74,51 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 
 ## `kanbo init`
 
-Bind this project to a board, and tell its agents about it. Writes `.kanbo/binding.json` (mode `0600`) and `.kanbo/.gitignore`; with the options below it also writes an instruction block and MCP registrations. Running it again merges into the existing binding and changes nothing that is already current.
+Set up a board for this project, and tell its agents about it. Writes `.kanbo/binding.json` (mode `0600`) and `.kanbo/.gitignore`, creates the board, and — when you connect agents — the kanbo section in their instruction files and their MCP registrations. Running it again merges into the existing binding and changes nothing that is already current.
 
-When nothing names a board — no `--db`/`--database-url`, no `KANBO_DB_PATH`/`KANBO_DATABASE_URL`, no binding at or above the folder — a plain `kanbo init` creates a board file of the project's own, exactly like `--file`. A new board file gets the standard columns straight away, so `kanbo prime` has them to show.
+### In a terminal: the wizard
 
-`init` works out everything first: it asks its questions, then (in a terminal, without `--yes`) shows the list of files it will create or write and asks `Make these changes?`. Nothing — not even the binding — is written before that yes; Ctrl-C at any question leaves the folder as it was.
+Without `--yes` (and without `--json`/`--format`), in a terminal, `init` asks one question at a time:
+
+1. **Where should the board be set up?** — only when the folder is inside a git repository but not its root: the repository root (recommended) or only this folder.
+2. **Where should the board live?** — *In this project* (the file `.kanbo/board.db`; nothing to run or host) or *In a shared Postgres database* (for a team; Supabase works). For Postgres it asks for the connection string (hidden; stored only in `.kanbo/binding.json`, which git never sees), the workspace id (default: the folder name), and whether to create the board's tables now (`kanbo migrate`), and warns that agents reach the board with that owner's connection string until you set up roles.
+3. **Card numbers start with** — suggested from the folder name (`todo-list` → `TLI`); a letter and two letters or digits.
+4. **Which columns should the board start with?** — *Standard* (Backlog → To Do → In Progress → In Review → Done · Canceled), *Simple* (To Do → In Progress → Done), *Review + QA* (… In Review → QA → Done), or *Custom*: pick from Backlog, To Do, In Progress, In Review, QA, Blocked, Done, Canceled, add columns of your own, and give each one line saying when a card belongs there — agents read it. To Do is always there: agents take work from it.
+5. **Which coding agents do you use here?** — Claude Code, Codex, Cursor, Gemini CLI; the ones found on this machine or in the project are ticked.
+6. **Connect them now?** — *Yes* (show exactly which files change, then ask), *Not now* (the board only; no other file is touched — later: `kanbo connect`), or *I'll paste the instructions myself* (prints them; nothing is written).
+7. On *Yes*: the files that change, each with what it is for (untick any), and the kanbo section your agents get.
+8. **Add a first card?** — optional; it goes in To Do.
+9. The full list of changes, then **Write these changes?** — nothing, not even the binding, is written before this yes. At the end: what was done, and what to do next.
+
+A question a flag already answers is not asked. In a project that already has a board, the board questions (1–4) are skipped and the wizard goes straight to the agents. Ctrl-C at any question prints `Cancelled — nothing was written.` and exits `1`; the folder is left exactly as it was.
+
+A warning is shown when agents could not start `kanbo mcp`: kanbo running from npx, or not on `PATH` (`npm install -g kanbo-cli`).
+
+### Without a terminal, or with `--yes`
+
+No questions. When nothing names a board — no `--db`/`--database-url`, no `KANBO_DB_PATH`/`KANBO_DATABASE_URL`, no binding at or above the folder — `init` creates a board file of the project's own, exactly like `--file`, with the standard columns (so `kanbo prime` has them to show) and the card key suggested from the folder name (a project already bound keeps its key). No agent file is touched unless `--connect`, `--instructions` or `--mcp` says so; the output ends with how to connect them later (`kanbo connect <agent>`, or `kanbo instructions --copy` and paste it).
 
 | Option | Meaning |
 | --- | --- |
-| `--file [path]` | Use a board file of this project's own instead of a host database or an external board (default `.kanbo/board.db`). Creates and migrates the file, and seeds the standard columns into a new one. What a plain `kanbo init` does when nothing names a board. |
-| `--database-url <url>` | External Postgres board to bind this project to. Needs a workspace id and a card-key prefix (`--workspace`, `--identifier`). |
+| `--file [path]` | Use a board file of this project's own instead of a host database or an external board (default `.kanbo/board.db`). Creates and migrates the file, and puts the columns into a new one. What a plain `kanbo init` does when nothing names a board. |
+| `--database-url <url>` | External Postgres board to bind this project to. Needs a workspace id and a card key (`--workspace`, `--key`). |
+| `--migrate` | With `--database-url`: create the board's tables now, as `kanbo migrate` does, and put the columns on the new board. |
 | `--db <path>` | Host database file to read this project's workspace from (for a board that lives inside another app's SQLite database). |
 | `--workspace <nameOrId>` | Workspace this project is. With `--file` and no binding yet, defaults to the folder name. |
-| `--identifier <key>` | What this workspace's card keys start with (`APP` in `APP-001`). With `--file`, defaults to the folder name. |
+| `--key <KEY>` | What card numbers start with (`APP` in `APP-001`): a letter and two letters or digits. The same as `--identifier`, checked. For a new board file it defaults to a key suggested from the folder name. |
+| `--identifier <key>` | The same, unchecked (kept for 0.2 scripts). |
+| `--columns <columns>` | The columns a new board starts with: `standard` (default), `simple`, `review-qa`, or a comma-separated list in board order that includes To Do — ready-made names (`QA`, `Blocked`, …) or your own. Ignored for a board that already exists. |
+| `--connect <agents>` | Connect these agents as `kanbo connect <agents>` does: `claude`, `codex`, `cursor`, `gemini`, `all`, or `none`; comma-separated. Not together with `--instructions`/`--mcp`. |
+| `--first-card <title>` | Put a first card in To Do. |
 | `--agent-url <url>` | The connection string agents get, when it is not the one above (see [storage](storage.md#roles)). |
 | `--board <id>` | The board inside the workspace, when it has more than one. |
 | `--instructions <file>` | Where to write the instruction block: `claude` (`CLAUDE.md`), `agents` (`AGENTS.md`) or `none`. With `--global`: a comma-separated list of `claude`, `codex`, `gemini`, or `none`. |
 | `--mcp <clients>` | Register the board's MCP server with `claude` (`.mcp.json`), `codex` (`.codex/config.toml`), `cursor` (`.cursor/mcp.json`); comma-separated. |
 | `--global` | Set up your own agent tools for every project instead of binding this one (see below). Binds no board. |
 | `--yes` | Take the defaults instead of asking. |
-| `--json <fields>`, `--format <format>` | Output, as everywhere. |
+| `--json <fields>`, `--format <format>` | Output, as everywhere. No wizard. |
 
-Without `--instructions` or `--mcp`, `init` asks in an interactive terminal and does neither otherwise. The instruction block sits between `<!-- KANBO_START v2 h=… -->` and `<!-- KANBO_END -->` and is replaced in place on a later run — unless you edited it, in which case `init` asks first (default no) and leaves it alone under `--yes`. An MCP entry named `kanbo` that already exists is left alone, unless it is kanbo's own and no longer starts (see `kanbo connect`). `--instructions` and `--mcp` plan the same changes as `kanbo connect <agent> --project` (`agents` is the `AGENTS.md` Codex and Cursor read).
+The wizard's answers and the equivalent flags plan exactly the same changes. The instruction block sits between `<!-- KANBO_START v2 h=… -->` and `<!-- KANBO_END -->` and is replaced in place on a later run — unless you edited it, in which case `init` asks first (default no) and leaves it alone under `--yes`. An MCP entry named `kanbo` that already exists is left alone, unless it is kanbo's own and no longer starts (see `kanbo connect`). `--instructions` and `--mcp` plan the same changes as `kanbo connect <agent> --project` (`agents` is the `AGENTS.md` Codex and Cursor read).
 
 `--file` together with `--database-url` is refused (exit `1`).
 

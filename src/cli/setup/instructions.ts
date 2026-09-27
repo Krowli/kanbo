@@ -192,18 +192,19 @@ export interface PlannedInstructionBlock {
 export async function planInstructionBlockAsking(
   path: string,
   block: string,
-  options: { yes?: boolean },
+  options: { yes?: boolean, /** How the file is named to the person; the path itself by default. */ label?: string },
 ): Promise<PlannedInstructionBlock> {
   if (readInstructionBlockState(path, block) !== 'edited') {
     return { change: planInstructionBlock(path, block) }
   }
+  const label = options.label ?? path
   const replace = !options.yes && canPrompt() && await getUi().confirm({
-    message: `You changed the kanbo section in ${path}. Replace it with the current one?`,
+    message: `You changed the kanbo section in ${label}. Replace it with the current one?`,
     initialValue: false,
   })
   return replace
     ? { change: planInstructionBlock(path, block) }
-    : { change: { path, next: null }, note: `${path}: you changed the kanbo section, so it was left as it is.` }
+    : { change: { path, next: null }, note: `${label}: you changed the kanbo section, so it was left as it is.` }
 }
 
 /**

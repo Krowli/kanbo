@@ -4,8 +4,18 @@ import { basename, relative, resolve } from 'node:path'
 import type { Command } from 'commander'
 
 import { DEFAULT_BOARD_FILE_PATH } from '../../default-board-file-path'
+import type { ColumnSpec } from '../../domain/column-templates'
+import {
+  COLUMN_TEMPLATE_IDS,
+  COLUMN_TEMPLATES,
+  findCatalogueColumn,
+  hasReadyColumn,
+  ownColumn,
+} from '../../domain/column-templates'
 import { maskDatabaseUrl } from '../../domain/database-url'
+import { isValidCardKey, suggestCardKey } from '../../domain/key-suggestion'
 import type { BoardWorkspaceIdentity } from '../../domain/numbering'
+import { normalizeStatusName } from '../../domain/status-name'
 import { openBoardDatabase } from '../../sqlite/open-database'
 import type { SqliteDatabase } from '../../sqlite/transaction'
 import type { KanboBinding } from '../binding'
@@ -16,16 +26,19 @@ import type { BoardTarget } from '../db-target'
 import { describeTarget, resolveDatabaseUrl, resolveDbTarget, resolveHostDbPath } from '../db-target'
 import type { CliResult } from '../output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
+import type { AgentId } from '../setup/agents'
+import { AGENT_IDS, AGENTS, defaultMcpScope, detectAgents, parseAgentId } from '../setup/agents'
+import { planConnect } from '../setup/connect-plan'
 import type { FileOutcome } from '../setup/file-change'
 import type { AppliedInitPlan, InitFileChange, InitPlan } from '../setup/init-plan'
-import { applyInitPlan, assertOwnBoardFile, describeInitPlan } from '../setup/init-plan'
-import { planConnect } from '../setup/connect-plan'
-import { INSTRUCTION_BLOCK } from '../setup/instructions'
+import { applyInitPlan, assertOwnBoardFile } from '../setup/init-plan'
+import { readLaunchWarning } from '../setup/launch-warning'
 import { mcpLaunchSpec } from '../setup/mcp-launch'
 import type { McpClient, ProjectInstructionTarget } from '../setup/paths'
 import { MCP_CLIENTS } from '../setup/paths'
 import { canPrompt } from '../ui/environment'
-import { getUi } from '../ui/ui'
+import { CancelledError, getUi } from '../ui/ui'
+import { printInitOutro, runInitWizard } from '../wizard/init-wizard'
 import { resolveWorkspace } from '../workspace'
 import { initGlobal } from './init-global'
 
@@ -65,12 +78,20 @@ const FILE_AND_DATABASE_URL_MESSAGE
  * owner. Not a refusal: the board works this way from the first minute, and the
  * rule an agent is missing is one the database keeps, not this command.
  */
-const AGENT_URL_MISSING_WARNING
+export const AGENT_URL_MISSING_WARNING
   = 'kanbo: agents in this project will reach the board with the connection string you gave, which owns it. '
     + 'Until you run "kanbo roles apply" and record the agent role\'s own string with --agent-url, an agent '
     + 'here can approve its own work.'
 
 type InstructionTarget = ProjectInstructionTarget | 'none'
+
+/** What a person is told when the setup stopped at a question. */
+export const INIT_CANCELLED_MESSAGE = 'Cancelled — nothing was written.'
+
+/** What a board set up without its agents ends with. */
+export const CONNECT_LATER_TIP = 'Agents don\'t know about this board yet: kanbo connect <agent>, or kanbo instructions --copy and paste it.'
+
+const CONNECT_VALUES = `${AGENT_IDS.join(', ')}, all or none`
 
 export interface InitOptions extends BoardCommandOptions {
   /** Set up this person's own agent tools for every project, instead of binding this one. */
@@ -88,6 +109,16 @@ export interface InitOptions extends BoardCommandOptions {
    * project root.
    */
   file?: string | boolean
+  /** `--key`: `--identifier`, checked to be a card key and upper-cased. */
+  key?: string
+  /** `--columns`: what a new board starts with; the standard set when not given. */
+  columns?: ColumnSpec[]
+  /** `--connect`: the agents to connect as `kanbo connect` does; empty for none. */
+  connect?: AgentId[]
+  /** `--first-card`: a card to put in To Do once the board is there. */
+  firstCard?: string
+  /** `--migrate`: create the shared board's tables now, as `kanbo migrate` does. */
+  migrate?: boolean
 }
 
 export function registerInitCommand(program: Command): void {
@@ -96,7 +127,7 @@ export function registerInitCommand(program: Command): void {
   // spelled the same as everywhere else.
   program
     .command('init')
-    .description('bind this project to a board, and tell its agents about it')
+    .description('set up a board for this project and connect its agents (a wizard in a terminal)')
     .option('--db <path>', 'host database file to read this project\'s workspace from')
     .option('--database-url <url>', 'external Postgres board to bind this project to')
     .option('--file [path]', `use a board file of this project's own instead of a host database or an `
@@ -106,6 +137,12 @@ export function registerInitCommand(program: Command): void {
     .option('--format <format>', 'output format: json or pretty')
     .option('--board <id>', 'the board inside the workspace, when it has more than one')
     .option('--identifier <key>', 'what this workspace\'s card keys start with, for an external board')
+    .option('--key <KEY>', 'what card numbers start with, e.g. MYA for MYA-001 (the same as --identifier)', parseKey)
+    .option('--columns <columns>', `the columns a new board starts with: ${COLUMN_TEMPLATE_IDS.join(', ')}, or a `
+    + 'comma-separated list that includes To Do', parseColumns)
+    .option('--connect <agents>', `connect these agents, as kanbo connect does: ${CONNECT_VALUES}`, parseConnect)
+    .option('--first-card <title>', 'put a first card in To Do')
+    .option('--migrate', 'create the board\'s tables in the external Postgres database now')
     .option('--agent-url <url>', 'the connection string agents get, when it is not the one above')
     .option('--instructions <file>', 'where to write the instruction block: claude, agents or none; with '
     + '--global, a comma-separated list of claude, codex, gemini, or none')
@@ -122,34 +159,92 @@ export function registerInitCommand(program: Command): void {
         parseInstructions(options.instructions)
       }
       readFormat(options)
-      const plan = await planInit(process.cwd(), options)
-      await confirmInitPlan(plan, options)
-      warnAboutOwnerAccess(plan.target, options)
+      const request = normalizeInitOptions(options)
+      // Machine output wants the result on stdout, not a wizard drawn over it.
+      if (!request.yes && !request.json && !request.format && canPrompt()) {
+        await initWithWizard(request)
+        return
+      }
+      const plan = await planInit(process.cwd(), request)
+      warnAboutOwnerAccess(plan.target, request)
       const applied = await applyInitPlan(plan)
-      printResult(describeInit(plan, applied, options), options)
+      printResult(describeInit(plan, applied, request), request)
     })
+}
+
+/**
+ * `kanbo init` at a person's terminal: the wizard asks what the flags did not
+ * say, shows the plan and asks once; only then is anything written.
+ */
+async function initWithWizard(options: InitOptions): Promise<void> {
+  const ui = getUi()
+  let answered
+  try {
+    answered = await runInitWizard({
+      cwd: process.cwd(),
+      options,
+      ui,
+      plan: planInit,
+      detect: projectDir => detectAgents({ projectDir }),
+      launchWarning: readLaunchWarning(),
+      agentUrlWarning: AGENT_URL_MISSING_WARNING,
+    })
+  }
+  catch (error) {
+    throw error instanceof CancelledError ? new CancelledError(INIT_CANCELLED_MESSAGE) : error
+  }
+  printInitOutro(ui, answered, await applyInitPlan(answered.plan))
+}
+
+/** The flags as `planInit` takes them: `--key` is `--identifier`, and `--connect` does not mix with the older flags. */
+export function normalizeInitOptions(options: InitOptions): InitOptions {
+  if (options.connect && (options.instructions !== undefined || options.mcp)) {
+    throw new CliError(1, 'Use --connect, or the older --instructions and --mcp, not both.')
+  }
+  if (options.key === undefined) {
+    return options
+  }
+  if (options.identifier !== undefined && options.identifier.trim().toUpperCase() !== options.key) {
+    throw new CliError(1, '--key and --identifier are the same thing; pass one of them.')
+  }
+  return { ...options, identifier: options.key }
 }
 
 /**
  * Everything `init` will do, with every question asked — nothing is written
  * here. The board comes first: which one, and which workspace it is about.
  * A board file of the project's own is created only when the plan is applied.
+ *
+ * The wizard's answers come here as the flags that say the same thing, so a
+ * wizard run and the equivalent command line plan exactly the same changes.
  */
-async function planInit(projectDir: string, options: InitOptions): Promise<InitPlan> {
+export async function planInit(projectDir: string, options: InitOptions): Promise<InitPlan> {
   const { target, workspace, boardFile } = await resolveBoard(projectDir, options)
-  const fileChanges = [
-    ...await planInstructions(projectDir, options),
-    ...await planMcpServers(projectDir, await askMcpClientsUnlessGiven(options)),
-  ]
+  const migrate = target.kind === 'postgres' && Boolean(options.migrate)
+  const newBoard = (boardFile !== null && !boardFile.exists) || migrate
   return {
     projectDir,
     target,
     workspace,
     binding: buildBinding(projectDir, target, workspace, options),
     boardFile,
-    ...(boardFile && !boardFile.exists ? { columns: 'default' as const } : {}),
-    fileChanges,
+    columns: newBoard ? options.columns ?? COLUMN_TEMPLATES.standard : null,
+    migrate,
+    fileChanges: [
+      ...await planInstructions(projectDir, options),
+      ...await planMcpServers(projectDir, options.mcp ?? []),
+    ],
+    connect: options.connect?.length ? await planAgents(projectDir, options.connect, options) : null,
+    firstCard: options.firstCard?.trim() || null,
   }
+}
+
+/** Connect these agents the way `kanbo connect <agents>` does: the kanbo section in the project, the MCP server where each agent reads it. */
+async function planAgents(projectDir: string, agents: AgentId[], options: InitOptions): Promise<InitPlan['connect']> {
+  return await planConnect(
+    agents.map(agent => ({ agent, instructions: 'project', mcp: defaultMcpScope(agent) })),
+    { projectDir, yes: options.yes },
+  )
 }
 
 /** The board this project is bound to, and the workspace on it. */
@@ -239,22 +334,6 @@ function resolveOwnFile(projectDir: string, options: InitOptions): Pick<InitPlan
     target: { kind: 'sqlite', path: absolutePath, owner: 'kanbo' },
     workspace,
     boardFile: { path: absolutePath, exists },
-  }
-}
-
-/**
- * Show the plan to a person at a terminal and ask once. `--yes`, or a shell
- * nobody is at, goes ahead without asking — the questions that decide what is
- * written into a person's own files were not asked there either.
- */
-async function confirmInitPlan(plan: InitPlan, options: InitOptions): Promise<void> {
-  if (options.yes || !canPrompt()) {
-    return
-  }
-  const print = options.json || options.format ? console.error : console.log
-  print(describeInitPlan(plan))
-  if (!await getUi().confirm({ message: 'Make these changes?', initialValue: true })) {
-    throw new CliError(1, 'Nothing was changed.')
   }
 }
 
@@ -365,7 +444,8 @@ async function resolveExternalWorkspace(projectDir: string, options: InitOptions
  * nothing else installed, so there is nothing to refuse about it and nothing to
  * look up: what the person typed wins, then the id this project is already
  * bound to, and failing both the folder's own name, slugged, stands in for the
- * id and for the card-key stem `readIssuePrefix` derives from it.
+ * id — and `suggestCardKey` of that name for the card key of a workspace that
+ * has none yet.
  *
  * The binding comes second rather than last because the id in it is the id the
  * cards in the file are already numbered under — a second `init` that fell back
@@ -381,12 +461,12 @@ function resolveOwnFileWorkspace(projectDir: string, options: InitOptions): Boar
   const slug = deriveProjectSlug(projectDir)
   const id = options.workspace?.trim() || bound?.workspaceId.trim() || slug
   const boundIdentifier = id === bound?.workspaceId.trim() ? bound.identifier?.trim() : null
-  const identifier = options.identifier?.trim() || boundIdentifier || slug
+  const identifier = options.identifier?.trim() || boundIdentifier || suggestCardKey(basename(resolve(projectDir)))
   return { id, identifier, name: identifier }
 }
 
-/** A workspace id and card-key stem from the project folder's own name, for the machine with nothing else to ask. */
-function deriveProjectSlug(projectDir: string): string {
+/** A workspace id from the project folder's own name, for the machine with nothing else to ask. */
+export function deriveProjectSlug(projectDir: string): string {
   const slug = basename(resolve(projectDir)).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
   return slug || 'project'
 }
@@ -454,15 +534,12 @@ function warnAboutOwnerAccess(target: BoardTarget, options: InitOptions): void {
 }
 
 /**
- * The block in the file the caller named — or, when they named none, show them
- * what it says and ask.
- *
- * A shell that is nobody's terminal is never asked anything: an `init` in a
- * script prints the block and stops there, because writing into a project's
- * instructions is the kind of thing a person says yes to.
+ * The block in the file `--instructions` named. Without the flag nothing is
+ * written into a project's instructions: that is `--connect`, the wizard, or
+ * `kanbo connect` later.
  */
 async function planInstructions(projectDir: string, options: InitOptions): Promise<InitFileChange[]> {
-  const target = options.instructions === undefined ? await askInstructionTarget(options) : parseInstructions(options.instructions)
+  const target = options.instructions === undefined ? 'none' : parseInstructions(options.instructions)
   if (target === 'none') {
     return []
   }
@@ -473,33 +550,6 @@ async function planInstructions(projectDir: string, options: InitOptions): Promi
     console.error(note)
   }
   return plan.items.flatMap(item => (item.kind === 'instructions' ? [{ kind: 'instructions' as const, change: item.change }] : []))
-}
-
-async function askInstructionTarget(options: InitOptions): Promise<InstructionTarget> {
-  showBlock(options)
-  if (options.yes || !canPrompt()) {
-    return 'none'
-  }
-
-  return await getUi().select<InstructionTarget>({
-    message: 'Add this block to the project\'s agent instructions?',
-    options: [
-      { value: 'claude' as const, label: 'CLAUDE.md' },
-      { value: 'agents' as const, label: 'AGENTS.md' },
-      { value: 'none' as const, label: 'Neither — I will paste it myself' },
-    ],
-  })
-}
-
-/**
- * Show the block to whoever is about to decide where it goes — unless the
- * caller asked for machine output, in which case stdout belongs to the result
- * and nothing else may be written there, prompt or no prompt.
- */
-function showBlock(options: InitOptions): void {
-  if (!options.json && !options.format) {
-    console.log(`${INSTRUCTION_BLOCK}\n`)
-  }
 }
 
 /**
@@ -518,26 +568,7 @@ async function planMcpServers(projectDir: string, clients: McpClient[]): Promise
   return plan.items.flatMap(item => (item.kind === 'mcp' ? [{ kind: 'mcp' as const, change: item.change }] : []))
 }
 
-async function askMcpClientsUnlessGiven(options: InitOptions): Promise<McpClient[]> {
-  if (options.mcp) {
-    return options.mcp
-  }
-  if (options.yes || !canPrompt()) {
-    return []
-  }
-
-  return await getUi().multiselect<McpClient>({
-    message: 'Register the board\'s MCP server with which tools?',
-    options: [
-      { value: 'claude' as const, label: 'Claude Code (.mcp.json)' },
-      { value: 'codex' as const, label: 'Codex (.codex/config.toml)' },
-      { value: 'cursor' as const, label: 'Cursor (.cursor/mcp.json)' },
-    ],
-    required: false,
-  })
-}
-
-function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: InitOptions): CliResult {
+export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: InitOptions): CliResult {
   const { workspace, target } = plan
   const outcome = ({ path, state }: FileOutcome): FileOutcome => ({ path, state })
   const instructions = applied.files.filter(file => file.kind === 'instructions').map(outcome)[0] ?? null
@@ -550,15 +581,38 @@ function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: InitOpt
   else if (target.owner === 'kanbo') {
     lines.push(`Board file: ${target.path}`)
   }
+  if (applied.columns.length > 0) {
+    lines.push(`Columns: ${applied.columns.join(', ')}`)
+  }
   if (instructions) {
     lines.push(`Instructions: ${instructions.path} (${instructions.state})`)
   }
   for (const entry of mcp) {
     lines.push(`MCP: ${entry.path} (${entry.state})`)
   }
+  for (const entry of applied.connect) {
+    const who = entry.agents.map(agent => AGENTS[agent].label).join(', ')
+    lines.push(entry.state === 'manual'
+      ? `${who}: run this yourself: ${entry.command} (${entry.reason})`
+      : `${who}: ${entry.path} (${entry.state === 'ran' ? `ran ${entry.command}` : entry.state})`)
+  }
+  if (applied.firstCard) {
+    lines.push(`First card: ${applied.firstCard.id} ${applied.firstCard.title}`)
+  }
   const warning = mcp.length > 0 ? mcpLaunchSpec({ scope: 'project' }).warning : undefined
   if (warning) {
     lines.push(`Note: ${warning}`)
+  }
+  for (const note of plan.connect?.notes ?? []) {
+    lines.push(`Note: ${note}`)
+  }
+  const connected = instructions !== null || mcp.length > 0 || applied.connect.length > 0
+  const launchWarning = connected ? readLaunchWarning() : null
+  if (launchWarning) {
+    lines.push(`Note: ${launchWarning}`)
+  }
+  if (!connected) {
+    lines.push(CONNECT_LATER_TIP)
   }
 
   return {
@@ -569,6 +623,9 @@ function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: InitOpt
       database: describeTarget(target),
       instructions,
       mcp,
+      columns: applied.columns,
+      connect: applied.connect,
+      firstCard: applied.firstCard,
     },
     text: lines.join('\n'),
   }
@@ -589,4 +646,55 @@ function parseMcpClients(value: string): McpClient[] {
     }
     return client
   })
+}
+
+/** `--key`: a letter and two letters or digits, upper-cased. */
+function parseKey(value: string): string {
+  if (!isValidCardKey(value)) {
+    throw new CliError(1, `"${value}" can't be a card key: use a letter and two letters or digits, like MYA.`)
+  }
+  return value.trim().toUpperCase()
+}
+
+/**
+ * `--columns`: a template by name, or the columns in board order — each a
+ * ready-made one (`QA`, `Blocked`, …) or a name of the person's own. To Do has
+ * to be there: agents take their work from it.
+ */
+export function parseColumns(value: string): ColumnSpec[] {
+  const template = COLUMN_TEMPLATE_IDS.find(id => id === value.trim().toLowerCase())
+  if (template) {
+    return [...COLUMN_TEMPLATES[template]]
+  }
+  const names = value.split(',').map(name => name.trim()).filter(Boolean)
+  const columns = names.map(name => findCatalogueColumn(name) ?? ownColumn(name, null))
+  const slugs = columns.map(column => normalizeStatusName(column.name))
+  const repeated = slugs.find((slug, index) => slugs.indexOf(slug) !== index)
+  if (repeated) {
+    throw new CliError(1, `The column "${columns[slugs.indexOf(repeated)]!.name}" is named twice in --columns.`)
+  }
+  if (!hasReadyColumn(columns)) {
+    throw new CliError(1, `--columns needs To Do: agents take their work from it. Use ${COLUMN_TEMPLATE_IDS.join(', ')}, `
+      + 'or a list like "To Do, In Progress, Done".')
+  }
+  return columns
+}
+
+/** `--connect`: agents by name, `all`, or `none`. */
+function parseConnect(value: string): AgentId[] {
+  const names = value.split(',').map(name => name.trim().toLowerCase()).filter(Boolean)
+  if (names.length === 1 && names[0] === 'none') {
+    return []
+  }
+  const agents = names.flatMap((name) => {
+    if (name === 'all') {
+      return [...AGENT_IDS]
+    }
+    const agent = parseAgentId(name)
+    if (!agent) {
+      throw new CliError(1, `Unknown agent "${name}" in --connect. Use ${CONNECT_VALUES}.`)
+    }
+    return [agent]
+  })
+  return [...new Set(agents)]
 }

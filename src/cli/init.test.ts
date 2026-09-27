@@ -6,6 +6,7 @@ import SqliteDriver from 'better-sqlite3'
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { suggestCardKey } from '../domain/key-suggestion'
 import { assertBoardSchema, openBoardDatabase, readBoardFileOwner } from '../sqlite/open-database'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
@@ -411,7 +412,7 @@ describe('kanbo init', () => {
       }
     })
 
-    it('writes the binding\'s dbPath, and — with no host database — a workspace and key slugged from the folder name', async () => {
+    it('writes the binding\'s dbPath, and — with no host database — a workspace slugged from the folder name and the key suggested from it', async () => {
       await runFile([])
 
       // mkdtempSync's own suffix may carry uppercase characters; the slug does not.
@@ -421,7 +422,7 @@ describe('kanbo init', () => {
         workspaceId: slug,
         boardId: null,
         dbPath: join('.kanbo', 'board.db'),
-        identifier: slug,
+        identifier: suggestCardKey(basename(projectDir)),
       })
     })
 
@@ -503,10 +504,9 @@ describe('kanbo init', () => {
       await runFile(['--workspace', WORKSPACE_ID])
 
       expect(hostLookups.count).toBe(0)
-      const slug = basename(projectDir).toLowerCase()
       expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toEqual(expect.objectContaining({
         workspaceId: WORKSPACE_ID,
-        identifier: slug,
+        identifier: suggestCardKey(basename(projectDir)),
       }))
     })
 

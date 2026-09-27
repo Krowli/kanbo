@@ -1,6 +1,6 @@
 import type { Readable, Writable } from 'node:stream'
 
-import type { ConfirmOptions, MultiSelectOptions, SelectOptions } from '@clack/prompts'
+import type { ConfirmOptions, MultiSelectOptions, PasswordOptions, SelectOptions, TextOptions } from '@clack/prompts'
 
 import { CliError } from '../output'
 
@@ -19,8 +19,8 @@ import { CliError } from '../output'
 
 /** The person stopped the command at a prompt. */
 export class CancelledError extends CliError {
-  constructor() {
-    super(1, 'Cancelled.')
+  constructor(message = 'Cancelled.') {
+    super(1, message)
     this.name = 'CancelledError'
   }
 }
@@ -37,6 +37,10 @@ export interface Ui {
   /** Nothing picked is an answer unless the question says `required: true`. */
   multiselect: <T extends string>(question: Question<MultiSelectOptions<T>>) => Promise<T[]>
   confirm: (question: Question<ConfirmOptions>) => Promise<boolean>
+  /** One line of text; an empty answer is the question's `defaultValue`, or `''`. */
+  text: (question: Question<TextOptions>) => Promise<string>
+  /** The same, with what is typed hidden. */
+  password: (question: Question<PasswordOptions>) => Promise<string>
 }
 
 /** A `Ui` over these streams — the process's own terminal when none are given. */
@@ -59,6 +63,14 @@ export function createUi(streams: { input?: Readable, output?: Writable } = {}):
     async confirm(question) {
       const prompts = await import('@clack/prompts')
       return answered(prompts, await prompts.confirm({ ...io, ...question }))
+    },
+    async text(question) {
+      const prompts = await import('@clack/prompts')
+      return answered(prompts, await prompts.text({ ...io, ...question })) ?? ''
+    },
+    async password(question) {
+      const prompts = await import('@clack/prompts')
+      return answered(prompts, await prompts.password({ ...io, ...question })) ?? ''
     },
   }
 }

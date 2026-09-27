@@ -21,6 +21,7 @@ import { createTestPostgresDatabase } from '../testing/postgres-database'
 import { writeBinding } from './binding'
 import { registerApproveCommand } from './commands/approve'
 import { registerCardCommands } from './commands/card'
+import { registerInitCommand } from './commands/init'
 import { BOARD_FILE_NOT_MIGRATED_MESSAGE, registerMigrateCommand } from './commands/migrate'
 import { registerRolesCommands, ROLES_NEED_A_DATABASE_MESSAGE } from './commands/roles'
 import type { OpenPostgresBoard } from './postgres-board'
@@ -137,6 +138,7 @@ describe('the command line on an external board', () => {
     })
     const program = new Command().exitOverride()
     registerCardCommands(program)
+    registerInitCommand(program)
     registerApproveCommand(program)
     registerMigrateCommand(program)
     registerRolesCommands(program)
@@ -216,6 +218,23 @@ describe('the command line on an external board', () => {
     expect(first).toContain('postgres://user:***@board.example:5432/board')
     expect(first).not.toContain('secret')
     expect(JSON.parse(await run(['card', 'list', '--json', 'id']))).toEqual([])
+  })
+
+  it('init --migrate creates the tables, puts the chosen columns on the board, and its first card in To Do', async () => {
+    board = await createEmptyPostgresDatabase()
+    serve(board)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    const printed = await runExactly([
+      'init', '--yes', '--database-url', DATABASE_URL, '--workspace', 'weather', '--key', 'WEA',
+      '--migrate', '--columns', 'simple', '--first-card', 'Calibrate the sensors',
+    ])
+
+    expect(printed).toContain('Columns: To Do, In Progress, Done')
+    expect(printed).toContain('First card: WEA-001 Calibrate the sensors')
+    const store = createPostgresBoardStore({ database: board.database })
+    expect((await store.statuses.listByWorkspace('weather')).map(column => column.name)).toEqual(['To Do', 'In Progress', 'Done'])
+    expect(JSON.parse(await run(['card', 'list', '--json', 'id,column']))).toEqual([{ id: 'WEA-001', column: 'To Do' }])
   })
 
   it('refuses both of its own commands on a board file, which is a host app\'s to look after', async () => {
