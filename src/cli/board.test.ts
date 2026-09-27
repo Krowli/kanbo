@@ -12,7 +12,9 @@ import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import { registerBoardCommand } from './commands/board'
+import { registerCardCommands } from './commands/card'
 import { describeFailure } from './failure'
+import { displayWidth } from './terminal-text'
 
 const WORKSPACE: BoardWorkspaceIdentity = { id: 'workspace', identifier: 'WOR', name: 'Workspace' }
 const USER: BoardActor = { kind: 'user', id: '__self__' }
@@ -82,6 +84,7 @@ describe('kanbo board', () => {
   async function kanbo(...args: string[]): Promise<unknown> {
     const program = new Command().exitOverride()
     registerBoardCommand(program)
+    registerCardCommands(program)
     return await program
       .parseAsync([...args, '--db', board.path, '--workspace', WORKSPACE.id], { from: 'user' })
       .then(() => null, (error: unknown) => error)
@@ -158,6 +161,49 @@ describe('kanbo board', () => {
 
     const outcome = await kanbo('board', '--column', 'nowhere')
     expect(describeFailure(outcome).message).toBe('This board has no column "nowhere". See kanbo columns list.')
+  })
+
+  it('fits CJK and emoji titles and a long heading by the columns they take, and prints no escape sequence it was given', async () => {
+    const ops = createBoardOps(store)
+    const backlog = `Backlog ${'很长的列名'.repeat(8)}`
+    await ops.renameColumn(WORKSPACE.id, 'backlog', backlog, USER)
+    await ops.createCard({ workspace: WORKSPACE, title: '漢字のタイトル'.repeat(8), statusName: backlog }, USER)
+    await ops.createCard({ workspace: WORKSPACE, title: `Ship it ${'👨‍👩‍👧🚀'.repeat(20)}`, statusName: backlog }, USER)
+    const hostile = await ops.createCard({ workspace: WORKSPACE, title: 'Evil \u001B]0;pwned\u0007title \u001B[2J\u009B31m', statusName: backlog }, USER)
+    await ops.setStatusLine(hostile.id, 'line \u001B[31mred\u001B[0m\u0000', AGENT)
+    atWidth(50)
+
+    expect(await kanbo('board')).toBeNull()
+
+    for (const line of output().split('\n')) {
+      expect(displayWidth(line), line).toBeLessThan(50)
+      expect(line).not.toMatch(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/)
+    }
+    expect(output()).toContain('Backlog 很长的列名')
+    expect(output()).toContain('Evil title')
+    expect(output()).toContain('line red')
+    // Cut between whole emoji, not inside the family.
+    const shipLine = output().split('\n').find(line => line.includes('Ship it'))!
+    expect(shipLine.endsWith('…')).toBe(true)
+    expect(shipLine).not.toMatch(/\u200D…/)
+  })
+
+  it('prints no escape sequence a card carries in card list and card get', async () => {
+    const card = await createBoardOps(store).createCard({
+      workspace: WORKSPACE,
+      title: 'Evil \u001B]0;pwned\u0007title',
+      description: 'first\n\u001B[2Jsecond',
+      statusName: 'To Do',
+    }, USER)
+    await createBoardOps(store).setStatusLine(card.id, 'on \u001B[31mit', AGENT)
+
+    expect(await kanbo('card', 'list')).toBeNull()
+    expect(await kanbo('card', 'get', card.id)).toBeNull()
+
+    expect(output()).not.toMatch(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/)
+    expect(output()).toContain('Evil title')
+    expect(output()).toContain('first\nsecond')
+    expect(output()).toContain('status line: on it')
   })
 
   it('shows Canceled once it holds a card', async () => {

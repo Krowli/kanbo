@@ -24,7 +24,9 @@ export interface BoardErrorResponse {
  * because the answer would have been yes a moment earlier. An agent putting a
  * card in a column whose entry rules it does not meet yet is 409 for the same
  * reason turned around: the answer will be yes once the card meets them, and
- * `details.unmet` says what is missing.
+ * `details.unmet` says what is missing. Deleting a column that still holds
+ * cards is 409 too: it can be done once they are moved, and
+ * `details.cardCount` says how many there are.
  *
  * A failure may also be renamed here: the package names its codes after the
  * board, while every error the `/issues` routes answer with is named after the
@@ -34,7 +36,7 @@ export interface BoardErrorResponse {
 export const BOARD_ERROR_RESPONSES: Record<BoardErrorCode, BoardErrorResponse> = {
   board_approval_requires_user: { status: 403, message: 'Only a person can approve a card', code: 'issue_approval_requires_user' },
   board_column_name_taken: { status: 400, message: 'Another column already has that name' },
-  board_column_not_empty: { status: 400, message: 'The column still holds cards: say which column they move to' },
+  board_column_not_empty: { status: 409, message: 'The column still holds cards: say which column they move to' },
   board_column_ready_protected: { status: 400, message: 'To Do is where agents take work from: it cannot be renamed or removed' },
   board_column_remove_target_invalid: { status: 400, message: 'Cards cannot move into the column being removed' },
   board_column_rules_requires_user: { status: 403, message: 'Only a person can set what a column asks of a card', code: 'issue_column_rules_requires_user' },

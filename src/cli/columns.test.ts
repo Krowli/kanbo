@@ -8,7 +8,7 @@ import type { BoardStore } from '../board-store'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { createCard } from '../ops/cards'
 import { readChangeSeq } from '../ops/change-seq'
-import { ensureDefaultColumns, listColumns } from '../ops/columns'
+import { ensureDefaultColumns, listColumns, setColumnEntryRules } from '../ops/columns'
 import type { BoardActor } from '../ops/types'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { TestBoardDatabase } from '../testing/board-database'
@@ -125,8 +125,13 @@ describe('kanbo columns', () => {
       expect((await listColumns(store, WORKSPACE.id))[4]).toMatchObject({ description: 'Being tested before it counts as done', category: 'started' })
     })
 
-    it('puts a column before the one named', async () => {
+    it('puts a column before the one named, in one board change', async () => {
+      const before = await readChangeSeq(store)
+
       expect(await kanbo('columns', 'add', 'Blocked', '--before', 'in-progress')).toBeNull()
+
+      expect(await readChangeSeq(store)).toBe(before + 1)
+      expect((await listColumns(store, WORKSPACE.id)).map(column => column.order)).toEqual([0, 1, 2, 3, 4, 5, 6])
 
       expect(await names()).toEqual(['Backlog', 'To Do', 'Blocked', 'In Progress', 'In Review', 'Done', 'Canceled'])
     })
@@ -154,7 +159,8 @@ describe('kanbo columns', () => {
 
       expect(await names()).toEqual(['Backlog', 'To Do', 'In Progress', 'Code Review', 'Done', 'Canceled'])
       expect(await columnOf(card!)).toBe('Code Review')
-      expect(printed.join('\n')).toContain('Renamed In Review to Code Review (slug code_review).')
+      expect(printed.join('\n')).toContain('Renamed In Review to Code Review (slug code_review).\n'
+        + 'Agents read column names from kanbo prime; rename is picked up there.')
     })
 
     it('refuses a name another column answers to', async () => {
@@ -224,6 +230,16 @@ describe('kanbo columns', () => {
       expect(await columnOf(cards[0]!)).toBe('In Progress')
       expect(await columnOf(cards[1]!)).toBe('In Progress')
       expect(printed.join('\n')).toContain('Removed In Review and moved 2 cards to In Progress.')
+    })
+
+    it('warns about each moved card that enters a column without meeting its rules, as card move does', async () => {
+      const [card] = await addCards('In Review', 1)
+      await setColumnEntryRules(store, WORKSPACE.id, 'done', ['pull_request_linked'], USER)
+
+      expect(await kanbo('columns', 'remove', 'in_review', '--move-cards-to', 'done')).toBeNull()
+
+      expect(await columnOf(card!)).toBe('Done')
+      expect(printed.join('\n')).toMatch(new RegExp(`kanbo: warning: ${card} entered "Done" without pull_request_linked: `))
     })
 
     it('never removes To Do', async () => {
@@ -363,5 +379,24 @@ describe('kanbo columns', () => {
     expect((await listColumns(store, WORKSPACE.id))[4]).toMatchObject({ description: 'Tested by a person' })
     const transcript = driver.transcript().split('\n').map(line => line.trimEnd()).join('\n')
     await expect(`${transcript}\n--- exit 0\n`).toMatchFileSnapshot(join(__dirname, '__golden__', 'columns-menu.txt'))
+  })
+
+  it('says there is nothing to remove when To Do is the only column, and goes back to the menu', async () => {
+    for (const column of await listColumns(store, WORKSPACE.id)) {
+      if (column.name !== 'To Do') {
+        await store.statuses.delete(column.id)
+      }
+    }
+    atTerminal()
+
+    const running = kanbo('columns')
+    await driver.waitFor('What would you like to change?')
+    driver.press('down', 'down', 'down', 'enter') // Remove a column
+    await driver.waitFor('Nothing to remove — To Do always stays.')
+    await driver.waitFor('What would you like to change?')
+    driver.press('up', 'enter') // Done
+
+    expect(await running).toBeNull()
+    expect(await names()).toEqual(['To Do'])
   })
 })

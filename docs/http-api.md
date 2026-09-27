@@ -49,13 +49,13 @@ Nothing secret is logged: never a token, a header or a connection string.
 
 Every write is filed as `external`, under `KANBO_ACTOR_ID` or the user who started the server — the same actor the `kanbo` command writes as.
 
-Approving, returning, closing a sprint, setting a column's entry rules, deleting a comment the board wrote, removing a pull request link somebody else made and deleting a card are a person's. A request acts for the person who started the server only when **all** of these hold:
+Approving, returning, closing a sprint, changing the columns (creating, renaming, deleting, reordering, adding the standard ones), setting a column's entry rules, deleting a comment the board wrote, removing a pull request link somebody else made and deleting a card are a person's. A request acts for the person who started the server only when **all** of these hold:
 
 - the server has a token and the request presented it;
 - the server was not started from an agent's shell (`KANBO_ACTOR_KIND=agent`);
 - the request did not send `x-kanbo-actor: agent` (any comma-separated value `agent`, any case). No header value can *raise* a request.
 
-Otherwise those operations answer `403` (`issue_approval_requires_user`, `issue_return_requires_user`, `issue_sprint_close_requires_user`, `issue_column_rules_requires_user`, `issue_comment_delete_requires_user`, `issue_pull_request_not_yours`, `issue_delete_requires_user`). A person's card placements into a column whose entry rules are unmet succeed and carry `unmetRules`; anyone else's are refused.
+Otherwise those operations answer `403` (`issue_approval_requires_user`, `issue_return_requires_user`, `issue_sprint_close_requires_user`, `issue_column_structure_requires_user`, `issue_column_rules_requires_user`, `issue_comment_delete_requires_user`, `issue_pull_request_not_yours`, `issue_delete_requires_user`). A person's card placements into a column whose entry rules are unmet succeed and carry `unmetRules`; anyone else's are refused.
 
 An agent that talks to the server should send `x-kanbo-actor: agent` and should not be given the token.
 
@@ -92,7 +92,8 @@ All routes are under `/issues`. A card is addressed by its key (`API-001`). A `w
 | `GET /issues/:id/runs` · `POST /issues/:id/runs` | List and start runs. |
 | `PATCH /issues/runs/:runId` | Finish a run or attach what it ran in. |
 | `GET /issues/statuses` · `POST /issues/statuses` | List and create columns. |
-| `PATCH /issues/statuses/:id` · `DELETE /issues/statuses/:id` | Update (name, description, entry rules) and delete a column. |
+| `PATCH /issues/statuses/:id` | Update a column's name, description, colour or entry rules. A new name follows `kanbo columns rename`: its slug may not be another column's (`400 board_column_name_taken`), and To Do keeps the slug `to_do` (`400 board_column_ready_protected`). |
+| `DELETE /issues/statuses/:id` | Remove a column. A column holding cards needs `moveCardsTo` (a column's id or name, in the body or the query): its cards move there in the same write, otherwise `409 board_column_not_empty` with `details.cardCount`. To Do is never removed. Answers `{ ok, movedCards, unmetRules? }`. |
 | `POST /issues/statuses/reorder` | Reorder columns. |
 | `POST /issues/statuses/standard` | Add the missing standard columns. |
 | `GET /issues/columns` | Columns of the workspaces in `workspaceIds`. |

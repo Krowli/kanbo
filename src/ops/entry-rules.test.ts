@@ -66,7 +66,6 @@ describe.each(BOARD_STORE_FACTORIES)('column entry rules on $name', (factory) =>
       async () => await setColumnEntryRules(store, WORKSPACE.id, 'In Review', null, actor),
       async () => await updateColumn(store, column.id, { entryRules: [] }, actor),
       async () => await updateColumn(store, column.id, { entryRules: ['ci_green'] }, actor),
-      async () => await createColumn(store, { workspaceId: WORKSPACE.id, name: 'QA', entryRules: ['ci_green'] }, actor),
     ]) {
       const failure = await refusal(attempt)
       expect(failure.code).toBe('board_column_rules_requires_user')
@@ -75,9 +74,13 @@ describe.each(BOARD_STORE_FACTORIES)('column entry rules on $name', (factory) =>
 
     expect(await readChangeSeq(store)).toBe(version)
     expect((await requireColumn(store, WORKSPACE.id, 'In Review')).entryRules).toBe('["approved"]')
-    // Anything else about a column stays open to them, and a new column asking nothing is fine.
+    // A column's description stays open to them; adding a column at all is a
+    // person's change to the board's structure, rules or none.
     expect((await updateColumn(store, column.id, { description: 'Checked' }, actor)).entryRules).toBe('["approved"]')
-    expect((await createColumn(store, { workspaceId: WORKSPACE.id, name: 'QA', entryRules: null }, actor)).entryRules).toBeNull()
+    for (const entryRules of [['ci_green'], null]) {
+      const failure = await refusal(async () => await createColumn(store, { workspaceId: WORKSPACE.id, name: 'QA', entryRules }, actor))
+      expect(failure.code).toBe('board_column_structure_requires_user')
+    }
   })
 
   it('refuses an unknown rule before writing anything', async () => {

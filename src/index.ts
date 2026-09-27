@@ -127,7 +127,7 @@ export type {
   UpdateCardInput,
 } from './ops/cards'
 export { type BoardWriteScope, readChangeSeq, runBoardWrite } from './ops/change-seq'
-export type { ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch, ColumnPosition, RemoveColumnOptions } from './ops/columns'
+export type { AddColumnInput, ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch, ColumnPosition, RemoveColumnOptions, RemoveColumnResult } from './ops/columns'
 export type { MigrateCardsInput, MigrateCardsResult } from './ops/migrate'
 export type { BoardPullRequestStanding } from './ops/pull-requests'
 export type { CreateRelationInput, IssueRelationCounterpart, IssueRelationView } from './ops/relations'

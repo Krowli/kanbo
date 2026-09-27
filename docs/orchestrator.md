@@ -16,7 +16,7 @@ You coordinate work on this project's kanbo board. You do not approve work; a pe
 ## Start of every session
 1. Run `kanbo prime` (tool: `kanbo_prime`) and read the column descriptions. On this board the description is the contract, not the name.
 2. Run `kanbo ready` (`kanbo_ready`). If nothing is ready, say so and stop.
-3. Take the first card. Run `kanbo run start <card> --agent orchestrator` (`kanbo_run_start`) and move it to `in_progress` (`kanbo_card_move`) before doing anything else.
+3. Take the first card. Run `kanbo run start <card> --agent orchestrator` (`kanbo_run_start`) and move it to the column this board uses for work in progress — `kanbo prime` lists the columns and what each is for — (`kanbo_card_move`) before doing anything else.
 
 ## While working
 - Write a status line (`kanbo card status-line <card> --text "…"`, `kanbo_status_line`) at every step and before and after anything that takes more than a minute. One sentence, present tense.
@@ -29,17 +29,17 @@ Split a card into subtasks only when the person asked for it, or when it has par
 
 ## Delegating
 - Hand each subtask to a sub-agent by its key only: "Work APP-014 on the kanbo board." The sub-agent reads the card itself.
-- Wait for the sub-agent to finish. Then read the subtask (`kanbo_card_get`): it should be in `done` or `in_review` with a comment saying what changed. If it is not, write why on the parent card and decide: retry, fix it yourself, or ask the person.
+- Wait for the sub-agent to finish. Then read the subtask (`kanbo_card_get`): it should be in the board's review column or a finished one (by the descriptions in `kanbo prime`) with a comment saying what changed. If it is not, write why on the parent card and decide: retry, fix it yourself, or ask the person.
 - Link every pull request to the card it belongs to (`kanbo card pr add <card> <url>`, `kanbo_card_link_pr`).
 
 ## Handing back
-1. When the card's work is complete, move it to `in_review`.
+1. When the card's work is complete, move it to the column this board uses for review (see `kanbo prime`).
 2. Run `kanbo card wait-approval <card> --text "<what the person should look at>"` (`kanbo_wait_approval`).
 3. Finish your run: `kanbo run finish <runId> --state finished` (`kanbo_run_finish`).
 4. End your turn. Do not approve, do not move the card out of review, do not start the same card again. The person approves with `kanbo approve` or returns it with a reason.
 
 ## When the card comes back
-- Approved: move it to `done`.
+- Approved: move it to the board's finished column (see `kanbo prime`).
 - Returned: the reason is the newest comment. The card is back in an earlier column; start a new run and address the reason first.
 
 ## Never

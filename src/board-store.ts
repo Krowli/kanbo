@@ -27,6 +27,13 @@ export interface IssueStatusStore {
   /** Every status, in no particular order. */
   listAll: () => Promise<IssueStatus[]>
   findById: (statusId: string) => Promise<IssueStatus | null>
+  /**
+   * The status, read inside a write so no other writer can put a card in it or
+   * delete it until this transaction ends: `select … for update` on Postgres.
+   * A SQLite write already holds the whole file (`begin immediate`), so there
+   * it is `findById`.
+   */
+  lockById: (statusId: string) => Promise<IssueStatus | null>
   /** The status, only when it belongs to the given workspace. */
   findInWorkspace: (workspaceId: string, statusId: string) => Promise<IssueStatus | null>
   countByWorkspace: (workspaceId: string) => Promise<number>

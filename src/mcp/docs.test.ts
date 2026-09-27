@@ -145,4 +145,10 @@ describe('docs/orchestrator.md', () => {
       expect(ORCHESTRATOR_GUIDE, action).toContain(`\`kanbo ${action}\``)
     }
   })
+
+  it('names no column but To Do by its slug: a board\'s other columns are its own, and kanbo prime says what they are', () => {
+    for (const slug of ['backlog', 'in_progress', 'in_review', 'done', 'canceled']) {
+      expect(ORCHESTRATOR_GUIDE, slug).not.toMatch(new RegExp(`\`${slug}\``))
+    }
+  })
 })

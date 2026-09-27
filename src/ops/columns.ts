@@ -3,11 +3,12 @@ import { randomUUID } from 'node:crypto'
 import type { BoardStore } from '../board-store'
 import type { ColumnSpec } from '../domain/column-templates'
 import { READY_COLUMN_SLUG } from '../domain/column-templates'
+import type { UnmetEntryRule } from '../domain/entry-rules'
 import { serializeEntryRules } from '../domain/entry-rules'
 import { BoardError } from '../domain/errors'
 import { DEFAULT_STATUSES, normalizeStatusName } from '../domain/status-name'
 import { currentUnixSeconds } from '../domain/time'
-import type { IssueStatus, issueStatuses } from '../sqlite/schema'
+import type { Issue, IssueStatus, issueStatuses } from '../sqlite/schema'
 import { bulkUpdateCards } from './card-batch'
 import type { BoardWriteScope } from './change-seq'
 import { runBoardWrite } from './change-seq'
@@ -155,22 +156,40 @@ function assertPersonChangesColumns(actor: BoardActor, details: Record<string, u
   }
 }
 
+/**
+ * Add a column at the end of the board. Only a person changes the board's
+ * structure; an actor that is not one is refused before anything is written.
+ * The name follows the rules `renameColumn` holds a new name to: not empty,
+ * and no other column of the workspace answering to its slug.
+ */
 export async function createColumn<TStore extends BoardStore>(
   store: TStore,
   input: BoardColumnInput,
   actor: BoardActor,
   scope?: BoardWriteScope<TStore>,
 ): Promise<IssueStatus> {
+  assertPersonChangesColumns(actor, { workspaceId: input.workspaceId, name: input.name })
   if (serializeEntryRules(input.entryRules ?? null) !== null) {
     assertPersonSetsEntryRules(actor, { workspaceId: input.workspaceId, name: input.name })
   }
+  const name = requireColumnName(input.name, input.workspaceId)
   return await runBoardWrite(store, async ({ tx }) => {
-    // New columns land at the end of the board.
-    const order = await tx.statuses.countByWorkspace(input.workspaceId)
-    return await insertColumn(tx, input, order)
+    const columns = await listColumns(tx, input.workspaceId)
+    assertNameFree(columns, null, name, input.workspaceId)
+    // New columns land at the end of the board: one past the last, so a board
+    // whose orders have gaps still gets a column no other shares.
+    return await insertColumn(tx, { ...input, name }, nextOrder(columns))
   }, scope)
 }
 
+/**
+ * Change a column's name, description, colour or entry rules.
+ *
+ * A new name is held to `renameColumn`'s rules — its slug is not another
+ * column's, and To Do keeps the slug `to_do` — and a name that changes is a
+ * change to the board's structure, a person's to make. Description and
+ * colour stay open to anyone; entry rules are a person's.
+ */
 export async function updateColumn<TStore extends BoardStore>(
   store: TStore,
   statusId: string,
@@ -185,9 +204,18 @@ export async function updateColumn<TStore extends BoardStore>(
     assertPersonSetsEntryRules(actor, { statusId })
   }
   return await runBoardWrite(store, async ({ tx }) => {
+    const current = await tx.statuses.findById(statusId)
+    if (!current) {
+      throw new BoardError('issue_status_not_found', { statusId })
+    }
     const updates: Partial<typeof issueStatuses.$inferInsert> = {}
     if (patch.name !== undefined) {
-      updates.name = patch.name
+      const name = requireColumnName(patch.name, current.workspaceId)
+      if (name !== current.name) {
+        assertPersonChangesColumns(actor, { workspaceId: current.workspaceId, statusName: current.name })
+        assertRenameAllowed(await listColumns(tx, current.workspaceId), current, name)
+        updates.name = name
+      }
     }
     if ('description' in patch) {
       updates.description = patch.description ?? null
@@ -201,11 +229,7 @@ export async function updateColumn<TStore extends BoardStore>(
     if (Object.keys(updates).length > 0) {
       await tx.statuses.update(statusId, updates)
     }
-    const column = await tx.statuses.findById(statusId)
-    if (!column) {
-      throw new BoardError('issue_status_not_found', { statusId })
-    }
-    return column
+    return (await tx.statuses.findById(statusId))!
   }, scope)
 }
 
@@ -248,28 +272,60 @@ export async function setColumnEntryRules<TStore extends BoardStore>(
   }, scope)
 }
 
+/**
+ * Take an empty column off the board, and number the columns left 0..n-1 in
+ * the same write.
+ *
+ * To Do is never deleted (`kanbo ready` takes work from it), and neither is a
+ * column that still holds cards: they would be left in no column. Move them
+ * first, or use `removeColumn`, which moves them in the same write. With an
+ * `actor` that is not a person the delete is refused before anything is read.
+ */
 export async function deleteColumn<TStore extends BoardStore>(
   store: TStore,
   statusId: string,
   scope?: BoardWriteScope<TStore>,
+  actor?: BoardActor,
 ): Promise<void> {
+  if (actor) {
+    assertPersonChangesColumns(actor, { statusId })
+  }
   await runBoardWrite(store, async ({ tx }) => {
-    if (!await tx.statuses.findById(statusId)) {
+    const column = await tx.statuses.lockById(statusId)
+    if (!column) {
       throw new BoardError('issue_status_not_found', { statusId })
     }
-    // Cards pointing at the column keep their place on the board and lose their
-    // column, the way the schema's `on delete set null` says they should.
+    if (normalizeStatusName(column.name) === READY_COLUMN_SLUG) {
+      throw new BoardError('board_column_ready_protected', { workspaceId: column.workspaceId, statusName: column.name })
+    }
+    const cardCount = (await cardsInColumn(tx, column)).length
+    if (cardCount > 0) {
+      throw new BoardError('board_column_not_empty', {
+        workspaceId: column.workspaceId,
+        statusName: column.name,
+        cardCount,
+        hint: 'Move its cards to another column first, or remove it with removeColumn and moveCardsTo.',
+      })
+    }
     await tx.statuses.delete(statusId)
+    await renumberColumns(tx, column.workspaceId)
   }, scope)
 }
 
-/** Put the workspace's columns in the given order; unnamed columns keep their place. */
+/**
+ * Put the workspace's columns in the given order; unnamed columns keep their
+ * place. With an `actor` that is not a person nothing is written.
+ */
 export async function reorderColumns<TStore extends BoardStore>(
   store: TStore,
   workspaceId: string,
   orderedIds: string[],
   scope?: BoardWriteScope<TStore>,
+  actor?: BoardActor,
 ): Promise<void> {
+  if (actor) {
+    assertPersonChangesColumns(actor, { workspaceId })
+  }
   await runBoardWrite(store, async ({ tx }) => {
     for (const [order, statusId] of orderedIds.entries()) {
       await tx.statuses.update(statusId, { order })
@@ -286,13 +342,18 @@ export async function reorderColumns<TStore extends BoardStore>(
  * when the owner put three columns of their own in between — and at the front
  * when none of them is there. A board that already holds all six is left
  * untouched, down to the board version: running this twice must not look like a
- * change to anyone polling.
+ * change to anyone polling. With an `actor` that is not a person nothing is
+ * written.
  */
 export async function addStandardColumns<TStore extends BoardStore>(
   store: TStore,
   workspaceId: string,
   scope?: BoardWriteScope<TStore>,
+  actor?: BoardActor,
 ): Promise<{ statuses: IssueStatus[], added: string[] }> {
+  if (actor) {
+    assertPersonChangesColumns(actor, { workspaceId })
+  }
   return await addMissingColumns(store, workspaceId, DEFAULT_STATUSES, scope)
 }
 
@@ -382,22 +443,10 @@ export async function renameColumn<TStore extends BoardStore>(
   scope?: BoardWriteScope<TStore>,
 ): Promise<IssueStatus> {
   assertPersonChangesColumns(actor, { workspaceId, statusName: nameOrId })
-  const name = newName.trim()
-  const slug = normalizeStatusName(name)
-  if (!slug) {
-    throw new BoardError('issue_status_name_empty', { workspaceId })
-  }
+  const name = requireColumnName(newName, workspaceId)
   return await runBoardWrite(store, async ({ tx }) => {
     const column = await requireColumn(tx, workspaceId, nameOrId)
-    const currentSlug = normalizeStatusName(column.name)
-    if (currentSlug === READY_COLUMN_SLUG && slug !== READY_COLUMN_SLUG) {
-      throw new BoardError('board_column_ready_protected', { workspaceId, statusName: column.name, newName: name })
-    }
-    const taken = (await listColumns(tx, workspaceId))
-      .find(other => other.id !== column.id && normalizeStatusName(other.name) === slug)
-    if (taken) {
-      throw new BoardError('board_column_name_taken', { workspaceId, name, takenBy: taken.name })
-    }
+    assertRenameAllowed(await listColumns(tx, workspaceId), column, name)
     if (column.name === name) {
       return column
     }
@@ -424,23 +473,13 @@ export async function moveColumn<TStore extends BoardStore>(
     const columns = await listColumns(tx, workspaceId)
     const others = columns.filter(candidate => candidate.id !== column.id)
 
-    let index: number
-    if (position === 'first') {
-      index = 0
-    }
-    else if (position === 'last') {
-      index = others.length
-    }
-    else {
-      const anchorName = 'before' in position ? position.before : position.after
-      const anchor = await requireColumn(tx, workspaceId, anchorName)
+    if (typeof position !== 'string') {
+      const anchor = await requireColumn(tx, workspaceId, 'before' in position ? position.before : position.after)
       if (anchor.id === column.id) {
         return columns
       }
-      const anchorIndex = others.findIndex(candidate => candidate.id === anchor.id)
-      index = 'before' in position ? anchorIndex : anchorIndex + 1
     }
-
+    const index = await indexForPosition(tx, workspaceId, others, position)
     const ordered = [...others.slice(0, index), column, ...others.slice(index)]
     if (ordered.every((candidate, order) => candidate.id === columns[order]?.id && candidate.order === order)) {
       return columns
@@ -450,17 +489,109 @@ export async function moveColumn<TStore extends BoardStore>(
   }, scope)
 }
 
+/** What `addColumn` makes: a column's name and what it says, and where it goes. */
+export interface AddColumnInput {
+  name: string
+  description?: string | null
+  color?: string | null
+  category?: IssueStatus['category']
+  /**
+   * Where it goes. Left out: before the board's first completed column (Done),
+   * else before the first canceled one, else at the end — so work still to do
+   * stays on the left.
+   */
+  position?: ColumnPosition
+}
+
+/**
+ * Add a column at its place on the board in one write: the column, and the
+ * order of every column after it. The name is checked inside the write, so
+ * two people adding the same name at once do not both get it.
+ */
+export async function addColumn<TStore extends BoardStore>(
+  store: TStore,
+  workspaceId: string,
+  input: AddColumnInput,
+  actor: BoardActor,
+  scope?: BoardWriteScope<TStore>,
+): Promise<IssueStatus> {
+  assertPersonChangesColumns(actor, { workspaceId, name: input.name })
+  const name = requireColumnName(input.name, workspaceId)
+  return await runBoardWrite(store, async ({ tx }) => {
+    const columns = await listColumns(tx, workspaceId)
+    assertNameFree(columns, null, name, workspaceId)
+    const index = await indexForPosition(tx, workspaceId, columns, input.position ?? defaultAddPosition(columns))
+    const created = await insertColumn(tx, {
+      workspaceId,
+      name,
+      description: input.description,
+      color: input.color,
+      category: input.category,
+    }, index)
+    for (const [offset, column] of columns.slice(index).entries()) {
+      if (column.order !== index + 1 + offset) {
+        await tx.statuses.update(column.id, { order: index + 1 + offset })
+      }
+    }
+    for (const [order, column] of columns.slice(0, index).entries()) {
+      if (column.order !== order) {
+        await tx.statuses.update(column.id, { order })
+      }
+    }
+    return created
+  }, scope)
+}
+
+/** Where a new column goes when nobody said: before Done, else before Canceled, else last. */
+function defaultAddPosition(columns: IssueStatus[]): ColumnPosition {
+  const end = columns.find(column => column.category === 'completed') ?? columns.find(column => column.category === 'canceled')
+  return end ? { before: end.id } : 'last'
+}
+
+/** The index in `others` (the board without the column being placed) a position names. */
+async function indexForPosition(
+  store: BoardStore,
+  workspaceId: string,
+  others: IssueStatus[],
+  position: ColumnPosition,
+): Promise<number> {
+  if (position === 'first') {
+    return 0
+  }
+  if (position === 'last') {
+    return others.length
+  }
+  const anchor = await requireColumn(store, workspaceId, 'before' in position ? position.before : position.after)
+  const anchorIndex = others.findIndex(candidate => candidate.id === anchor.id)
+  return 'before' in position ? anchorIndex : anchorIndex + 1
+}
+
 /** What `removeColumn` does with the cards still in the column. */
 export interface RemoveColumnOptions {
   /** The column they move to, by id or any spelling of its name. Required when the column holds cards. */
   moveCardsTo?: string | null
 }
 
+/** What `removeColumn` did. */
+export interface RemoveColumnResult {
+  removed: IssueStatus
+  movedCards: number
+  movedTo: IssueStatus | null
+  /** Moved cards that entered the target without meeting its entry rules — a person's move warns, it does not refuse. */
+  unmetRules?: Array<{ issueId: string, unmet: UnmetEntryRule[] }>
+}
+
 /**
  * Take a column off the board. A column that still holds cards is only
  * removed together with moving them — in the same write, each card's history
- * recording the move — so no card is left in no column. To Do is never
- * removed: agents take their work from it (`ops/ready.ts`).
+ * recording the move, exactly as `moveCard` would (a card waiting for a person
+ * keeps waiting) — so no card is left in no column. To Do is never removed:
+ * agents take their work from it (`ops/ready.ts`). The columns left are
+ * numbered 0..n-1.
+ *
+ * The column's row is locked before its cards are read, so on Postgres a card
+ * put into it meanwhile waits for this write — and is checked for once more
+ * before the delete.
  */
 export async function removeColumn<TStore extends BoardStore>(
   store: TStore,
@@ -469,14 +600,18 @@ export async function removeColumn<TStore extends BoardStore>(
   options: RemoveColumnOptions,
   actor: BoardActor,
   scope?: BoardWriteScope<TStore>,
-): Promise<{ removed: IssueStatus, movedCards: number, movedTo: IssueStatus | null }> {
+): Promise<RemoveColumnResult> {
   assertPersonChangesColumns(actor, { workspaceId, statusName: nameOrId })
   return await runBoardWrite(store, async ({ tx }) => {
-    const column = await requireColumn(tx, workspaceId, nameOrId)
+    const found = await requireColumn(tx, workspaceId, nameOrId)
+    const column = await tx.statuses.lockById(found.id)
+    if (!column) {
+      throw new BoardError('issue_status_not_found', { workspaceId, statusName: nameOrId })
+    }
     if (normalizeStatusName(column.name) === READY_COLUMN_SLUG) {
       throw new BoardError('board_column_ready_protected', { workspaceId, statusName: column.name })
     }
-    const cards = (await tx.issues.listInBoardOrder(workspaceId)).filter(card => card.statusId === column.id)
+    const cards = await cardsInColumn(tx, column)
     const target = options.moveCardsTo ? await requireColumn(tx, workspaceId, options.moveCardsTo) : null
     if (target?.id === column.id) {
       throw new BoardError('board_column_remove_target_invalid', { workspaceId, statusName: column.name })
@@ -484,12 +619,61 @@ export async function removeColumn<TStore extends BoardStore>(
     if (cards.length > 0 && !target) {
       throw new BoardError('board_column_not_empty', { workspaceId, statusName: column.name, cardCount: cards.length })
     }
+    let unmetRules: RemoveColumnResult['unmetRules']
     if (cards.length > 0 && target) {
-      await bulkUpdateCards(tx, cards.map(card => card.id), { statusId: target.id }, actor, { tx })
+      unmetRules = (await bulkUpdateCards(tx, cards.map(card => card.id), { statusId: target.id }, actor, { tx })).unmetRules
     }
+    // `deleteColumn` counts the column's cards once more: one that arrived
+    // after the list above refuses the whole write rather than losing its column.
     await deleteColumn(tx, column.id, { tx })
-    return { removed: column, movedCards: cards.length, movedTo: cards.length > 0 ? target : null }
+    const result: RemoveColumnResult = { removed: column, movedCards: cards.length, movedTo: cards.length > 0 ? target : null }
+    return unmetRules && unmetRules.length > 0 ? { ...result, unmetRules } : result
   }, scope)
+}
+
+/** The cards sitting in the column right now. */
+async function cardsInColumn(store: BoardStore, column: IssueStatus): Promise<Issue[]> {
+  return (await store.issues.listByWorkspace(column.workspaceId)).filter(card => card.statusId === column.id)
+}
+
+/** Number the workspace's columns 0..n-1 in board order, writing only the ones that change. */
+async function renumberColumns(store: BoardStore, workspaceId: string): Promise<void> {
+  for (const [order, column] of (await listColumns(store, workspaceId)).entries()) {
+    if (column.order !== order) {
+      await store.statuses.update(column.id, { order })
+    }
+  }
+}
+
+/** One past the last column's order: a board whose orders have gaps still gets a new, unshared one. */
+function nextOrder(columns: IssueStatus[]): number {
+  return columns.reduce((max, column) => Math.max(max, column.order), -1) + 1
+}
+
+/** The name, trimmed, or the error that says a column needs one. */
+function requireColumnName(name: string, workspaceId: string): string {
+  const trimmed = name.trim()
+  if (!normalizeStatusName(trimmed)) {
+    throw new BoardError('issue_status_name_empty', { workspaceId })
+  }
+  return trimmed
+}
+
+/** Refuse a name whose slug a column other than `self` already answers to. */
+function assertNameFree(columns: IssueStatus[], self: IssueStatus | null, name: string, workspaceId: string): void {
+  const slug = normalizeStatusName(name)
+  const taken = columns.find(other => other.id !== self?.id && normalizeStatusName(other.name) === slug)
+  if (taken) {
+    throw new BoardError('board_column_name_taken', { workspaceId, name, takenBy: taken.name })
+  }
+}
+
+/** A new name for `column`: To Do keeps its slug, and no other column may already answer to it. */
+function assertRenameAllowed(columns: IssueStatus[], column: IssueStatus, name: string): void {
+  if (normalizeStatusName(column.name) === READY_COLUMN_SLUG && normalizeStatusName(name) !== READY_COLUMN_SLUG) {
+    throw new BoardError('board_column_ready_protected', { workspaceId: column.workspaceId, statusName: column.name, newName: name })
+  }
+  assertNameFree(columns, column, name, column.workspaceId)
 }
 
 async function insertColumn(

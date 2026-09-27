@@ -24,8 +24,9 @@ import {
   waitApproval,
 } from './cards'
 import type { BoardWriteScope } from './change-seq'
-import type { ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch, ColumnPosition, RemoveColumnOptions } from './columns'
+import type { AddColumnInput, ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch, ColumnPosition, RemoveColumnOptions } from './columns'
 import {
+  addColumn,
   addStandardColumns,
   applyColumnTemplate,
   createColumn,
@@ -169,10 +170,13 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
       await setColumnEntryRules(store, workspaceId, nameOrId, entryRules, actor, scope),
     enforceColumnEntryForCards: async (issueIds: string[], statusId: string, actor: BoardActor) =>
       await enforceColumnEntryForCards(store, issueIds, statusId, actor),
-    deleteColumn: async (statusId: string, scope?: Scope) => await deleteColumn(store, statusId, scope),
-    reorderColumns: async (workspaceId: string, orderedIds: string[], scope?: Scope) =>
-      await reorderColumns(store, workspaceId, orderedIds, scope),
-    addStandardColumns: async (workspaceId: string, scope?: Scope) => await addStandardColumns(store, workspaceId, scope),
+    deleteColumn: async (statusId: string, scope?: Scope, actor?: BoardActor) => await deleteColumn(store, statusId, scope, actor),
+    reorderColumns: async (workspaceId: string, orderedIds: string[], scope?: Scope, actor?: BoardActor) =>
+      await reorderColumns(store, workspaceId, orderedIds, scope, actor),
+    addStandardColumns: async (workspaceId: string, scope?: Scope, actor?: BoardActor) =>
+      await addStandardColumns(store, workspaceId, scope, actor),
+    addColumn: async (workspaceId: string, input: AddColumnInput, actor: BoardActor, scope?: Scope) =>
+      await addColumn(store, workspaceId, input, actor, scope),
     applyColumnTemplate: async (workspaceId: string, columns: readonly ColumnSpec[], options: ApplyColumnTemplateOptions, scope?: Scope) =>
       await applyColumnTemplate(store, workspaceId, columns, options, scope),
     renameColumn: async (workspaceId: string, nameOrId: string, newName: string, actor: BoardActor, scope?: Scope) =>

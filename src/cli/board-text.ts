@@ -3,6 +3,7 @@ import pc from 'picocolors'
 import { cardDisplayTitle } from '../domain/card-display-title'
 import { normalizeStatusName } from '../domain/status-name'
 import type { IssueStatus } from '../sqlite/schema'
+import { displayWidth, sanitizeTerminalText, truncateToWidth } from './terminal-text'
 import type { CardView } from './view'
 
 /**
@@ -96,22 +97,25 @@ export function describeBoardSections(sections: BoardSection[], options: BoardTe
   const keyWidth = Math.max(0, ...sections.flatMap(section => section.cards.map(card => card.id.length)))
 
   return sections.map((section) => {
-    const lines = [colors.bold(`${section.name ?? 'No column'} (${section.count})`)]
+    const heading = `${sanitizeTerminalText(section.name ?? 'No column')} (${section.count})`
+    const lines = [colors.bold(truncateToWidth(heading, usable))]
     if (section.count === 0) {
       lines.push(colors.dim('  no cards'))
     }
     for (const card of section.cards) {
       const prefix = `  ${card.id.padEnd(keyWidth)}  `
       const markers = [
-        card.waitingFor === 'human' ? colors.yellow(`[waiting for ${options.whom}]`) : null,
-        card.activeRun ? colors.cyan(`[running: ${card.activeRun.agentName}]`) : null,
+        card.waitingFor === 'human' ? { text: `[waiting for ${options.whom}]`, paint: colors.yellow } : null,
+        card.activeRun ? { text: `[running: ${sanitizeTerminalText(card.activeRun.agentName)}]`, paint: colors.cyan } : null,
       ].filter(marker => marker !== null)
-      const markerText = markers.length > 0 ? `  ${markers.join(' ')}` : ''
-      const room = Math.max(10, usable - prefix.length - visibleLength(markerText))
-      lines.push(`${prefix}${truncate(cardDisplayTitle(card), room)}${markerText}`)
+      const markerText = markers.length > 0 ? `  ${markers.map(marker => marker.text).join(' ')}` : ''
+      const room = Math.max(10, usable - displayWidth(prefix) - displayWidth(markerText))
+      const painted = markers.length > 0 ? `  ${markers.map(marker => marker.paint(marker.text)).join(' ')}` : ''
+      lines.push(`${prefix}${truncateToWidth(sanitizeTerminalText(cardDisplayTitle(card)), room)}${painted}`)
       if (card.statusLine) {
         const indent = ' '.repeat(prefix.length)
-        lines.push(colors.dim(`${indent}${truncate(firstLine(card.statusLine), Math.max(10, usable - indent.length))}`))
+        const statusLine = sanitizeTerminalText(firstLine(card.statusLine))
+        lines.push(colors.dim(`${indent}${truncateToWidth(statusLine, Math.max(10, usable - indent.length))}`))
       }
     }
     const hidden = section.count - section.cards.length
@@ -122,16 +126,6 @@ export function describeBoardSections(sections: BoardSection[], options: BoardTe
   }).join('\n\n')
 }
 
-function truncate(text: string, room: number): string {
-  return text.length <= room ? text : `${text.slice(0, room - 1).trimEnd()}…`
-}
-
 function firstLine(text: string): string {
   return text.trim().split('\n')[0] ?? ''
-}
-
-/** The length a person sees: colour codes take no room. */
-function visibleLength(text: string): number {
-  // eslint-disable-next-line no-control-regex
-  return text.replace(/\u001B\[[0-9;]*m/g, '').length
 }

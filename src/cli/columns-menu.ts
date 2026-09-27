@@ -69,6 +69,10 @@ const MENU: { value: MenuChoice, label: string }[] = [
   { value: 'done', label: 'Done' },
 ]
 
+export const NOTHING_TO_REMOVE = 'Nothing to remove — To Do always stays.'
+const NOTHING_TO_RENAME = 'Nothing to rename — this board has no columns yet.'
+const NOTHING_TO_MOVE = 'Nothing to move — this board has no columns yet.'
+
 /** Ask what the item needs and make the change; `true` when the board changed (and its columns were printed). */
 async function act(ui: Ui, choice: Exclude<MenuChoice, 'done'>, columns: IssueStatus[]): Promise<boolean> {
   switch (choice) {
@@ -91,6 +95,10 @@ async function act(ui: Ui, choice: Exclude<MenuChoice, 'done'>, columns: IssueSt
     }
     case 'rename': {
       const actor = requireHumanActor('columns rename')
+      if (columns.length === 0) {
+        say(ui, NOTHING_TO_RENAME)
+        return false
+      }
       const column = await askColumn(ui, 'Which column?', columns)
       const name = (await ui.text({
         message: `New name for ${column.name}`,
@@ -102,6 +110,10 @@ async function act(ui: Ui, choice: Exclude<MenuChoice, 'done'>, columns: IssueSt
     }
     case 'move': {
       const actor = requireHumanActor('columns move')
+      if (columns.length === 0) {
+        say(ui, NOTHING_TO_MOVE)
+        return false
+      }
       const column = await askColumn(ui, 'Which column?', columns)
       const index = columns.indexOf(column)
       const position = await askPosition(ui, columns, column, index === 0 ? 'first' : { after: columns[index - 1]!.id })
@@ -111,6 +123,10 @@ async function act(ui: Ui, choice: Exclude<MenuChoice, 'done'>, columns: IssueSt
     case 'remove': {
       const actor = requireHumanActor('columns remove')
       const removable = columns.filter(column => normalizeStatusName(column.name) !== READY_COLUMN_SLUG)
+      if (removable.length === 0) {
+        say(ui, NOTHING_TO_REMOVE)
+        return false
+      }
       const column = await askColumn(ui, 'Which column? (To Do stays: agents take work from it)', removable)
       const cardCount = await withSession(async session => await countCardsIn(session, column))
       const decision = await askRemoval(ui, columns, column, cardCount)

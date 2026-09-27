@@ -4,6 +4,30 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Breaking — for applications that use kanbo as a library
+
+These change what the column operations of `createBoardOps(...)` do. Signatures only gained optional trailing parameters.
+
+- `deleteColumn(statusId)` refuses a column that still holds cards (`board_column_not_empty`, `details.cardCount`) instead of leaving its cards in no column: move them first, or use `removeColumn(workspaceId, column, { moveCardsTo }, actor)`, which moves them in the same write. It also refuses To Do (`board_column_ready_protected`), and numbers the columns left 0..n-1. A board app whose delete button removed non-empty columns now gets this error.
+- `updateColumn(statusId, { name }, actor)` holds a new name to `renameColumn`'s rules: `board_column_name_taken` when another column has its slug, `board_column_ready_protected` when To Do would lose the slug `to_do`, `issue_status_name_empty` for a blank name. Names are trimmed. A name that changes needs a person (`board_column_structure_requires_user`); description and colour stay open to anyone.
+- `createColumn(input, actor)` needs a person (`board_column_structure_requires_user`) and refuses a name whose slug another column has. A new column goes one past the highest order (was: the number of columns).
+- `deleteColumn`, `reorderColumns` and `addStandardColumns` take an optional trailing `actor`; given and not a person, they are refused with `board_column_structure_requires_user`. Without one they behave as before.
+- `BOARD_ERROR_RESPONSES.board_column_not_empty` is `409` (was `400`).
+- `BoardStore.statuses.lockById(statusId)` is new (`select … for update` on Postgres, a read on SQLite). A store written by hand must add it.
+
+### Added
+
+- `addColumn(workspaceId, { name, description, color, category, position }, actor)` on `createBoardOps(...)`: a column at its place in one write, its name checked inside the write. `kanbo columns add` uses it.
+- `removeColumn` returns `unmetRules` for moved cards that entered a column without meeting its entry rules; `kanbo columns remove` prints the same warning as `kanbo card move`. Moved cards keep `waitingFor`, as a moved card does.
+
+### Changed
+
+- `kanbo serve`: every column change (`POST /issues/statuses`, `PATCH /issues/statuses/:id` with a new name, `DELETE`, `/reorder`, `/standard`) is a person's — a request without the token or with `x-kanbo-actor: agent` gets `403 issue_column_structure_requires_user`. `DELETE /issues/statuses/:id` removes through `removeColumn`: a column holding cards needs `moveCardsTo` (body or query), otherwise `409`; it answers `{ ok, movedCards, unmetRules? }`.
+- `kanbo board`, `kanbo card list` and `kanbo card get` strip escape sequences and control characters from what cards and columns carry, and `kanbo board` measures and cuts text by the columns it takes (CJK and emoji two, combining marks none), column headings included.
+- The orchestrator guide names no column but To Do by its slug; `kanbo prime` says which column is for what. `kanbo columns rename` says that agents pick the new name up from `kanbo prime`.
+- `kanbo columns` menu: "Nothing to remove — To Do always stays." when To Do is the only column.
+- On Postgres, removing a column locks its row first; a card put into it meanwhile waits, and a card that still arrives refuses the removal rather than losing its column.
+
 ## [0.2.1] — 2026-09-27
 
 ### Changed

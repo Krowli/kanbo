@@ -21,6 +21,8 @@ import {
   finishRunBody,
   listIssuesQuery,
   readyQuery,
+  removeStatusBody,
+  removeStatusQuery,
   reorderIssuesBody,
   reorderStatusesBody,
   requiredWorkspaceIdQuery,
@@ -184,12 +186,12 @@ export function createIssueRoutes(session: BoardSession): Route[] {
       path: '/issues/statuses/reorder',
       body: reorderStatusesBody,
       write: true,
-      handle: async ({ body }) => {
+      handle: async ({ body, actors }) => {
         requireWorkspace(body.workspaceId)
         for (const statusId of body.orderedIds) {
           await requireStatus(statusId)
         }
-        await ops.reorderColumns(workspaceId, body.orderedIds)
+        await ops.reorderColumns(workspaceId, body.orderedIds, undefined, actors.person)
         return OK
       },
     }),
@@ -198,7 +200,8 @@ export function createIssueRoutes(session: BoardSession): Route[] {
       path: '/issues/statuses/standard',
       body: workspaceIdBody,
       write: true,
-      handle: async ({ body }) => (await ops.addStandardColumns(requireWorkspace(body.workspaceId))).statuses.map(toStatusView),
+      handle: async ({ body, actors }) =>
+        (await ops.addStandardColumns(requireWorkspace(body.workspaceId), undefined, actors.person)).statuses.map(toStatusView),
     }),
     route({
       method: 'PATCH',
@@ -207,17 +210,25 @@ export function createIssueRoutes(session: BoardSession): Route[] {
       write: true,
       handle: async ({ params, body, actors }) => {
         await requireStatus(params.id)
+        // A new name is held to `renameColumn`'s rules and is a person's to give.
         return toStatusView(await ops.updateColumn(params.id, body, actors.person))
       },
     }),
     route({
       method: 'DELETE',
       path: '/issues/statuses/:id',
+      query: removeStatusQuery,
+      body: removeStatusBody,
       write: true,
-      handle: async ({ params }) => {
+      handle: async ({ params, query, body, actors }) => {
         await requireStatus(params.id)
-        await ops.deleteColumn(params.id)
-        return OK
+        const moveCardsTo = body.moveCardsTo ?? query.moveCardsTo ?? null
+        const result = await ops.removeColumn(workspaceId, params.id, { moveCardsTo }, actors.person)
+        return {
+          ok: true as const,
+          movedCards: result.movedCards,
+          ...(result.unmetRules ? { unmetRules: result.unmetRules } : {}),
+        }
       },
     }),
 

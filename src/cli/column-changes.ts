@@ -38,10 +38,10 @@ async function changed(session: BoardSession, message: string, extra: Record<str
 }
 
 /**
- * A new column. A ready-made name (`QA`, `Blocked`) brings its own line and
- * category; any other name is work in progress. With no place given it goes
- * before the board's first completed column (Done), or Canceled, so work
- * still to do stays on the left.
+ * A new column, placed in the same write that creates it. A ready-made name
+ * (`QA`, `Blocked`) brings its own line and category; any other name is work
+ * in progress. With no place given it goes before the board's first completed
+ * column (Done), or Canceled, so work still to do stays on the left.
  */
 export async function addColumn(session: BoardSession, request: AddColumnRequest, actor: BoardActor): Promise<CliResult> {
   const workspaceId = session.workspace.id
@@ -60,42 +60,25 @@ export async function addColumn(session: BoardSession, request: AddColumnRequest
   const anchor = anchorName === undefined ? null : await requireNamedColumn(session, anchorName)
 
   const spec = findCatalogueColumn(name) ?? ownColumn(name, null)
-  const created = await session.ops.createColumn({
-    workspaceId,
+  const created = await explainRefusal(session.ops.addColumn(workspaceId, {
     name,
     description: request.description?.trim() || spec.description,
     color: spec.color,
     category: request.category ?? spec.category,
-  }, actor)
-
-  const position = await placeNewColumn(session, created, request, anchor)
-  if (position !== 'last') {
-    await session.ops.moveColumn(workspaceId, created.id, position, actor)
-  }
+    position: anchor ? (request.after !== undefined ? { after: anchor.id } : { before: anchor.id }) : undefined,
+  }, actor))
   return await changed(session, `Added ${created.name} (slug ${normalizeStatusName(created.name)}).`, { added: projectColumn(created) })
 }
 
-/** Where a new column goes: where the person said, or before the first completed (else canceled) column. */
-async function placeNewColumn(
-  session: BoardSession,
-  created: IssueStatus,
-  request: AddColumnRequest,
-  anchor: IssueStatus | null,
-): Promise<ColumnPosition> {
-  if (anchor) {
-    return request.after !== undefined ? { after: anchor.id } : { before: anchor.id }
-  }
-  const others = (await session.ops.listColumns(session.workspace.id)).filter(column => column.id !== created.id)
-  const end = others.find(column => column.category === 'completed') ?? others.find(column => column.category === 'canceled')
-  return end ? { before: end.id } : 'last'
-}
+/** Said after a rename: agents' instructions name no column but To Do, and `kanbo prime` gives them the rest. */
+export const RENAME_NOTE = 'Agents read column names from kanbo prime; rename is picked up there.'
 
 export async function renameColumn(session: BoardSession, column: string, newName: string, actor: BoardActor): Promise<CliResult> {
   const before = await requireNamedColumn(session, column)
   const renamed = await explainRefusal(session.ops.renameColumn(session.workspace.id, before.id, newName, actor))
   const message = before.name === renamed.name
     ? `${renamed.name} already has that name.`
-    : `Renamed ${before.name} to ${renamed.name} (slug ${normalizeStatusName(renamed.name)}).`
+    : `Renamed ${before.name} to ${renamed.name} (slug ${normalizeStatusName(renamed.name)}).\n${RENAME_NOTE}`
   return await changed(session, message, { renamed: projectColumn(renamed) })
 }
 
@@ -138,6 +121,12 @@ export async function removeColumn(session: BoardSession, column: string, moveCa
     await requireNamedColumn(session, moveCardsTo)
   }
   const result = await explainRefusal(session.ops.removeColumn(session.workspace.id, removing.id, { moveCardsTo }, actor))
+  // The same warning `kanbo card move` leaves when a person's move skips a column's entry rules.
+  for (const card of result.unmetRules ?? []) {
+    for (const item of card.unmet) {
+      console.error(`kanbo: warning: ${card.issueId} entered "${result.movedTo?.name ?? '—'}" without ${item.rule}: ${item.detail}`)
+    }
+  }
   const message = result.movedTo
     ? `Removed ${result.removed.name} and moved ${describeCount(result.movedCards)} to ${result.movedTo.name}.`
     : `Removed ${result.removed.name}.`

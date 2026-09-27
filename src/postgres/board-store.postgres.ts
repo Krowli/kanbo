@@ -164,6 +164,10 @@ function createStoreOver(database: BoardPostgresDatabase): BoardStore {
         const [row] = await database.select().from(issueStatuses).where(eq(issueStatuses.id, statusId)).limit(1)
         return row ?? null
       },
+      lockById: async (statusId) => {
+        const [row] = await database.select().from(issueStatuses).where(eq(issueStatuses.id, statusId)).limit(1).for('update')
+        return row ?? null
+      },
       findInWorkspace: async (workspaceId, statusId) => {
         const [row] = await database
           .select()

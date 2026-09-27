@@ -276,6 +276,72 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     expect(await board.store.issues.findById('WOR-001')).toBeNull()
   })
 
+  describe('column changes, a person\'s to make', () => {
+    /** The columns, seeded by a first card, by slug. */
+    async function columnsBySlug(): Promise<Record<string, { id: string, name: string, order: number }>> {
+      const listed = (await call(client, 'GET', `/issues/statuses?workspaceId=${WORKSPACE.id}`)).json as { id: string, name: string, order: number }[]
+      return Object.fromEntries(listed.map(column => [column.name.toLowerCase().replace(/\W+/g, '_'), column]))
+    }
+
+    beforeEach(async () => {
+      await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Seeds the columns', statusName: 'in_review' } })
+    })
+
+    it('refuses every column change to an agent, and to a request without the token', async () => {
+      const columns = await columnsBySlug()
+      const ids = Object.values(columns).map(column => column.id)
+      const attempts = (headers: Record<string, string>) => [
+        call(client, 'POST', '/issues/statuses', { body: { workspaceId: WORKSPACE.id, name: 'QA' }, headers }),
+        call(client, 'PATCH', `/issues/statuses/${columns.done!.id}`, { body: { name: 'Shipped' }, headers }),
+        call(client, 'DELETE', `/issues/statuses/${columns.canceled!.id}`, { headers }),
+        call(client, 'POST', '/issues/statuses/reorder', { body: { workspaceId: WORKSPACE.id, orderedIds: ids.toReversed() }, headers }),
+        call(client, 'POST', '/issues/statuses/standard', { body: { workspaceId: WORKSPACE.id }, headers }),
+      ]
+
+      for (const answer of await Promise.all(attempts({ 'x-kanbo-actor': 'agent' }))) {
+        expect(answer.status).toBe(403)
+        expect(answer.json.code).toBe('issue_column_structure_requires_user')
+      }
+      await restart({ token: null })
+      for (const answer of await Promise.all(attempts({}))) {
+        expect(answer.status).toBe(403)
+        expect(answer.json.code).toBe('issue_column_structure_requires_user')
+      }
+      expect(await columnsBySlug()).toEqual(columns)
+    })
+
+    it('keeps To Do: a rename away from its slug and a delete are refused', async () => {
+      const { to_do: toDo } = await columnsBySlug()
+
+      const renamed = await call(client, 'PATCH', `/issues/statuses/${toDo!.id}`, { body: { name: 'Ready' } })
+      expect(renamed.status).toBe(400)
+      expect(renamed.json.code).toBe('board_column_ready_protected')
+      const deleted = await call(client, 'DELETE', `/issues/statuses/${toDo!.id}`)
+      expect(deleted.status).toBe(400)
+      expect(deleted.json.code).toBe('board_column_ready_protected')
+      expect((await call(client, 'PATCH', `/issues/statuses/${toDo!.id}`, { body: { name: 'To-do' } })).json.name).toBe('To-do')
+    })
+
+    it('deletes a column holding cards only when told where they go, in the body or the query', async () => {
+      const { in_review: inReview, done } = await columnsBySlug()
+
+      const refused = await call(client, 'DELETE', `/issues/statuses/${inReview!.id}`)
+      expect(refused.status).toBe(409)
+      expect(refused.json).toMatchObject({ code: 'board_column_not_empty', details: { cardCount: 1 } })
+      expect((await call(client, 'GET', '/issues/WOR-001')).json.statusId).toBe(inReview!.id)
+
+      const removed = await call(client, 'DELETE', `/issues/statuses/${inReview!.id}`, { body: { moveCardsTo: 'done' } })
+      expect(removed.json).toEqual({ ok: true, movedCards: 1 })
+      expect((await call(client, 'GET', '/issues/WOR-001')).json.statusId).toBe(done!.id)
+
+      const { backlog } = await columnsBySlug()
+      await call(client, 'PATCH', '/issues/WOR-001/status/backlog')
+      const byQuery = await call(client, 'DELETE', `/issues/statuses/${backlog!.id}?moveCardsTo=to_do`)
+      expect(byQuery.json).toEqual({ ok: true, movedCards: 1 })
+      expect(Object.values(await columnsBySlug()).map(column => column.order)).toEqual([0, 1, 2, 3])
+    })
+  })
+
   it('refuses approval to every request when the server was started from an agent\'s shell', async () => {
     await restart({ actors: { ...PERSON_ACTORS, person: null } })
     await waitingCard()

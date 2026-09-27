@@ -210,6 +210,141 @@ describe.each(BOARD_STORE_FACTORIES)('board columns on $name', (factory) => {
       expect(await readChangeSeq(store)).toBe(afterFirst)
     })
 
+    it('holds a new name given through updateColumn to the rename rules, and to a person', async () => {
+      const toDo = await ops().requireColumn('workspace', 'to_do')
+      const backlog = await ops().requireColumn('workspace', 'backlog')
+      const before = await readChangeSeq(store)
+
+      await expect(ops().updateColumn(backlog.id, { name: 'in progress' }, PERSON))
+        .rejects.toMatchObject({ code: 'board_column_name_taken', details: { takenBy: 'In Progress' } })
+      await expect(ops().updateColumn(toDo.id, { name: 'Ready' }, PERSON))
+        .rejects.toMatchObject({ code: 'board_column_ready_protected' })
+      await expect(ops().updateColumn(backlog.id, { name: '  ' }, PERSON))
+        .rejects.toMatchObject({ code: 'issue_status_name_empty' })
+      await expect(ops().updateColumn(backlog.id, { name: 'Ideas' }, AGENT))
+        .rejects.toMatchObject({ code: 'board_column_structure_requires_user' })
+      expect(await readChangeSeq(store)).toBe(before)
+
+      // The same name, a description, a new spelling of To Do: all fine.
+      await ops().updateColumn(backlog.id, { name: 'Backlog', description: 'Later' }, AGENT)
+      await ops().updateColumn(toDo.id, { name: 'To-do' }, PERSON)
+      expect(await names()).toEqual(['Backlog', 'To-do', 'In Progress', 'In Review', 'Done', 'Canceled'])
+    })
+
+    it('deletes only an empty column that is not To Do, and numbers the rest 0..n-1', async () => {
+      const card = await ops().createCard({ workspace: WORKSPACE, title: 'Check', statusName: 'In Review' }, PERSON)
+      const inReview = await ops().requireColumn('workspace', 'in_review')
+      const toDo = await ops().requireColumn('workspace', 'to_do')
+      const before = await readChangeSeq(store)
+
+      await expect(ops().deleteColumn(inReview.id))
+        .rejects.toMatchObject({ code: 'board_column_not_empty', details: { cardCount: 1 } })
+      await expect(ops().deleteColumn(toDo.id)).rejects.toMatchObject({ code: 'board_column_ready_protected' })
+      expect(await cardsIn('in_review')).toEqual([card.id])
+      expect(await readChangeSeq(store)).toBe(before)
+
+      await ops().deleteColumn((await ops().requireColumn('workspace', 'backlog')).id)
+      const left = await listColumns(store, 'workspace')
+      expect(left.map(column => column.name)).toEqual(['To Do', 'In Progress', 'In Review', 'Done', 'Canceled'])
+      expect(left.map(column => column.order)).toEqual([0, 1, 2, 3, 4])
+      expect(await readChangeSeq(store)).toBe(before + 1)
+    })
+
+    it('refuses create, update, delete, reorder and add-standard from an actor who is not a person, and allows them with none', async () => {
+      const canceled = await ops().requireColumn('workspace', 'canceled')
+      const ids = (await listColumns(store, 'workspace')).map(column => column.id)
+      const before = await readChangeSeq(store)
+      const refused = { code: 'board_column_structure_requires_user' }
+
+      await expect(ops().createColumn({ workspaceId: 'workspace', name: 'QA' }, AGENT)).rejects.toMatchObject(refused)
+      await expect(ops().deleteColumn(canceled.id, undefined, AGENT)).rejects.toMatchObject(refused)
+      await expect(ops().reorderColumns('workspace', ids.toReversed(), undefined, AGENT)).rejects.toMatchObject(refused)
+      await expect(ops().addStandardColumns('workspace', undefined, AGENT)).rejects.toMatchObject(refused)
+      expect(await readChangeSeq(store)).toBe(before)
+
+      await ops().reorderColumns('workspace', ids.toReversed())
+      await ops().deleteColumn(canceled.id)
+      expect((await ops().addStandardColumns('workspace', undefined, PERSON)).added).toEqual(['Canceled'])
+    })
+
+    it('gives a column added after a removal an order no other column has', async () => {
+      await ops().removeColumn('workspace', 'backlog', {}, PERSON)
+      await ops().createColumn({ workspaceId: 'workspace', name: 'QA' }, PERSON)
+      // A board whose orders have a gap anyway (written by an older kanbo).
+      const done = await ops().requireColumn('workspace', 'done')
+      await store.statuses.update(done.id, { order: 40 })
+      const blocked = await ops().createColumn({ workspaceId: 'workspace', name: 'Blocked' }, PERSON)
+
+      const columns = await listColumns(store, 'workspace')
+      expect(new Set(columns.map(column => column.order)).size).toBe(columns.length)
+      expect(blocked.order).toBe(41)
+      expect(columns.map(column => column.name)).toEqual(['To Do', 'In Progress', 'In Review', 'Canceled', 'QA', 'Done', 'Blocked'])
+    })
+
+    it('moves the cards of a removed column as a person\'s move does: waiting cards keep waiting, unmet entry rules come back', async () => {
+      const card = await ops().createCard({ workspace: WORKSPACE, title: 'Check', statusName: 'In Review' }, PERSON)
+      await ops().waitApproval(card.id, {}, PERSON)
+      await ops().setColumnEntryRules('workspace', 'done', ['pull_request_linked'], PERSON)
+
+      const result = await ops().removeColumn('workspace', 'in_review', { moveCardsTo: 'done' }, PERSON)
+
+      expect(result.unmetRules).toEqual([{ issueId: card.id, unmet: [expect.objectContaining({ rule: 'pull_request_linked' })] }])
+      expect(await store.issues.findById(card.id)).toMatchObject({ waitingFor: 'human' })
+      expect(await cardsIn('done')).toEqual([card.id])
+    })
+
+    it('refuses the whole removal when a card lands in the column after its cards were read', async () => {
+      const moving = await ops().createCard({ workspace: WORKSPACE, title: 'Moving', statusName: 'In Review' }, PERSON)
+      const late = await ops().createCard({ workspace: WORKSPACE, title: 'Late', statusName: 'Backlog' }, PERSON)
+      const inReview = await ops().requireColumn('workspace', 'in_review')
+      const before = await readChangeSeq(store)
+      // Another writer puts a card in the column right after removeColumn listed its cards.
+      const racing: BoardStore = {
+        ...store,
+        transaction: async (fn, options) => await store.transaction(async (tx) => {
+          let reads = 0
+          const issues = {
+            ...tx.issues,
+            listByWorkspace: async (workspaceId: string) => {
+              const rows = await tx.issues.listByWorkspace(workspaceId)
+              if (++reads === 1) {
+                await tx.issues.update(late.id, { statusId: inReview.id })
+              }
+              return rows
+            },
+          }
+          return await fn({ ...tx, issues })
+        }, options),
+      }
+
+      await expect(createBoardOps(racing).removeColumn('workspace', 'in_review', { moveCardsTo: 'to_do' }, PERSON))
+        .rejects.toMatchObject({ code: 'board_column_not_empty', details: { cardCount: 1 } })
+      expect(await names()).toContain('In Review')
+      expect(await cardsIn('in_review')).toEqual([moving.id])
+      expect(await cardsIn('backlog')).toEqual([late.id])
+      expect(await readChangeSeq(store)).toBe(before)
+    })
+
+    it('adds a column at its place in one write, and refuses a name another column answers to', async () => {
+      const before = await readChangeSeq(store)
+
+      const qa = await ops().addColumn('workspace', { name: 'QA', description: 'Checked by hand' }, PERSON)
+      expect(await readChangeSeq(store)).toBe(before + 1)
+      expect(qa).toMatchObject({ name: 'QA', description: 'Checked by hand', category: 'unstarted' })
+      await ops().addColumn('workspace', { name: 'Design', position: { after: 'backlog' } }, PERSON)
+      await ops().addColumn('workspace', { name: 'Inbox', position: 'first' }, PERSON)
+
+      const columns = await listColumns(store, 'workspace')
+      expect(columns.map(column => column.name))
+        .toEqual(['Inbox', 'Backlog', 'Design', 'To Do', 'In Progress', 'In Review', 'QA', 'Done', 'Canceled'])
+      expect(columns.map(column => column.order)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8])
+
+      const afterAdds = await readChangeSeq(store)
+      await expect(ops().addColumn('workspace', { name: ' qa ' }, PERSON)).rejects.toMatchObject({ code: 'board_column_name_taken' })
+      await expect(ops().addColumn('workspace', { name: 'Later' }, AGENT)).rejects.toMatchObject({ code: 'board_column_structure_requires_user' })
+      expect(await readChangeSeq(store)).toBe(afterAdds)
+    })
+
     it('refuses every structure change from anyone but a person', async () => {
       const before = await readChangeSeq(store)
       const refused = { code: 'board_column_structure_requires_user' }

@@ -62,6 +62,10 @@ export const updateStatusBody = z.object({
 
 export const workspaceIdBody = z.object({ workspaceId: id })
 
+/** Where the cards of a column being deleted go — in the body or the query; required when it holds any. */
+export const removeStatusBody = z.object({ moveCardsTo: id.optional() })
+export const removeStatusQuery = z.object({ moveCardsTo: id.optional() })
+
 export const reorderStatusesBody = z.object({ workspaceId: id, orderedIds: z.array(z.string()) })
 
 export const createMilestoneBody = z.object({

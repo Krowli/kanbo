@@ -7,6 +7,7 @@ import { normalizeStatusName } from '../domain/status-name'
 import type { BoardRunView } from '../ops/runs'
 import type { BoardSprint } from '../ops/sprints'
 import type { Issue, IssueRun, IssueStatus } from '../sqlite/schema'
+import { displayWidth, padToWidth, sanitizeTerminalText } from './terminal-text'
 
 /**
  * The board's rows as a command line prints them.
@@ -224,25 +225,27 @@ export function describeCards(cards: CardView[]): string {
   }
 
   const keyWidth = Math.max(...cards.map(card => card.id.length))
-  const columnWidth = Math.max(...cards.map(card => (card.column ?? '—').length))
+  const column = (card: CardView): string => sanitizeTerminalText(card.column ?? '—')
+  const columnWidth = Math.max(...cards.map(card => displayWidth(column(card))))
   return cards
-    .map(card => `${card.id.padEnd(keyWidth)}  ${(card.column ?? '—').padEnd(columnWidth)}  ${cardDisplayTitle(card)}`)
+    .map(card => `${card.id.padEnd(keyWidth)}  ${padToWidth(column(card), columnWidth)}  ${sanitizeTerminalText(cardDisplayTitle(card))}`)
     .join('\n')
 }
 
 /** The whole card, for a person who asked about exactly one. */
 export function describeCard(card: CardView): string {
+  // Everything here was written by someone: no escape sequence of theirs reaches the terminal.
   const lines = [
-    `${card.id}  ${card.column ?? '—'}  ${card.executionMode}`,
-    cardDisplayTitle(card),
+    `${card.id}  ${sanitizeTerminalText(card.column ?? '—')}  ${card.executionMode}`,
+    sanitizeTerminalText(cardDisplayTitle(card)),
   ]
   if (card.description) {
-    lines.push('', card.description)
+    lines.push('', sanitizeTerminalText(card.description, { multiline: true }))
   }
   const facts = [
-    card.statusLine ? `status line: ${card.statusLine}` : null,
+    card.statusLine ? `status line: ${sanitizeTerminalText(card.statusLine)}` : null,
     card.waitingFor === 'human' ? 'waiting for a person' : null,
-    card.labels.length > 0 ? `labels: ${card.labels.join(', ')}` : null,
+    card.labels.length > 0 ? `labels: ${sanitizeTerminalText(card.labels.join(', '))}` : null,
     card.priority === 'none' ? null : `priority: ${card.priority}`,
     card.parentIssueId ? `parent: ${card.parentIssueId}` : null,
   ].filter(fact => fact !== null)
@@ -258,11 +261,11 @@ export function describeColumns(columns: ColumnView[]): string {
     return 'This board has no columns yet'
   }
 
-  const slugWidth = Math.max(...columns.map(column => column.slug.length))
+  const slugWidth = Math.max(...columns.map(column => displayWidth(sanitizeTerminalText(column.slug))))
   return columns
     .map(column => [
-      `${column.slug.padEnd(slugWidth)}  ${column.name}`,
-      column.description ? ` — ${column.description}` : '',
+      `${padToWidth(sanitizeTerminalText(column.slug), slugWidth)}  ${sanitizeTerminalText(column.name)}`,
+      column.description ? ` — ${sanitizeTerminalText(column.description)}` : '',
       column.entryRules.length > 0 ? ` [requires: ${column.entryRules.join(', ')}]` : '',
     ].join(''))
     .join('\n')
