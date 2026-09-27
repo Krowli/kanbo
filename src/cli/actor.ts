@@ -1,6 +1,7 @@
 import { hostname, userInfo } from 'node:os'
 
 import type { BoardActor } from '../ops/types'
+import { AGENT_KIND_MARKER, readAgentShellMarker } from './agent-shell'
 import { CliError, EXIT_HUMAN_ONLY } from './output'
 
 /**
@@ -13,20 +14,26 @@ import { CliError, EXIT_HUMAN_ONLY } from './output'
  * the one rule the board has about people would be worth nothing.
  */
 
+/** Where a person does it instead — said after every refusal below. */
+const HUMAN_ONLY_HINT = ' Run it in your own terminal, or on the board page (kanbo serve).'
+
 /** What a person is told when an agent's shell tries to answer for them. */
 export const APPROVAL_IS_HUMAN_MESSAGE
   = 'Approval is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
     + 'Ask a person to approve it on the board or run "kanbo approve" in their own terminal.'
+    + HUMAN_ONLY_HINT
 
 /** The same, for sending a card back. */
 export const RETURN_IS_HUMAN_MESSAGE
   = 'Return is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
     + 'Ask a person to return it on the board or run "kanbo return" in their own terminal.'
+    + HUMAN_ONLY_HINT
 
 /** The same, for closing a sprint (ruling 5x-4). */
 export const SPRINT_CLOSE_IS_HUMAN_MESSAGE
   = 'Closing a sprint is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
     + 'Ask a person to close the sprint on the board or run "kanbo sprint close" in their own terminal.'
+    + HUMAN_ONLY_HINT
 
 /**
  * The same, for setting what a column asks of a card (ruling 6-1): an agent that
@@ -35,6 +42,7 @@ export const SPRINT_CLOSE_IS_HUMAN_MESSAGE
 export const COLUMN_RULES_IS_HUMAN_MESSAGE
   = 'Column entry rules are for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
     + 'Ask a person to set them on the board or run "kanbo columns rules" in their own terminal.'
+    + HUMAN_ONLY_HINT
 
 /**
  * The same, for taking back the log a run names: an agent that could clear or
@@ -43,6 +51,7 @@ export const COLUMN_RULES_IS_HUMAN_MESSAGE
 export const RUN_SESSION_REF_IS_HUMAN_MESSAGE
   = 'Changing or clearing the log a run names is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
     + 'Ask a person to do it on the board or run "kanbo run clear-session" or "kanbo run attach-session --replace" in their own terminal.'
+    + HUMAN_ONLY_HINT
 
 /** The commands only a person may run, as typed after `kanbo` — the capabilities manifest reads this rather than naming them again. */
 export const HUMAN_ONLY_ACTIONS = ['approve', 'return', 'sprint close', 'columns rules', 'run clear-session'] as const
@@ -79,8 +88,10 @@ export function createCliActor(): BoardActor {
  * lie, and an escape hatch would be used by the first agent that read about it.
  */
 export function requireHumanActor(action: HumanOnlyAction): BoardActor {
-  if (isAgentShell()) {
-    throw new CliError(EXIT_HUMAN_ONLY, HUMAN_ONLY_MESSAGES[action])
+  const marker = readAgentShellMarker()
+  if (marker !== null) {
+    // The messages name `KANBO_ACTOR_KIND=agent`; a shell an agent tool marked says which mark it carries.
+    throw new CliError(EXIT_HUMAN_ONLY, HUMAN_ONLY_MESSAGES[action].replace(AGENT_KIND_MARKER, marker))
   }
   return createPersonActor()
 }
@@ -134,14 +145,16 @@ export function safeUsername(): string {
 }
 
 /**
- * Does this shell say it belongs to an agent?
+ * Does this shell belong to an agent?
  *
- * `KANBO_ACTOR_KIND=agent` is the one way to say so. An app that starts agents
- * sets it in every shell and process it starts for one; a person can set it
- * for an agent they run themselves. Two things ask. `approve`, `return`, `sprint close` and `columns rules` refuse such a shell outright, and the
+ * `KANBO_ACTOR_KIND=agent` says so, and so does the mark an agent tool leaves
+ * in the commands its agent runs (`AGENT_SHELL_MARKERS`), unless
+ * `KANBO_ACTOR_KIND=person` says otherwise. Three things ask. `approve`,
+ * `return`, `sprint close`, `columns rules` and taking back a run's log refuse
+ * such a shell outright, no question is asked in it (`canPrompt`), and the
  * board resolution hands it the agent role's own connection string when the
  * project has one — the same question, answered once here.
  */
 export function isAgentShell(): boolean {
-  return process.env.KANBO_ACTOR_KIND?.trim() === 'agent'
+  return readAgentShellMarker() !== null
 }

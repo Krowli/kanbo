@@ -23,6 +23,13 @@ const AGENT: BoardActor = { kind: 'agent', id: 'agent-1' }
 /** The variable that marks a shell as an agent's. */
 const AGENT_SHELL = ['KANBO_ACTOR_KIND']
 
+/** The marks agent tools leave in their agent's shell, each as documented: the variable, a value, and how the refusal names it. */
+const AGENT_TOOL_MARKS = [
+  ['CLAUDECODE', '1', 'CLAUDECODE=1'],
+  ['GEMINI_CLI', '1', 'GEMINI_CLI=1'],
+  ['CURSOR_AGENT', '1', 'CURSOR_AGENT'],
+] as const
+
 describe('approving and returning from a terminal', () => {
   let board: TestBoardDatabase
   let store: BoardStore
@@ -31,7 +38,7 @@ describe('approving and returning from a terminal', () => {
     board = await createTestBoardDatabase()
     seedHostWorkspace(board, WORKSPACE.id, WORKSPACE.identifier)
     store = createSqliteBoardStore({ database: () => board.database })
-    for (const name of [...AGENT_SHELL, 'KANBO_DB_PATH', 'KANBO_WORKSPACE_ID']) {
+    for (const name of [...AGENT_SHELL, ...AGENT_TOOL_MARKS.map(([variable]) => variable), 'KANBO_DB_PATH', 'KANBO_WORKSPACE_ID']) {
       vi.stubEnv(name, undefined)
     }
   })
@@ -69,6 +76,36 @@ describe('approving and returning from a terminal', () => {
     expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')
     expect(await store.comments.listByIssue(card.id)).toHaveLength(0)
     expect(await readChangeSeq(store)).toBe(before)
+  })
+
+  it.each(AGENT_TOOL_MARKS)('refuses an approval in a shell an agent tool marked (%s=%s), naming the mark', async (variable, value, label) => {
+    const card = await createWaitingCard()
+    vi.stubEnv(variable, value)
+
+    const message = APPROVAL_IS_HUMAN_MESSAGE.replace('KANBO_ACTOR_KIND=agent', label)
+    await expect(run(['approve', card.id])).rejects.toThrowError(expect.objectContaining({ exitCode: 4, message }))
+    expect(message).toContain(`(${label})`)
+    expect(message).toContain('Run it in your own terminal, or on the board page (kanbo serve).')
+    expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')
+  })
+
+  it('lets a person approve in their own terminal that carries a mark, with KANBO_ACTOR_KIND=person', async () => {
+    const card = await createWaitingCard()
+    vi.stubEnv('CLAUDECODE', '1')
+    vi.stubEnv('KANBO_ACTOR_KIND', 'person')
+
+    await run(['approve', card.id])
+
+    expect((await store.issues.findById(card.id))?.waitingFor).toBeNull()
+  })
+
+  it('reads CLAUDECODE only as documented: 1, not any value', async () => {
+    const card = await createWaitingCard()
+    vi.stubEnv('CLAUDECODE', '0')
+
+    await run(['approve', card.id])
+
+    expect((await store.issues.findById(card.id))?.waitingFor).toBeNull()
   })
 
   it('refuses a return in the same shell, and says so about returning', async () => {

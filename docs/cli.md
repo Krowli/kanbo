@@ -70,7 +70,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo mcp` | Serve this board to an MCP client over stdio. |
 | `kanbo serve` | Serve this board over HTTP, with a board page for the browser. |
 
-**Person only** commands refuse with exit `4` in a shell where `KANBO_ACTOR_KIND=agent` is set. There is no flag to get past this. See [agents](agents.md#agents-and-people).
+**Person only** commands refuse with exit `4` in an agent's shell: `KANBO_ACTOR_KIND=agent`, or a mark Claude Code, Gemini CLI or Cursor leaves ([configuration](configuration.md#agent-shells-kanbo-recognises)). There is no flag to get past this. See [agents](agents.md#agents-and-people).
 
 ## `kanbo init`
 
@@ -185,7 +185,7 @@ Checks, each `ok`, `warn` or `fail`, with a `fix` on everything that is not `ok`
 | `instructions` | Every kanbo block in the project's `CLAUDE.md`/`AGENTS.md`/`GEMINI.md` and your own files is the block this version writes. `warn` when a block was written by an older kanbo, when you edited one, or when there is no block anywhere. |
 | `mcp:<client>` | Every `kanbo` registration in the files `kanbo connect` writes (and `~/.claude.json`): its `command` is on `PATH`, or its full paths exist (`fail` otherwise, fixed by `kanbo connect <agent>`). On Windows a Codex registration that starts a `.cmd` is a `warn`. `warn` when there is none. |
 | `mcp:handshake` | Starts `kanbo mcp` in the project (the command a registration names), sends `initialize`, and expects server name `kanbo` with instructions, within 10 seconds. |
-| `actor` | `warn` when `KANBO_ACTOR_KIND=agent` is set in this shell. |
+| `actor` | `warn` when this shell is an agent's: `KANBO_ACTOR_KIND=agent`, or an agent tool's mark (named in the detail). |
 
 Exits `1` when any check fails; warnings alone exit `0`. Nothing is written.
 

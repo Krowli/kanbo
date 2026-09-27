@@ -10,8 +10,22 @@ kanbo has no configuration file of its own beyond the per-project binding. Every
 | `KANBO_DB_PATH` | every board command, `kanbo init` | Path of a SQLite board file to open when neither a flag nor the project's binding names one. An app that keeps the board inside its own database sets this for the shells it starts. |
 | `KANBO_WORKSPACE_ID` | every board command | The workspace to work on, when `--workspace` is not given. Beats the binding. |
 | `KANBO_ACTOR_ID` | every writing command, `kanbo mcp`, `kanbo serve` | The name writes are filed under. Defaults to the operating-system user name. |
-| `KANBO_ACTOR_KIND` | every command | Set to `agent` to mark the shell as an agent's: person-only commands exit `4`, column entry rules refuse instead of warning, and a Postgres binding's `agentDatabaseUrl` is used. Any other value, or none, is a person's shell. |
+| `KANBO_ACTOR_KIND` | every command | `agent` marks the shell as an agent's: person-only commands exit `4`, no question is asked, column entry rules refuse instead of warning, and a Postgres binding's `agentDatabaseUrl` is used. `person` marks it as a person's even when an agent tool's mark is there (see [Agent shells kanbo recognises](#agent-shells-kanbo-recognises)). Unset, the marks decide. |
 | `KANBO_SERVE_TOKEN` | `kanbo serve` | Bearer token the HTTP server requires (same as `--token`, but not visible in `ps`). Unset on loopback, a token is generated for the run. |
+
+## Agent shells kanbo recognises
+
+Some agent tools leave a documented mark in the environment of every command their agent runs. kanbo reads a shell carrying one as an agent's, exactly as if `KANBO_ACTOR_KIND=agent` were set: `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo run clear-session` and `kanbo run attach-session --replace` exit `4` with "Run it in your own terminal, or on the board page (kanbo serve).", and nothing asks a question (so `kanbo uninstall --purge` keeps the board file).
+
+| Mark | Set by | Source |
+| --- | --- | --- |
+| `CLAUDECODE=1` | Claude Code, in its Bash and PowerShell tools, hooks and stdio MCP servers — **and in the integrated terminal of its IDE extensions** | [code.claude.com/docs/en/env-vars](https://code.claude.com/docs/en/env-vars) |
+| `GEMINI_CLI=1` | Gemini CLI, in `run_shell_command` | [geminicli.com/docs/tools/shell](https://geminicli.com/docs/tools/shell/) |
+| `CURSOR_AGENT` (any value) | Cursor, in the Agent's terminal | [cursor.com/docs/agent/tools/terminal](https://cursor.com/docs/agent/tools/terminal) |
+
+Not recognised: **Codex** documents no variable of its own in the commands it runs, so mark its shells with `KANBO_ACTOR_KIND=agent` ([agents](agents.md#mark-every-agent-shell-as-an-agents)).
+
+**Your own terminal carries a mark** — typically an IDE terminal where the Claude Code extension sets `CLAUDECODE=1` — so person-only commands refuse there: set `KANBO_ACTOR_KIND=person` in that terminal (or its profile). `KANBO_ACTOR_KIND` always wins over the marks. `kanbo doctor` shows which mark it saw (`actor` warn).
 
 ## How a command finds its board
 

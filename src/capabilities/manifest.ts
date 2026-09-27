@@ -257,7 +257,8 @@ export function buildCapabilitiesManifest(): KanboCapabilities {
     },
     limits: [
       'Only a person may approve or return a card. `kanbo approve` and `kanbo return` refuse a shell that '
-      + 'says it belongs to an agent (`KANBO_ACTOR_KIND=agent`, exit 4), and there is no flag past it.',
+      + 'says it belongs to an agent (`KANBO_ACTOR_KIND=agent`, or `CLAUDECODE=1`, `GEMINI_CLI=1` or `CURSOR_AGENT` '
+      + 'unless `KANBO_ACTOR_KIND=person`; exit 4), and there is no flag past it.',
       'On an external board the same two rules are the database\'s own: a person\'s decision cannot be taken '
       + 'back, written over, or erased by the agent role, whichever client sends the write.',
       'Only a person may close a sprint. `kanbo sprint close` refuses an agent\'s shell '

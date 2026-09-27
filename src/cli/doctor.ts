@@ -8,7 +8,7 @@ import { maskDatabaseUrl } from '../domain/database-url'
 import { BoardError } from '../domain/errors'
 import { KANBO_PACKAGE_VERSION } from '../package-version'
 import { assertBoardSchema, openBoardDatabase } from '../sqlite/open-database'
-import { isAgentShell } from './actor'
+import { readAgentShellMarker } from './agent-shell'
 import type { KanboBinding } from './binding'
 import { BINDING_FILE_PATH, readBinding } from './binding'
 import type { BoardTarget } from './db-target'
@@ -483,12 +483,15 @@ function connectCommand(client: AgentId, scope: Registration['scope']): string {
 }
 
 function checkActor(): DoctorFinding {
-  if (isAgentShell()) {
+  const marker = readAgentShellMarker()
+  if (marker !== null) {
     return {
       check: 'actor',
       status: 'warn',
-      detail: 'This shell says it belongs to an agent (KANBO_ACTOR_KIND=agent): approve and return refuse here.',
-      fix: 'If this is your own terminal, remove KANBO_ACTOR_KIND from your shell profile.',
+      detail: `This shell says it belongs to an agent (${marker}): approve and return refuse here.`,
+      fix: marker === 'KANBO_ACTOR_KIND=agent'
+        ? 'If this is your own terminal, remove KANBO_ACTOR_KIND from your shell profile.'
+        : 'If this is your own terminal, set KANBO_ACTOR_KIND=person in it.',
     }
   }
   return { check: 'actor', status: 'ok', detail: 'This shell is a person\'s.' }

@@ -29,7 +29,7 @@ The client cannot start the server. Install kanbo globally, or change `command` 
 The `kanbo` a client would start fails before answering. The detail is its first line on stderr; run `kanbo mcp` in the project yourself to see all of it.
 
 **`actor` warn: `This shell says it belongs to an agent`**
-`KANBO_ACTOR_KIND=agent` is set. If this is your own terminal, remove it from your shell profile — otherwise you cannot approve.
+`KANBO_ACTOR_KIND=agent` is set, or an agent tool's mark (`CLAUDECODE=1`, `GEMINI_CLI=1`, `CURSOR_AGENT`) — the finding names which. If this is your own terminal, remove `KANBO_ACTOR_KIND=agent` from your shell profile, or for a mark set `KANBO_ACTOR_KIND=person` (an IDE terminal with the Claude Code extension sets `CLAUDECODE=1`).
 
 ## Messages
 
@@ -55,7 +55,7 @@ You upgraded kanbo. Run `kanbo migrate` in the project. Reads keep working until
 The Postgres database has no board yet, or an older one. Run `kanbo migrate --database-url <owner url>`, then `kanbo roles apply` with the same URL.
 
 **`Approval is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent).` (exit 4)**
-`KANBO_ACTOR_KIND=agent` is set in this shell. Approve from your own terminal, where it is not set — check your shell profile if it is set there.
+`KANBO_ACTOR_KIND=agent` is set in this shell. Approve from your own terminal, where it is not set — check your shell profile if it is set there. The same message with `(CLAUDECODE=1)`, `(GEMINI_CLI=1)` or `(CURSOR_AGENT)` means an agent tool marked the shell; in your own terminal, set `KANBO_ACTOR_KIND=person`.
 
 **`One board at a time: pass --db for a board file or --database-url for an external board, not both.` (exit 1)**
 Give only one of the two flags.
