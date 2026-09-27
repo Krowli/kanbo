@@ -1,6 +1,7 @@
 import type { Command } from 'commander'
 import { describe, expect, it } from 'vitest'
 
+import { DEFAULT_BOARD_FILE_PATH } from '../default-board-file-path'
 import { createKanboProgram } from './program'
 
 /** Words a person new to kanbo should not have to learn from `--help`. */
@@ -37,7 +38,8 @@ describe('kanbo --help', () => {
   })
 
   it('explains init', () => {
-    expect(find(program(), 'init').helpInformation()).toMatchSnapshot()
+    // The default board file is spelled the way this system spells paths; the snapshot is POSIX.
+    expect(find(program(), 'init').helpInformation().replace(DEFAULT_BOARD_FILE_PATH, '.kanbo/board.db')).toMatchSnapshot()
   })
 
   it('speaks without jargon, in every command, argument and option', () => {
