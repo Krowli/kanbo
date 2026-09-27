@@ -8,6 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { writeRecordingBin } from '../testing/fake-bin'
 import { registerInitCommand } from './commands/init'
 import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK } from './setup/instructions'
+import { claudeUserAddArgv, displayCommand, readCodexMcpEntry } from './setup/mcp-config'
+import { mcpLaunchSpec } from './setup/mcp-launch'
+
+const USER_LAUNCH = mcpLaunchSpec({ scope: 'user' })
 
 /**
  * `kanbo init --global` against a home directory of its own: `HOME`,
@@ -63,16 +67,17 @@ describe('kanbo init --global', () => {
     expect(claudeMd).not.toContain(INSTRUCTION_BLOCK)
     expect(readFileSync(join(codexHome, 'AGENTS.md'), 'utf8')).toContain(GLOBAL_INSTRUCTION_BLOCK)
     expect(existsSync(join(home, '.gemini', 'GEMINI.md'))).toBe(false)
-    expect(readFileSync(join(codexHome, 'config.toml'), 'utf8')).toBe('[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\n')
+    // `kanbo mcp`, or on Windows this Node and this script (mcp-launch.test.ts has both forms).
+    expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toEqual(USER_LAUNCH)
     expect(JSON.parse(readFileSync(join(home, '.cursor', 'mcp.json'), 'utf8'))).toEqual({
-      mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
+      mcpServers: { kanbo: { type: 'stdio', ...USER_LAUNCH } },
     })
 
     // Claude Code is not on this PATH: the line is handed to the person.
     expect(result.mcp).toContainEqual(expect.objectContaining({
       client: 'claude',
       state: 'manual',
-      command: 'claude mcp add --scope user kanbo -- kanbo mcp',
+      command: displayCommand(claudeUserAddArgv(USER_LAUNCH)),
     }))
     expect(existsSync(join(home, '.claude.json'))).toBe(false)
 
@@ -117,7 +122,7 @@ describe('kanbo init --global', () => {
 
     const result = await run(['--yes', '--instructions', 'none', '--mcp', 'claude'])
 
-    expect(readFileSync(calls, 'utf8')).toBe('mcp add --scope user kanbo -- kanbo mcp\n')
+    expect(readFileSync(calls, 'utf8')).toBe(`${claudeUserAddArgv(USER_LAUNCH).slice(1).join(' ')}\n`)
     expect(result.mcp).toEqual([expect.objectContaining({ client: 'claude', state: 'written' })])
   })
 

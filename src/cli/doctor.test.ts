@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -24,6 +25,33 @@ const TSX_CLI = createRequire(import.meta.url).resolve('tsx/cli')
  * script the test writes: this package run from source for the healthy case,
  * or one that fails for the broken ones.
  */
+/**
+ * Remove a test's folder. On Windows a folder cannot go while a process has it
+ * as its working directory — the server the handshake started, until it has
+ * exited — so this waits for that, up to 15 seconds, and then names the
+ * processes still running from it.
+ */
+async function removeTree(path: string): Promise<void> {
+  for (let waited = 0; ; waited += 250) {
+    try {
+      rmSync(path, { force: true, recursive: true })
+      return
+    }
+    catch (error) {
+      if (process.platform !== 'win32' || waited >= 15_000) {
+        const holders = process.platform === 'win32' ? describeProcesses() : ''
+        throw new Error(`${(error as Error).message}${holders ? `\nprocesses now:\n${holders}` : ''}`, { cause: error })
+      }
+      await new Promise(resolve => setTimeout(resolve, 250))
+    }
+  }
+}
+
+function describeProcesses(): string {
+  const listed = spawnSync('powershell', ['-NoProfile', '-Command', 'Get-CimInstance Win32_Process | Where-Object { $_.Name -match "node|cmd|conhost" } | ForEach-Object { "$($_.ProcessId) $($_.ParentProcessId) $($_.CommandLine)" }'], { encoding: 'utf8' })
+  return `${listed.stdout ?? ''}${listed.stderr ?? ''}`.trim()
+}
+
 describe('kanbo doctor', () => {
   let root: string
   let bin: string
@@ -56,12 +84,11 @@ describe('kanbo doctor', () => {
     )
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
-    // On Windows the server the handshake started may still be letting go of its folder.
-    rmSync(root, { force: true, recursive: true, maxRetries: 20, retryDelay: 250 })
-  })
+    await removeTree(root)
+  }, 20_000)
 
   /** A `kanbo` on PATH whose script is `body`, in JavaScript. */
   function installKanbo(body: string): void {
