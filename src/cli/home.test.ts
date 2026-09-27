@@ -283,6 +283,21 @@ describe('kanbo with no words', () => {
     expect(returned.comments.at(-1)).toContain('Keep the light theme the default')
   })
 
+  it('opens the columns menu from Change columns, and comes back to the home screen', async () => {
+    await createBoard()
+
+    const running = kanbo()
+    await driver.waitFor('What next?')
+    driver.press('down', 'down', 'down', 'down', 'down', 'enter')
+    await driver.waitFor('Columns of this board:')
+    await driver.waitFor('What would you like to change?')
+    driver.press('up', 'enter') // Done
+    await driver.waitFor('What next?')
+    exitMenu(driver)
+
+    expect(await running).toBeNull()
+  })
+
   it('leaves quietly with exit 0 on Ctrl-C at the menu', async () => {
     await createBoard()
 

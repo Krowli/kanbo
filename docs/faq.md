@@ -31,7 +31,7 @@ No. `kanbo card pr add` records a link. The rule `ci_green` and the pull request
 A milestone with a start and a due date is a sprint (`kanbo sprint create`). `kanbo sprint list` marks the current one. Closing it (`kanbo sprint close`, person only) moves unfinished cards to another milestone or out of the sprint.
 
 **Can I rename or add columns?**
-Yes, through the HTTP API (`POST /issues/statuses`, `PATCH /issues/statuses/:id`); `kanbo columns describe` sets what a column means and `kanbo columns rules` what a card needs to enter it. Agents read the descriptions via `kanbo prime`, so describe your columns.
+Yes: `kanbo columns` (a small menu at a terminal), or `kanbo columns add|rename|move|remove|template`; or through the HTTP API (`POST /issues/statuses`, `PATCH /issues/statuses/:id`); `kanbo columns describe` sets what a column means and `kanbo columns rules` what a card needs to enter it. Agents read the descriptions via `kanbo prime`, so describe your columns.
 
 **Can one database hold several projects?**
 Yes. Cards, columns and milestones belong to a workspace id; each project's binding names its own.

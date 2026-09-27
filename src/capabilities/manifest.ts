@@ -271,6 +271,10 @@ export function buildCapabilitiesManifest(): KanboCapabilities {
       + 'unmet rule (CLI exit 1); a person goes through and is told what is missing. Only a person sets the rules '
       + '— `kanbo columns rules` refuses an agent\'s shell (exit 4). The database role does not '
       + 'enforce them.',
+      'Only a person changes the board\'s columns: `kanbo columns add`, `rename`, `move`, `remove`, `template` and '
+      + '`add-standard` refuse an agent\'s shell (exit 4), and the rename, move, remove and add-missing operations '
+      + 'refuse any actor but a person (`board_column_structure_requires_user`); no MCP tool changes columns. '
+      + 'To Do can be neither removed nor renamed away from its slug `to_do`: `kanbo ready` takes work from it.',
       'No board tool or command deletes a card, agent role or not. Cancelling one is a move to another column. '
       + 'The one exception is `kanbo serve`\'s `DELETE /issues/:id`, which it answers only for '
       + 'a request presenting its token, on a server a person started, that has not sent `x-kanbo-actor: agent` '

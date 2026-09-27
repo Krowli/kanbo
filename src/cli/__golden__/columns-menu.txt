@@ -1,0 +1,76 @@
+
+Columns of this board:
+backlog      Backlog — Ideas and requests, not ready to start
+to_do        To Do — Ready to start — agents take work from here
+in_progress  In Progress — A person or an agent is working on it
+in_review    In Review — Work done; being checked, or waiting for a person
+done         Done — Finished and accepted
+canceled     Canceled — Won't be done
+│
+◆  What would you like to change?
+│  ● Add a column — kanbo columns add
+│  ○ Rename a column — kanbo columns rename
+│  ○ Move a column — kanbo columns move
+│  ○ Remove a column — kanbo columns remove
+│  ○ Apply a template — kanbo columns template
+│  ○ Done
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  What would you like to change?
+│  Add a column — kanbo columns add
+│
+◆  What is the new column called?
+│  _
+└
+│  Q█│  QA█◇  What is the new column called?
+│  QA
+│
+◆  When does a card belong here? One line agents read (Enter to skip)
+│  _
+└
+│  T█│  Te█│  Tes█│  Test█│  Teste█│  Tested█│  Tested █│  Tested b█│  Tested by█│  Tested by █│  Tested by a█│  Tested by a █│  Tested by a p█│  Tested by a pe█│  Tested by a per█│  Tested by a pers█│  Tested by a perso█│  Tested by a person█◇  When does a card belong here? One line agents read (Enter to skip)
+│  Tested by a person
+│
+◆  Where should it go?
+│  ○ At the start
+│  ○ After Backlog
+│  ○ After To Do
+│  ○ After In Progress
+│  ● After In Review
+│  ○ After Done
+│  ○ After Canceled
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  Where should it go?
+│  After In Review
+Added QA (slug qa).
+
+backlog      Backlog — Ideas and requests, not ready to start
+to_do        To Do — Ready to start — agents take work from here
+in_progress  In Progress — A person or an agent is working on it
+in_review    In Review — Work done; being checked, or waiting for a person
+qa           QA — Tested by a person
+done         Done — Finished and accepted
+canceled     Canceled — Won't be done
+│
+◆  What would you like to change?
+│  ● Add a column — kanbo columns add
+│  ○ Rename a column — kanbo columns rename
+│  ○ Move a column — kanbo columns move
+│  ○ Remove a column — kanbo columns remove
+│  ○ Apply a template — kanbo columns template
+│  ○ Done
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Add a column — kanbo columns add
+│  ○ Rename a column — kanbo columns rename
+│  ○ Move a column — kanbo columns move
+│  ○ Remove a column — kanbo columns remove
+│  ○ Apply a template — kanbo columns template
+│  ● Done
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  What would you like to change?
+│  Done
+
+--- exit 0

@@ -41,10 +41,16 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo capabilities` | The board's tools, commands, rules and limits — machine-readable, no board needed. |
 | `kanbo prime` | Print the columns of this board and the rules a card travels by. |
 | `kanbo ready` | Cards that are spelled out, unclaimed and nobody else's turn. |
+| `kanbo columns` | At a terminal, the columns and a small menu to change them (add, rename, move, remove, apply a template); with nobody to ask, the same list as `columns list`. |
 | `kanbo columns list` | Every column in board order, with the slug a card is moved by. |
 | `kanbo columns describe <column>` | Say in one line when a card belongs in a column. |
 | `kanbo columns rules <column>` | Set what a card must satisfy before an agent may move it into a column. **Person only.** |
-| `kanbo columns add-standard` | Add any of the standard columns this board is missing. |
+| `kanbo columns add <name>` | Add a column — before Done unless `--after`/`--before` says where. **Person only.** |
+| `kanbo columns rename <column> <name>` | Give a column a new name; its slug follows the name. To Do keeps its slug. **Person only.** |
+| `kanbo columns move <column>` | Move a column: `--first`, `--last`, `--before <column>` or `--after <column>`. **Person only.** |
+| `kanbo columns remove <column>` | Remove a column, moving its cards to `--move-cards-to <column>`. To Do stays. **Person only.** |
+| `kanbo columns template <template>` | Put `standard`, `simple` or `review-qa` on an empty board, or with `--add-missing` add the template's columns the board lacks. **Person only.** |
+| `kanbo columns add-standard` | Add any of the standard columns this board is missing — `columns template standard --add-missing`. **Person only.** |
 | `kanbo card list` | Cards in board order. |
 | `kanbo card get <card>` | One card, by key or number. |
 | `kanbo card create` | Put a new card on the board. |
@@ -84,7 +90,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
   - *Open the board in your browser* — `kanbo serve`.
   - *Add a card* — asks what it is about and puts it in To Do (`kanbo card create`).
   - *Connect an agent* — `kanbo connect`. *Get the agent instructions* — `kanbo instructions`.
-  - *Change columns* — `kanbo columns`; until its menu is in your version, `kanbo columns list`.
+  - *Change columns* — `kanbo columns`: its menu (below).
   - *Check the setup* — `kanbo doctor`. *Exit*.
 
   After each item the home screen comes back with fresh counts. Exit, or Ctrl-C at the menu, leaves with exit `0`; Ctrl-C inside an item goes back to the menu.
@@ -291,7 +297,15 @@ Lists To Do cards with no run and nobody's turn but the agent's, in board order.
 - `columns list` — common options only.
 - `columns describe <column> --text <text>` — `--text` (required): what the column means.
 - `columns rules <column>` — `--require <rules>`: comma-separated `checklist_complete`, `pull_request_linked`, `ci_green`, `approved`; `--clear`: ask nothing of a card entering the column. Person only.
-- `columns add-standard` — adds Backlog, To Do, In Progress, In Review, Done and Canceled where missing.
+- `columns add <name>` — `--after <column>` or `--before <column>`: where it goes (neither: before the first completed column, Done, or before Canceled); `--description <text>`: when a card belongs in it, one line agents read; `--category <category>`: `backlog`, `unstarted`, `started` (default), `completed` or `canceled`. A ready-made name (`QA`, `Blocked`, …) brings its own line and category. A name whose slug another column has is refused.
+- `columns rename <column> <name>` — the slug follows the new name, so a name another column's slug already answers to is refused. **To Do can't be renamed away from its slug `to_do`**: `kanbo ready` takes work from the column with that slug, and agents would find no cards to take. Another spelling (`To-do`, `TO DO`) is fine.
+- `columns move <column>` — exactly one of `--first`, `--last`, `--before <column>`, `--after <column>`.
+- `columns remove <column>` — `--move-cards-to <column>`: where the cards in it go. A column that holds cards is not removed without it — at a terminal kanbo asks which column, then *Remove column In Review and move 3 cards to To Do?* (default No); elsewhere it stops with the count and the command to type. The cards move in the same write as the removal, each card's history recording the move. **To Do can't be removed.**
+- `columns template <template>` — `standard`, `simple` or `review-qa`. On a board with no columns, puts the template on as it is; on a board with columns, only with `--add-missing`, which adds the template's columns the board lacks, each after the template column before it. A template never takes a column away; running it twice changes nothing.
+- `columns add-standard` — the same as `columns template standard --add-missing`: adds Backlog, To Do, In Progress, In Review, Done and Canceled where missing.
+- `kanbo columns` alone — at a terminal: the columns, then *What would you like to change?* — *Add a column*, *Rename a column*, *Move a column*, *Remove a column*, *Apply a template* (its missing columns), *Done* — each naming the command it runs, back after each change. Ctrl-C at the menu leaves; inside an item it goes back to the menu. With nobody to ask it prints the list. Takes no options: the board comes from the folder, `KANBO_DB_PATH` or `KANBO_DATABASE_URL`.
+
+All of these but `list` and `describe` are **person only**: in an agent's shell they stop with exit `4` and change nothing.
 
 ## `kanbo card …`
 

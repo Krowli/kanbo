@@ -11,7 +11,7 @@ Agents: none found — kanbo connect <agent>
 │  ○ Add a card — kanbo card create
 │  ○ Connect an agent — kanbo connect
 │  ○ Get the agent instructions — kanbo instructions
-│  ○ Change columns — kanbo columns list
+│  ○ Change columns — kanbo columns
 │  ○ Check the setup — kanbo doctor
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm
@@ -72,7 +72,7 @@ Agents: none found — kanbo connect <agent>
 │  ○ Add a card — kanbo card create
 │  ○ Connect an agent — kanbo connect
 │  ○ Get the agent instructions — kanbo instructions
-│  ○ Change columns — kanbo columns list
+│  ○ Change columns — kanbo columns
 │  ○ Check the setup — kanbo doctor
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm
@@ -82,7 +82,7 @@ Agents: none found — kanbo connect <agent>
 │  ○ Add a card — kanbo card create
 │  ○ Connect an agent — kanbo connect
 │  ○ Get the agent instructions — kanbo instructions
-│  ○ Change columns — kanbo columns list
+│  ○ Change columns — kanbo columns
 │  ○ Check the setup — kanbo doctor
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm
@@ -91,7 +91,7 @@ Agents: none found — kanbo connect <agent>
 │  ● Add a card — kanbo card create
 │  ○ Connect an agent — kanbo connect
 │  ○ Get the agent instructions — kanbo instructions
-│  ○ Change columns — kanbo columns list
+│  ○ Change columns — kanbo columns
 │  ○ Check the setup — kanbo doctor
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm
@@ -99,25 +99,25 @@ Agents: none found — kanbo connect <agent>
 │  ○ Add a card — kanbo card create
 │  ● Connect an agent — kanbo connect
 │  ○ Get the agent instructions — kanbo instructions
-│  ○ Change columns — kanbo columns list
+│  ○ Change columns — kanbo columns
 │  ○ Check the setup — kanbo doctor
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm
 └
 │  ○ Connect an agent — kanbo connect
 │  ● Get the agent instructions — kanbo instructions
-│  ○ Change columns — kanbo columns list
+│  ○ Change columns — kanbo columns
 │  ○ Check the setup — kanbo doctor
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm
 └
 │  ○ Get the agent instructions — kanbo instructions
-│  ● Change columns — kanbo columns list
+│  ● Change columns — kanbo columns
 │  ○ Check the setup — kanbo doctor
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm
 └
-│  ○ Change columns — kanbo columns list
+│  ○ Change columns — kanbo columns
 │  ● Check the setup — kanbo doctor
 │  ○ Exit
 │  ↑/↓ to navigate • Enter: confirm

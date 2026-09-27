@@ -15,7 +15,7 @@ kanbo has no configuration file of its own beyond the per-project binding. Every
 
 ## Agent shells kanbo recognises
 
-Some agent tools leave a documented mark in the environment of every command their agent runs. kanbo reads a shell carrying one as an agent's, exactly as if `KANBO_ACTOR_KIND=agent` were set: `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo run clear-session` and `kanbo run attach-session --replace` exit `4` with "Run it in your own terminal, or on the board page (kanbo serve).", and nothing asks a question (so `kanbo uninstall --purge` keeps the board file).
+Some agent tools leave a documented mark in the environment of every command their agent runs. kanbo reads a shell carrying one as an agent's, exactly as if `KANBO_ACTOR_KIND=agent` were set: `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo columns add|rename|move|remove|template|add-standard`, `kanbo run clear-session` and `kanbo run attach-session --replace` exit `4` with "Run it in your own terminal, or on the board page (kanbo serve).", and nothing asks a question (so `kanbo uninstall --purge` keeps the board file).
 
 | Mark | Set by | Source |
 | --- | --- | --- |

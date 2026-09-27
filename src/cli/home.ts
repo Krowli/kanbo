@@ -112,7 +112,7 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
 
     let choice: MenuChoice
     try {
-      choice = await ui.select<MenuChoice>({ message: 'What next?', options: menuOptions(context, board) })
+      choice = await ui.select<MenuChoice>({ message: 'What next?', options: menuOptions(board) })
     }
     catch (error) {
       // Ctrl-C at the menu is how a person leaves; nothing went wrong.
@@ -138,44 +138,27 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
   }
 }
 
-function menuOptions(context: BareKanboContext, board: HomeBoard): { value: MenuChoice, label: string }[] {
+function menuOptions(board: HomeBoard): { value: MenuChoice, label: string }[] {
   const item = (value: MenuChoice, text: string, command: string): { value: MenuChoice, label: string } =>
     ({ value, label: `${text} — kanbo ${command}` })
   return [
     ...(board.waiting.length > 0 ? [item('review', `Review the cards waiting for you (${board.waiting.length})`, 'approve · kanbo return')] : []),
-    item('board', 'Show the board here', menuCommand(context, 'board').join(' ')),
+    item('board', 'Show the board here', MENU_COMMANDS.board.join(' ')),
     item('serve', 'Open the board in your browser', 'serve'),
     item('card', 'Add a card', 'card create'),
     item('connect', 'Connect an agent', 'connect'),
     item('instructions', 'Get the agent instructions', 'instructions'),
-    item('columns', 'Change columns', menuCommand(context, 'columns').join(' ')),
+    item('columns', 'Change columns', MENU_COMMANDS.columns.join(' ')),
     item('doctor', 'Check the setup', 'doctor'),
     { value: 'exit', label: 'Exit' },
   ]
 }
 
-/**
- * What a menu item that is a command's own menu runs: `kanbo board` and
- * `kanbo columns` once they run with no further words, and until then the
- * listing that says the same (`card list`, `columns list`).
- */
-function menuCommand(context: BareKanboContext, name: 'board' | 'columns'): string[] {
-  const fallback = { board: ['card', 'list'], columns: ['columns', 'list'] }[name]
-  return runsBare(context.createProgram(), name) ? [name] : fallback
-}
-
-/**
- * Does `kanbo <name>` do something on its own? A command without subcommands
- * does; one with subcommands only when it has an action of its own, which
- * commander keeps in a field it does not document.
- */
-function runsBare(program: Command, name: string): boolean {
-  const command = program.commands.find(candidate => candidate.name() === name)
-  if (!command) {
-    return false
-  }
-  return command.commands.length === 0 || (command as unknown as { _actionHandler: unknown })._actionHandler != null
-}
+/** What the items that are a command of their own run. */
+const MENU_COMMANDS = {
+  board: ['card', 'list'],
+  columns: ['columns'],
+} as const satisfies Record<'board' | 'columns', readonly string[]>
 
 async function act(context: BareKanboContext, choice: Exclude<MenuChoice, 'exit'>, board: HomeBoard): Promise<void> {
   switch (choice) {
@@ -184,7 +167,7 @@ async function act(context: BareKanboContext, choice: Exclude<MenuChoice, 'exit'
       return
     case 'board':
     case 'columns':
-      await runCommand(context, menuCommand(context, choice))
+      await runCommand(context, [...MENU_COMMANDS[choice]])
       return
     case 'card':
       await addCard(context)

@@ -45,6 +45,15 @@ export const COLUMN_RULES_IS_HUMAN_MESSAGE
     + HUMAN_ONLY_HINT
 
 /**
+ * The same, for changing the board's columns: every agent reads its work from
+ * them, and `kanbo ready` from To Do.
+ */
+export const COLUMN_CHANGES_ARE_HUMAN_MESSAGE
+  = 'Changing the board\'s columns is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
+    + 'Ask a person to change them on the board or run "kanbo columns" in their own terminal.'
+    + HUMAN_ONLY_HINT
+
+/**
  * The same, for taking back the log a run names: an agent that could clear or
  * swap it could point a card's history at any log it liked.
  */
@@ -54,7 +63,19 @@ export const RUN_SESSION_REF_IS_HUMAN_MESSAGE
     + HUMAN_ONLY_HINT
 
 /** The commands only a person may run, as typed after `kanbo` — the capabilities manifest reads this rather than naming them again. */
-export const HUMAN_ONLY_ACTIONS = ['approve', 'return', 'sprint close', 'columns rules', 'run clear-session'] as const
+export const HUMAN_ONLY_ACTIONS = [
+  'approve',
+  'return',
+  'sprint close',
+  'columns rules',
+  'columns add',
+  'columns rename',
+  'columns move',
+  'columns remove',
+  'columns template',
+  'columns add-standard',
+  'run clear-session',
+] as const
 
 /** What only a person may do: the commands above, and one option of a command anyone may run. */
 type HumanOnlyAction = typeof HUMAN_ONLY_ACTIONS[number] | 'run attach-session --replace'
@@ -64,6 +85,12 @@ const HUMAN_ONLY_MESSAGES: Record<HumanOnlyAction, string> = {
   'return': RETURN_IS_HUMAN_MESSAGE,
   'sprint close': SPRINT_CLOSE_IS_HUMAN_MESSAGE,
   'columns rules': COLUMN_RULES_IS_HUMAN_MESSAGE,
+  'columns add': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
+  'columns rename': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
+  'columns move': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
+  'columns remove': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
+  'columns template': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
+  'columns add-standard': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
   'run clear-session': RUN_SESSION_REF_IS_HUMAN_MESSAGE,
   'run attach-session --replace': RUN_SESSION_REF_IS_HUMAN_MESSAGE,
 }
@@ -81,8 +108,9 @@ export function createCliActor(): BoardActor {
  * The person on the other end of this shell — or the refusal that says there
  * is none.
  *
- * Approving, returning, closing a sprint, setting a column's entry rules and
- * taking back the log a run names are the things only a person may do, and a shell
+ * Approving, returning, closing a sprint, setting a column's entry rules,
+ * changing the board's columns and taking back the log a run names are the
+ * things only a person may do, and a shell
  * that says it belongs to an agent is not one. `KANBO_ACTOR_KIND=person` overrides
  * the marks — for a person's own terminal that an agent tool marked — so this
  * keeps an honest agent from approving its own work, and does not stop one that
