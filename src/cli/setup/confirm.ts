@@ -1,4 +1,6 @@
 import { CliError } from '../output'
+import { canPrompt } from '../ui/environment'
+import { getUi } from '../ui/ui'
 
 /**
  * Show a plan of file changes and ask before carrying it out.
@@ -22,15 +24,8 @@ export async function confirmPlan(input: {
   if (input.yes) {
     return true
   }
-  if (!isInteractive()) {
+  if (!canPrompt()) {
     throw new CliError(1, `Nothing was changed. Run ${input.command} again with --yes to do this without being asked.`)
   }
-  const prompts = await import('@clack/prompts')
-  const answer = await prompts.confirm({ message: input.question })
-  return answer === true
-}
-
-/** Is there a person on the other end of this shell to ask? */
-export function isInteractive(): boolean {
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY)
+  return await getUi().confirm({ message: input.question })
 }

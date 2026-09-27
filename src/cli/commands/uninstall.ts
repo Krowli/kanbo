@@ -6,7 +6,7 @@ import type { Command } from 'commander'
 import { BINDING_FILE_PATH } from '../binding'
 import { findKanboProject } from '../doctor'
 import { CliError } from '../output'
-import { confirmPlan, isInteractive } from '../setup/confirm'
+import { confirmPlan } from '../setup/confirm'
 import type { FileChange } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
 import { planInstructionBlockRemoval } from '../setup/instructions'
@@ -18,6 +18,8 @@ import {
   runClaudeMcp,
 } from '../setup/mcp-config'
 import type { McpClient } from '../setup/paths'
+import { canPrompt } from '../ui/environment'
+import { CancelledError, getUi } from '../ui/ui'
 import {
   GLOBAL_INSTRUCTION_CLIENTS,
   globalInstructionPath,
@@ -173,15 +175,20 @@ function findOwnBoardFile(root: string): string | null {
 
 /** Delete the board file only on a yes to a question that names it; `--yes` is not that answer. */
 async function purgeBoardFile(path: string): Promise<UninstallAction> {
-  if (!isInteractive()) {
+  if (!canPrompt()) {
     return { path, action: 'kept', note: 'board file: deleting it needs a confirmation in a terminal; delete it yourself if you mean to' }
   }
-  const prompts = await import('@clack/prompts')
-  const answer = await prompts.confirm({
+  // Everything else is done by now; Ctrl-C here is one more way of saying keep it.
+  const answer = await getUi().confirm({
     message: `Delete the board file ${path} and every card in it? This cannot be undone.`,
     initialValue: false,
+  }).catch((error: unknown) => {
+    if (error instanceof CancelledError) {
+      return false
+    }
+    throw error
   })
-  if (answer !== true) {
+  if (!answer) {
     return { path, action: 'kept', note: 'board file' }
   }
   for (const file of [path, `${path}-wal`, `${path}-shm`]) {

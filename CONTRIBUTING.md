@@ -26,6 +26,8 @@ npm link             # optional: `kanbo` on your PATH, pointing at this checkout
 
 Tests need no external services. Board-file tests use real SQLite files in a temporary directory; Postgres tests use [PGlite](https://pglite.dev), an in-process Postgres, so no database server is required. Some tests run the built output, so run `npm run build` before `npm test`.
 
+Every prompt goes through `src/cli/ui/ui.ts`; a test answers one with `src/testing/prompt-driver.ts` (fake terminal streams and key presses, no pty). A test that needs a program on `PATH` writes it with `src/testing/fake-bin.ts`, which works on Windows too.
+
 ## Layout
 
 | Path | What |

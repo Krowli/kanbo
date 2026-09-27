@@ -5,13 +5,14 @@ import { join } from 'node:path'
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { createPromptDriver } from '../testing/prompt-driver'
 import { registerInitCommand } from './commands/init'
 import { registerUninstallCommand } from './commands/uninstall'
 import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK } from './setup/instructions'
+import { setUiForTests } from './ui/ui'
 
 /** The one question `--purge` asks, answered by the test. */
-const prompts = vi.hoisted(() => ({ confirm: vi.fn() }))
-vi.mock('@clack/prompts', () => ({ confirm: prompts.confirm }))
+const prompts = { confirm: vi.fn() }
 
 /**
  * `kanbo uninstall` on a project and a home directory set up by `kanbo init`,
@@ -67,8 +68,7 @@ describe('kanbo uninstall', () => {
   afterEach(() => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
-    Object.defineProperty(process.stdin, 'isTTY', { value: undefined, configurable: true })
-    Object.defineProperty(process.stdout, 'isTTY', { value: undefined, configurable: true })
+    setUiForTests(null)
     rmSync(root, { force: true, recursive: true })
   })
 
@@ -127,8 +127,11 @@ describe('kanbo uninstall', () => {
   })
 
   it('deletes the board file only on a yes to a question that names it', async () => {
-    Object.defineProperty(process.stdin, 'isTTY', { value: true, configurable: true })
-    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true })
+    // A terminal, as `canPrompt` sees one.
+    setUiForTests({ ...createPromptDriver().ui, confirm: prompts.confirm })
+    for (const name of ['CI', 'TERM', 'KANBO_ACTOR_KIND']) {
+      vi.stubEnv(name, undefined)
+    }
     const board = join(projectDir, '.kanbo', 'board.db')
 
     prompts.confirm.mockResolvedValueOnce(false)

@@ -18,13 +18,14 @@ import type { BoardTarget } from '../db-target'
 import { describeTarget, resolveDatabaseUrl, resolveDbTarget, resolveHostDbPath } from '../db-target'
 import type { CliResult } from '../output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
-import { isInteractive } from '../setup/confirm'
 import type { FileOutcome } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
 import { INSTRUCTION_BLOCK, planInstructionBlock } from '../setup/instructions'
 import { planCodexMcpServer, planJsonMcpServer } from '../setup/mcp-config'
 import type { McpClient, ProjectInstructionTarget } from '../setup/paths'
 import { MCP_CLIENTS, PROJECT_INSTRUCTION_FILES, projectMcpConfigPath } from '../setup/paths'
+import { canPrompt } from '../ui/environment'
+import { getUi } from '../ui/ui'
 import { resolveWorkspace } from '../workspace'
 import { initGlobal } from './init-global'
 
@@ -515,12 +516,11 @@ async function writeInstructions(projectDir: string, options: InitOptions): Prom
 
 async function askInstructionTarget(options: InitOptions): Promise<InstructionTarget> {
   showBlock(options)
-  if (options.yes || !isInteractive()) {
+  if (options.yes || !canPrompt()) {
     return 'none'
   }
 
-  const prompts = await import('@clack/prompts')
-  const answer = await prompts.select({
+  return await getUi().select<InstructionTarget>({
     message: 'Add this block to the project\'s agent instructions?',
     options: [
       { value: 'claude' as const, label: 'CLAUDE.md' },
@@ -528,7 +528,6 @@ async function askInstructionTarget(options: InitOptions): Promise<InstructionTa
       { value: 'none' as const, label: 'Neither — I will paste it myself' },
     ],
   })
-  return prompts.isCancel(answer) ? 'none' : answer
 }
 
 /**
@@ -556,12 +555,11 @@ async function registerMcpServers(projectDir: string, options: InitOptions): Pro
 }
 
 async function askMcpClients(options: InitOptions): Promise<McpClient[]> {
-  if (options.yes || !isInteractive()) {
+  if (options.yes || !canPrompt()) {
     return []
   }
 
-  const prompts = await import('@clack/prompts')
-  const answer = await prompts.multiselect({
+  return await getUi().multiselect<McpClient>({
     message: 'Register the board\'s MCP server with which tools?',
     options: [
       { value: 'claude' as const, label: 'Claude Code (.mcp.json)' },
@@ -570,7 +568,6 @@ async function askMcpClients(options: InitOptions): Promise<McpClient[]> {
     ],
     required: false,
   })
-  return prompts.isCancel(answer) ? [] : answer
 }
 
 function registerMcpServer(projectDir: string, client: McpClient): FileOutcome {
