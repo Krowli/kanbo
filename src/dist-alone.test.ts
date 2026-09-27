@@ -98,7 +98,12 @@ describe.skipIf(!built)('the kanbo binary copied without its package', () => {
       expect(await stylesheet.text()).toContain('.card')
     }
     finally {
-      server.kill()
+      // Wait for it to be gone: on Windows its board file cannot be removed while it is open.
+      if (server.exitCode === null && server.signalCode === null) {
+        const exited = new Promise(resolve => server.once('exit', resolve))
+        server.kill()
+        await exited
+      }
     }
   })
 })
