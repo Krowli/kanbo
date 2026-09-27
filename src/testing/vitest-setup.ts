@@ -9,3 +9,10 @@ import { AGENT_SHELL_MARKERS } from '../cli/agent-shell'
 for (const marker of AGENT_SHELL_MARKERS) {
   delete process.env[marker.variable]
 }
+
+/**
+ * No test asks npm about a newer kanbo: a command run in-process, or a built
+ * `kanbo` a test starts (which inherits this), would otherwise reach the
+ * network. The update check's own tests hand it a fake `fetch` and environment.
+ */
+process.env.KANBO_NO_UPDATE_CHECK = '1'

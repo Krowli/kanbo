@@ -2,6 +2,7 @@ import { isAbsolute, relative } from 'node:path'
 
 import type { Command } from 'commander'
 import { CommanderError } from 'commander'
+import pc from 'picocolors'
 
 import { cardDisplayTitle } from '../domain/card-display-title'
 import { READY_COLUMN_SLUG } from '../domain/column-templates'
@@ -21,6 +22,8 @@ import { AGENT_IDS, AGENTS, detectAgents } from './setup/agents'
 import { tildify } from './tildify'
 import type { Ui } from './ui/ui'
 import { CancelledError } from './ui/ui'
+import type { AvailableUpdate } from './update-check'
+import { UPDATE_COMMAND } from './update-check'
 import type { CardView } from './view'
 import { projectCard } from './view'
 
@@ -44,10 +47,20 @@ export interface BareKanboContext {
   interactive: boolean
   /** A fresh `kanbo` program to run one menu item's command on. */
   createProgram: () => Command
-  /** "A newer kanbo is out" — shown under the header when there is one (the update check fills it in). */
-  updateNotice: string | null
+  /**
+   * A newer kanbo, once the update check started with this run has heard of
+   * one: the home screen shows it under the summary and offers to install it.
+   */
+  update?: HomeUpdate
   /** How "Open the board in your browser" serves the board and waits; `kanbo serve`'s own unless a test says otherwise. */
   boardPage?: BoardPageRunner
+}
+
+/** The update check as the home screen sees it: what npm said so far, and how to install it. */
+export interface HomeUpdate {
+  peek: () => AvailableUpdate | null
+  /** Install it and say how it went; `true` when it worked. */
+  install: (update: AvailableUpdate) => boolean
 }
 
 /** Serving the board page from the menu: start it, then wait for the person to stop it. */
@@ -71,9 +84,13 @@ interface HomeBoard {
 /** The `--check` instruction cells that mean a kanbo section is there and readable. */
 const INSTRUCTION_BLOCK_PRESENT = new Set(['current', 'outdated', 'legacy', 'edited', 'newer', 'chosen'])
 
-type MenuChoice = 'review' | 'board' | 'serve' | 'card' | 'connect' | 'instructions' | 'columns' | 'doctor' | 'exit'
+type MenuChoice = 'review' | 'board' | 'serve' | 'card' | 'connect' | 'instructions' | 'columns' | 'doctor' | 'update' | 'exit'
 
-export async function runBareKanbo(context: BareKanboContext): Promise<void> {
+/**
+ * `kanbo` with no words. Says `'home'` when it showed the home screen, which
+ * offers a newer kanbo itself — nobody is asked again after it.
+ */
+export async function runBareKanbo(context: BareKanboContext): Promise<'home' | 'other'> {
   let target: BoardTarget | null
   try {
     target = findBoardTarget()
@@ -83,19 +100,20 @@ export async function runBareKanbo(context: BareKanboContext): Promise<void> {
     // one; with nobody to ask, the message says what to do.
     if (error instanceof BoardFileMissingError && context.interactive) {
       await runCommand(context, ['init'])
-      return
+      return 'other'
     }
     throw error
   }
   if (!context.interactive) {
     console.log(target ? await describePlainly(target) : describeNoBoard())
-    return
+    return 'other'
   }
   if (!target) {
     await runCommand(context, ['init'])
-    return
+    return 'other'
   }
   await runHome(context, target)
+  return 'home'
 }
 
 /** The board this folder works on, or `null` when nothing names one. */
@@ -128,18 +146,21 @@ function describeNoBoard(): string {
 
 /** A board and nobody to ask: the summary, and where to read more. */
 async function describePlainly(target: BoardTarget): Promise<string> {
-  return [...describeBoard(await readHomeBoard(target), null), 'More: kanbo --help'].join('\n')
+  return [...describeBoard(await readHomeBoard(target)), 'More: kanbo --help'].join('\n')
 }
 
 async function runHome(context: BareKanboContext, target: BoardTarget): Promise<void> {
   const { ui } = context
+  let updated = false
   while (true) {
     const board = await readHomeBoard(target)
-    say(ui, ['', ...describeBoard(board, context.updateNotice)].join('\n'))
+    // Looked at on every turn: npm's answer may come after the first screen.
+    const update = updated ? null : context.update?.peek() ?? null
+    say(ui, ['', ...describeBoard(board), ...(update ? [pc.dim(`kanbo ${update.latest} is available (you have ${update.current}).`)] : [])].join('\n'))
 
     let choice: MenuChoice
     try {
-      choice = await ui.select<MenuChoice>({ message: 'What next?', options: menuOptions(board) })
+      choice = await ui.select<MenuChoice>({ message: 'What next?', options: menuOptions(board, update) })
     }
     catch (error) {
       // Ctrl-C at the menu is how a person leaves; nothing went wrong.
@@ -150,6 +171,10 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
     }
     if (choice === 'exit') {
       return
+    }
+    if (choice === 'update') {
+      updated = context.update!.install(update!)
+      continue
     }
 
     try {
@@ -166,7 +191,7 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
   }
 }
 
-function menuOptions(board: HomeBoard): { value: MenuChoice, label: string }[] {
+function menuOptions(board: HomeBoard, update: AvailableUpdate | null): { value: MenuChoice, label: string }[] {
   const item = (value: MenuChoice, text: string, command: string): { value: MenuChoice, label: string } =>
     ({ value, label: `${text} — kanbo ${command}` })
   return [
@@ -178,6 +203,7 @@ function menuOptions(board: HomeBoard): { value: MenuChoice, label: string }[] {
     item('instructions', 'Get the agent instructions', 'instructions'),
     item('columns', 'Change columns', MENU_COMMANDS.columns.join(' ')),
     item('doctor', 'Check the setup', 'doctor'),
+    ...(update ? [{ value: 'update' as const, label: `Update kanbo to ${update.latest} — ${UPDATE_COMMAND}` }] : []),
     { value: 'exit', label: 'Exit' },
   ]
 }
@@ -188,7 +214,7 @@ const MENU_COMMANDS = {
   columns: ['columns'],
 } as const satisfies Record<'board' | 'columns', readonly string[]>
 
-async function act(context: BareKanboContext, choice: Exclude<MenuChoice, 'exit'>, board: HomeBoard): Promise<void> {
+async function act(context: BareKanboContext, choice: Exclude<MenuChoice, 'exit' | 'update'>, board: HomeBoard): Promise<void> {
   switch (choice) {
     case 'review':
       await review(context.ui, board.waiting)
@@ -347,12 +373,11 @@ function describeLocation(target: BoardTarget): string {
 }
 
 /** The header and the lines under it: columns, what waits, the agents. */
-function describeBoard(board: HomeBoard, updateNotice: string | null): string[] {
+function describeBoard(board: HomeBoard): string[] {
   const waiting = board.waiting.length
   const whom = isAgentShell() ? 'a person' : 'you'
   return [
     board.header,
-    ...(updateNotice ? [updateNotice] : []),
     board.columns
       .filter(column => column.category !== 'canceled' || column.count > 0)
       .map(column => `${column.name} ${column.count}`)

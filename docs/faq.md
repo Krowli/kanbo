@@ -38,3 +38,6 @@ Yes. Cards, columns and milestones belong to a workspace id; each project's bind
 
 **Is there a hosted version?**
 No.
+
+**Does kanbo phone home?**
+Only to ask npm which version is the latest, once per run, so it can offer an update ([Update check](configuration.md#update-check)). Nothing about you or your board is sent. Turn it off with `KANBO_NO_UPDATE_CHECK=1`; it is off in CI.

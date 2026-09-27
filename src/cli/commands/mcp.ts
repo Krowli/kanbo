@@ -4,7 +4,8 @@ import type { Command } from 'commander'
 import { createKanboMcpServer } from '../../mcp/server'
 import { createCliActor } from '../actor'
 import { describeFailure } from '../failure'
-import { openMcpBoard } from '../mcp-board'
+import { openMcpBoard, withUpdateNote } from '../mcp-board'
+import { isUpdateCheckDisabled, startUpdateCheck } from '../update-check'
 
 /**
  * `kanbo mcp` — the board as tools, for any MCP client.
@@ -60,7 +61,9 @@ export function registerMcpCommand(program: Command): void {
         console.error(describeFailure(error).message)
       }))
 
-      const server = createKanboMcpServer(board, { includeRunTools: true })
+      // Asked once, as the server starts; the answer only ever reaches `kanbo_prime`.
+      const check = isUpdateCheckDisabled() ? null : startUpdateCheck()
+      const server = createKanboMcpServer(check ? withUpdateNote(board, check.peek) : board, { includeRunTools: true })
       server.server.onclose = () => void close()
       try {
         await server.connect(new StdioServerTransport())

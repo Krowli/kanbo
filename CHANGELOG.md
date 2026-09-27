@@ -18,6 +18,7 @@ These change what the column operations of `createBoardOps(...)` do. Signatures 
 ### Added
 
 - `addColumn(workspaceId, { name, description, color, category, position }, actor)` on `createBoardOps(...)`: a column at its place in one write, its name checked inside the write. `kanbo columns add` uses it.
+- Update check: every run asks npm for the latest `kanbo-cli` alongside the command (about 1.5 s, never holding the command more than 0.3 s after it finishes; no schedule, no cache). A person at a terminal is asked whether to update (default No) and a yes runs `npm install -g kanbo-cli@latest`; the home screen shows it under the summary with a menu item; an agent's shell gets one line on stderr; `kanbo mcp` ends `kanbo_prime` with a note. Off in CI, with `KANBO_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER`, for `--json`, `--version` and `--help`.
 - `removeColumn` returns `unmetRules` for moved cards that entered a column without meeting its entry rules; `kanbo columns remove` prints the same warning as `kanbo card move`. Moved cards keep `waitingFor`, as a moved card does.
 
 ### Changed

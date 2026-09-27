@@ -12,7 +12,21 @@ kanbo has no configuration file of its own beyond the per-project binding. Every
 | `KANBO_ACTOR_ID` | every writing command, `kanbo mcp`, `kanbo serve` | The name writes are filed under. Defaults to the operating-system user name. |
 | `KANBO_ACTOR_KIND` | every command | `agent` marks the shell as an agent's: person-only commands exit `4`, no question is asked, column entry rules refuse instead of warning, and a Postgres binding's `agentDatabaseUrl` is used. `person` marks it as a person's even when an agent tool's mark is there (see [Agent shells kanbo recognises](#agent-shells-kanbo-recognises)). Unset, the marks decide. |
 | `KANBO_SERVE_TOKEN` | `kanbo serve` | Bearer token the HTTP server requires (same as `--token`, but not visible in `ps`). Unset on loopback, a token is generated for the run. |
-| `KANBO_DEBUG` | every command | `1` adds the values that caused a board refusal (`Details: {…}`) under its message. |
+| `KANBO_DEBUG` | every command | `1` adds the values that caused a board refusal (`Details: {…}`) under its message, and says why the update check got no answer. |
+| `KANBO_NO_UPDATE_CHECK` | every command, `kanbo mcp` | `1` turns off the update check (see [Update check](#update-check)). |
+| `NO_UPDATE_NOTIFIER` | every command, `kanbo mcp` | Set to anything: the same. The variable other command-line tools honour. |
+
+## Update check
+
+Every time kanbo starts, it asks npm (`https://registry.npmjs.org/kanbo-cli/latest`) which version is the latest, alongside the command — there is no schedule and nothing is cached. The request gets about 1.5 seconds and never holds the command up: its answer is used only if it arrives before the command finishes, plus at most 0.3 seconds. Pre-releases count only when you run one. If npm cannot be reached, nothing is said (`KANBO_DEBUG=1` says why).
+
+When a newer kanbo is out:
+
+- **A person at a terminal** is asked after the command's output: `kanbo X is available (you have Y). Update now?` (default No). Yes runs `npm install -g kanbo-cli@latest` in the same terminal and prints `Updated to X.`, or npm's failure and the command to run yourself. On the home screen (`kanbo` alone) there is a dim line under the summary and a menu item *Update kanbo to X* instead of the question.
+- **An agent's shell, or any shell with nobody to ask**, gets one line on stderr: `kanbo X is available (you have Y) — npm install -g kanbo-cli@latest`.
+- **`kanbo mcp`** asks once, when the server starts, and ends the `kanbo_prime` tool's answer with `Note: kanbo X is available (running Y). Ask a person to update: npm install -g kanbo-cli@latest`. It never prints anything else on stdout.
+
+No check is made when `CI` is set (to anything but empty, `0` or `false`), with `KANBO_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER` set, for machine output (`--json`, `--format json`), for `--version` and `--help`, and on the `kanbo mcp` command line itself (only its `kanbo_prime` note).
 
 ## Agent shells kanbo recognises
 

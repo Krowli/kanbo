@@ -3,6 +3,8 @@ import { createDbTransport } from '../mcp/db-transport'
 import type { KanboToolTransport } from '../mcp/transport'
 import { BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE } from './db-target'
 import { CliError, EXIT_NOT_RESOLVED } from './output'
+import type { AvailableUpdate } from './update-check'
+import { describeUpdateForAgent } from './update-check'
 
 /**
  * The board `kanbo mcp` serves — or, in a folder with none yet, a stand-in
@@ -96,4 +98,20 @@ function createDeferredBoard(input: KanboDbTransportInput): KanboDbTransport {
 /** The failure that means nothing names a board here — not a board that failed to open. */
 function isNoBoard(error: unknown): boolean {
   return error instanceof BoardNotFoundError
+}
+
+/**
+ * The same board, with `kanbo_prime` ending in a line about a newer kanbo once
+ * the update check `kanbo mcp` started has heard of one — the only place an
+ * agent on the MCP server can learn it, since stdout is the protocol.
+ */
+export function withUpdateNote<T extends KanboToolTransport>(board: T, peek: () => AvailableUpdate | null): T {
+  return {
+    ...board,
+    prime: async () => {
+      const { text } = await board.prime()
+      const update = peek()
+      return { text: update ? `${text}\n\n${describeUpdateForAgent(update)}` : text }
+    },
+  }
 }

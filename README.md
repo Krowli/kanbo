@@ -33,6 +33,8 @@ cd your-project && kanbo
 
 Run `kanbo` again later for the home screen: what is on the board, the cards waiting for you (approve them or send them back right there), which agents are connected, and a menu that shows the command behind every item.
 
+kanbo checks npm for a newer version as it starts and offers to update when one is out; `KANBO_NO_UPDATE_CHECK=1` turns that off ([details](docs/configuration.md#update-check)).
+
 Without a terminal (a script, CI, an agent's shell), `kanbo` asks nothing: it prints the command to run. `kanbo init --yes` takes the defaults: a board file with the standard columns, and no agent files. The same answers as flags:
 
 ```bash

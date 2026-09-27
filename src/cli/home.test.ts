@@ -414,6 +414,26 @@ describe('kanbo with no words', () => {
     expect(start).toHaveBeenCalledTimes(1)
   })
 
+  it('shows a newer kanbo under the summary and installs it from the menu, without asking again after', async () => {
+    await createBoard()
+    const install = vi.fn(() => ({ pid: 1, output: [], stdout: '', stderr: '', status: 0, signal: null }))
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(JSON.stringify({ version: '9.0.0' })))
+
+    const running = runKanbo([], program, {}, { fetch, env: {}, currentVersion: '0.3.0', install }).then(() => null, (error: unknown) => error)
+    await driver.waitFor('kanbo 9.0.0 is available (you have 0.3.0).')
+    await driver.waitFor('Update kanbo to 9.0.0 — npm install -g kanbo-cli@latest')
+    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+    await driver.waitFor('What next?')
+    exitMenu(driver)
+
+    expect(await running).toBeNull()
+    expect(install).toHaveBeenCalledOnce()
+    expect(printed).toContain('Updated to 9.0.0.')
+    const afterInstall = driver.transcript().split('Updated to 9.0.0.')[1]!
+    expect(afterInstall).not.toContain('Update kanbo to')
+    expect(afterInstall).not.toContain('Update now?')
+  })
+
   it('leaves quietly with exit 0 on Ctrl-C at the menu', async () => {
     await createBoard()
 
