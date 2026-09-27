@@ -13,9 +13,9 @@ import { defineConfig } from 'tsdown'
  * `import`/`require` in the output, which is tsdown's default for anything
  * listed under `dependencies` or `peerDependencies` — a consumer installs this
  * package the ordinary way and gets its own copy of each, rather than a second
- * one baked into ours. The one entry point this deliberately leaves out is
- * `./testing`: it pulls in `@electric-sql/pglite`, a development dependency of
- * this package's own tests, and has no reason to exist outside a checkout.
+ * one baked into ours. `src/testing/` is not an entry point: it pulls in
+ * `@electric-sql/pglite`, a development dependency of this package's own
+ * tests, and has no reason to exist outside a checkout.
  *
  * Each entry keeps its source subpath (`sqlite/index`, not `sqlite`) so the
  * compiled layout mirrors `src/`'s own depth — `getBoardMigrationsPath` and

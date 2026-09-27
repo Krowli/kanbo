@@ -3,27 +3,13 @@
  * this list: what each code is over HTTP is `BOARD_ERROR_RESPONSES`
  * (`../serve/board-error-responses.ts`), the one table `kanbo serve` and any app
  * serving the board over HTTP answer with.
- *
- * Five of them are about where a board lives rather than about what is on it,
- * and they are named here for the same reason as the rest: a host that keeps
- * one board in a file and another in a database still answers its callers in
- * one vocabulary. `board_storage_not_prepared` is a connection string pointing
- * at a database that holds no board this build can speak for,
- * `board_storage_unavailable` is one the host could not reach at all,
- * `board_storage_not_configured` is a workspace that names no board to look at,
- * `board_storage_not_empty` is a board still holding cards when something asked
- * to point the workspace somewhere else, and `board_mixed_workspaces` is a
- * single operation naming cards that turned out to live in two different
- * boards — which no transaction can commit as one.
  */
 export type BoardErrorCode
   = | 'board_approval_requires_user'
     | 'board_column_rules_requires_user'
     | 'board_column_rules_unmet'
-    | 'board_copy_conflict'
     | 'board_entry_rule_invalid'
     | 'board_execution_mode_locked'
-    | 'board_mixed_workspaces'
     | 'board_pull_request_invalid'
     | 'board_pull_request_not_found'
     | 'board_pull_request_not_yours'
@@ -38,10 +24,6 @@ export type BoardErrorCode
     | 'board_sprint_carry_invalid'
     | 'board_sprint_close_requires_user'
     | 'board_sprint_dates_invalid'
-    | 'board_storage_not_configured'
-    | 'board_storage_not_empty'
-    | 'board_storage_not_prepared'
-    | 'board_storage_unavailable'
     | 'issue_comment_delete_requires_user'
     | 'issue_comment_not_found'
     | 'issue_context_ref_invalid_index'

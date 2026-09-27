@@ -110,14 +110,6 @@ export {
 export { type BoardOps, createBoardOps } from './ops'
 export type { IssueActivityResolver } from './ops/activity'
 export type { BoardApproval } from './ops/approval'
-export {
-  type BoardCopyCounts,
-  type BoardSlice,
-  deleteBoardSlice,
-  emptyCopyCounts,
-  readBoardSlice,
-  writeBoardSlice,
-} from './ops/board-copy'
 export type { BulkUpdateCardsInput, BulkUpdateCardsResult } from './ops/card-batch'
 export type {
   AddCommentInput,

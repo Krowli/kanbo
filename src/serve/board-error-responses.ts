@@ -26,21 +26,6 @@ export interface BoardErrorResponse {
  * reason turned around: the answer will be yes once the card meets them, and
  * `details.unmet` says what is missing.
  *
- * The five failures about where a board is kept read the same rule. A database
- * that holds no board this build can speak for is 409 — the setting is there,
- * the board behind it is not yet, and `board-storage prepare` is what settles
- * that — and one nobody could reach at all is 503, because nothing about the
- * request was wrong. A workspace naming no board at all is 404: the caller
- * asked about a setting that is not there. A board still holding cards when
- * somebody asks to point the workspace elsewhere is 409, because the answer
- * would have been yes on an empty board and `board-storage migrate` is what
- * makes it one. An operation naming cards from two different boards is 400: no
- * transaction reaches both, so the caller asked for something that cannot be
- * done. A copy that would land on a card number or a column name the target
- * already holds under a different id is 409 for the same reason the others
- * are: the answer would have been yes on a target that did not hold that
- * board, and `details.conflicts` names every value that clashed.
- *
  * A failure may also be renamed here: the package names its codes after the
  * board, while every error the `/issues` routes answer with is named after the
  * issue, and a client matching on `issue_*` should not have to learn a second
@@ -50,10 +35,8 @@ export const BOARD_ERROR_RESPONSES: Record<BoardErrorCode, BoardErrorResponse> =
   board_approval_requires_user: { status: 403, message: 'Only a person can approve a card', code: 'issue_approval_requires_user' },
   board_column_rules_requires_user: { status: 403, message: 'Only a person can set what a column asks of a card', code: 'issue_column_rules_requires_user' },
   board_column_rules_unmet: { status: 409, message: 'The card does not meet what that column asks for yet', code: 'issue_column_rules_unmet' },
-  board_copy_conflict: { status: 409, message: 'That board already holds cards or columns of this workspace under the same numbers or names; nothing was copied' },
   board_entry_rule_invalid: { status: 400, message: 'Unknown column entry rule' },
   board_execution_mode_locked: { status: 400, message: 'Execution mode cannot change once the card has been launched' },
-  board_mixed_workspaces: { status: 400, message: 'Those cards are not all on the same board' },
   board_pull_request_invalid: { status: 400, message: 'Not a GitHub pull request: give its URL or owner/repo#number' },
   board_pull_request_not_found: { status: 404, message: 'The card names no such pull request' },
   board_pull_request_not_yours: { status: 403, message: 'You did not link that pull request', code: 'issue_pull_request_not_yours' },
@@ -68,10 +51,6 @@ export const BOARD_ERROR_RESPONSES: Record<BoardErrorCode, BoardErrorResponse> =
   board_sprint_carry_invalid: { status: 400, message: 'Unfinished cards can only be carried to another open milestone of the same workspace' },
   board_sprint_close_requires_user: { status: 403, message: 'Only a person can close a sprint', code: 'issue_sprint_close_requires_user' },
   board_sprint_dates_invalid: { status: 400, message: 'A sprint cannot start after it is due' },
-  board_storage_not_configured: { status: 404, message: 'This workspace names no board storage' },
-  board_storage_not_empty: { status: 409, message: 'That board still holds cards of this workspace; move them with migrate before changing where the board is kept' },
-  board_storage_not_prepared: { status: 409, message: 'That board has not been prepared yet' },
-  board_storage_unavailable: { status: 503, message: 'That board could not be reached' },
   issue_comment_delete_requires_user: { status: 403, message: 'Only a person can delete a comment the board wrote' },
   issue_comment_not_found: { status: 404, message: 'Comment not found' },
   issue_context_ref_invalid_index: { status: 400, message: 'Invalid context ref index' },
