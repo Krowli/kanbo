@@ -1,15 +1,15 @@
 import { mkdirSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { delimiter, dirname, join } from 'node:path'
 
-import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
-import { describe, expect, it } from 'vitest'
+import { Command } from 'commander'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { openBoardDatabase } from '../sqlite/open-database'
 import { writeFakeBin } from '../testing/fake-bin'
+import { registerInitCommand } from './commands/init'
+import { collectDoctorFindings } from './doctor'
 
-// Temporary: which step leaves a folder Windows will not remove.
+// Temporary: which step of kanbo doctor leaves a folder Windows will not remove.
 function tryRemove(path: string): string {
   try {
     rmSync(path, { recursive: true, force: true })
@@ -21,42 +21,41 @@ function tryRemove(path: string): string {
 }
 
 describe.runIf(process.platform === 'win32')('what holds a folder on Windows', () => {
-  it('a sqlite file opened and closed', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'hold-sqlite-'))
-    const board = await openBoardDatabase(join(root, 'board.db'))
-    board.close()
-    console.log('HOLD sqlite-file:', tryRemove(root))
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
   })
 
-  it('sqlite in memory', async () => {
-    const root = mkdtempSync(join(tmpdir(), 'hold-memory-'))
-    ;(await openBoardDatabase(':memory:')).close()
-    console.log('HOLD sqlite-memory:', tryRemove(root))
-  })
-
-  for (const via of ['cmd', 'node'] as const) {
-    it(`a handshake started in it, via ${via}, that exits at once`, async () => {
-      const root = mkdtempSync(join(tmpdir(), `hold-${via}-`))
-      const project = join(root, 'project')
-      mkdirSync(project)
-      const shim = writeFakeBin(root, 'kanbo', 'process.exit(1)')
-      const command = via === 'cmd' ? shim : process.execPath
-      const args = via === 'cmd' ? ['mcp'] : [join(root, 'kanbo.js'), 'mcp']
-      const transport = new StdioClientTransport({ command, args, cwd: project, stderr: 'pipe' })
-      const client = new Client({ name: 'hold', version: '0' })
-      try {
-        await client.connect(transport, { timeout: 5000 })
+  for (const variant of ['no-kanbo', 'fake-kanbo', 'no-cwd-mock'] as const) {
+    it(`doctor, ${variant}`, async () => {
+      const root = mkdtempSync(join(tmpdir(), `hold-${variant}-`))
+      const bin = join(root, 'bin')
+      const projectDir = join(root, 'project')
+      for (const directory of [bin, projectDir, join(root, 'home')]) {
+        mkdirSync(directory, { recursive: true })
       }
-      catch (error) {
-        console.log(`HOLD ${via} connect:`, (error as Error).message)
+      vi.stubEnv('HOME', join(root, 'home'))
+      vi.stubEnv('USERPROFILE', join(root, 'home'))
+      vi.stubEnv('CODEX_HOME', join(root, 'codex-home'))
+      vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
+      const cwd = vi.spyOn(process, 'cwd').mockReturnValue(projectDir)
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      const program = new Command().exitOverride()
+      registerInitCommand(program)
+      await program.parseAsync(['init', '--file', '--instructions', 'claude', '--mcp', 'claude,codex,cursor', '--yes'], { from: 'user' })
+      console.warn(`HOLD ${variant} after init:`, tryRemove(join(root, 'home', 'nothing')))
+      if (variant !== 'no-kanbo') {
+        writeFakeBin(bin, 'kanbo', 'process.exit(1)')
       }
-      finally {
-        await client.close().catch(() => {})
+      if (variant === 'no-cwd-mock') {
+        cwd.mockRestore()
       }
-      console.log(`HOLD ${via} pid ${transport.pid} project:`, tryRemove(project))
+      const findings = await collectDoctorFindings({ cwd: projectDir, self: null, handshakeTimeoutMs: 5000 })
+      console.warn(`HOLD ${variant} findings:`, findings.map(finding => `${finding.check}=${finding.status}`).join(' '))
+      console.warn(`HOLD ${variant} project:`, tryRemove(projectDir))
       await new Promise(resolve => setTimeout(resolve, 2000))
-      console.log(`HOLD ${via} project after 2s:`, tryRemove(project))
-      console.log(`HOLD ${via} root:`, tryRemove(root))
+      console.warn(`HOLD ${variant} project after 2s:`, tryRemove(projectDir))
+      console.warn(`HOLD ${variant} root:`, tryRemove(root))
       expect(true).toBe(true)
     }, 30_000)
   }
