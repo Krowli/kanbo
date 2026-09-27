@@ -17,13 +17,14 @@ import {
   deleteCard,
   deleteComment,
   moveCard,
+  assertReturnable,
   returnCard,
   searchCards,
   setStatusLine,
   updateCard,
   waitApproval,
 } from './cards'
-import { runBoardWrite } from './change-seq'
+import { readChangeSeq, runBoardWrite } from './change-seq'
 import { ensureDefaultColumns, listColumns } from './columns'
 import { createRelation } from './relations'
 import { startRun } from './runs'
@@ -184,6 +185,24 @@ describe.each(BOARD_STORE_FACTORIES)('board cards on $name', (factory) => {
     await expect(returnCard(store, card.id, { comment: 'nowhere to go' }, USER))
       .rejects
 .toMatchObject({ code: 'board_return_no_previous_column' })
+  })
+
+  it('answers every refusal of a return on reads alone, and names where the card would go', async () => {
+    const card = await createCard(store, { workspace: WORKSPACE, title: 'Card', statusName: 'In Review' }, USER)
+    await waitApproval(store, card.id, { statusLine: 'ready for your review' }, AGENT)
+    const columns = await listColumns(store, 'workspace')
+    const before = await readChangeSeq(store)
+
+    expect((await assertReturnable(store, card.id, {}, USER)).id).toBe(columns.find(column => column.name === 'In Progress')?.id)
+    expect((await assertReturnable(store, card.id, { toStatusName: 'backlog' }, USER)).name).toBe('Backlog')
+    await expect(assertReturnable(store, card.id, {}, AGENT)).rejects.toMatchObject({ code: 'board_return_requires_user' })
+    await expect(assertReturnable(store, 'missing', {}, USER)).rejects.toMatchObject({ code: 'issue_not_found' })
+    await expect(assertReturnable(store, card.id, { toStatusName: 'Nowhere' }, USER)).rejects.toMatchObject({ code: 'issue_status_not_found' })
+    expect(await readChangeSeq(store)).toBe(before)
+    expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')
+
+    const first = await createCard(store, { workspace: WORKSPACE, title: 'First', statusName: 'Backlog' }, USER)
+    await expect(assertReturnable(store, first.id, {}, USER)).rejects.toMatchObject({ code: 'board_return_no_previous_column' })
   })
 
   it('locks the execution mode once the card has been launched', async () => {

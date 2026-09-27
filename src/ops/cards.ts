@@ -6,12 +6,11 @@ import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { nextIssueIdentity, nextIssueNumber, nextIssueOrder } from '../domain/numbering'
 import { normalizeStatusName } from '../domain/status-name'
 import { currentUnixSeconds } from '../domain/time'
-import type { Issue, IssueComment, issues } from '../sqlite/schema'
+import type { Issue, IssueComment, issues, IssueStatus } from '../sqlite/schema'
 import { APPROVED_COMMENT } from './approval'
 import type { BoardWriteScope } from './change-seq'
 import { runBoardWrite } from './change-seq'
-import type { listColumns } from './columns'
-import { ensureDefaultColumns, requireColumn } from './columns'
+import { ensureDefaultColumns, listColumns, requireColumn } from './columns'
 import { enforceColumnEntry } from './entry-rules'
 import { readBoardProjectionForIssue, stopRunningRuns } from './runs'
 import type { BoardActor, BoardCommentInput } from './types'
@@ -386,16 +385,10 @@ export async function returnCard<TStore extends BoardStore>(
   actor: BoardActor,
   scope?: BoardWriteScope<TStore>,
 ): Promise<{ card: Issue, stoppedRunIds: string[] }> {
-  if (actor.kind !== 'user') {
-    throw new BoardError('board_return_requires_user', { issueId, actorKind: actor.kind })
-  }
-
   return await runBoardWrite(store, async ({ tx }) => {
+    await ensureDefaultColumns(tx, (await requireCard(tx, issueId)).workspaceId, { tx })
+    const target = await assertReturnable(tx, issueId, input, actor)
     const card = await requireCard(tx, issueId)
-    const columns = await ensureDefaultColumns(tx, card.workspaceId, { tx })
-    const target = input.toStatusName
-      ? await requireColumn(tx, card.workspaceId, input.toStatusName)
-      : previousColumn(columns, card)
 
     const updates = { statusId: target.id, waitingFor: null, updatedAt: currentUnixSeconds() } as const
     await recordFieldChanges(tx, card, updates, actor)
@@ -415,6 +408,35 @@ export async function returnCard<TStore extends BoardStore>(
 
     return { card: await requireCard(tx, issueId), stoppedRunIds }
   }, scope)
+}
+
+/**
+ * Every reason `returnCard` would refuse, asked on reads alone, and the column
+ * the card would go back to when none applies.
+ *
+ * `returnCard` asks exactly this inside its write. A caller that has to undo
+ * something of its own before the return — stop listening for the approval the
+ * card is waiting on, say — asks it first, so a return the board refuses leaves
+ * that untouched. The refusals are the same `BoardError` codes: an actor who is
+ * not a person (`board_return_requires_user`), a card that is not there
+ * (`issue_not_found`), a named column the workspace does not hold
+ * (`issue_status_not_found`), and a card already in the first column with no
+ * column named (`board_return_no_previous_column`).
+ */
+export async function assertReturnable(
+  store: BoardStore,
+  issueId: string,
+  input: { toStatusName?: string | null },
+  actor: BoardActor,
+): Promise<IssueStatus> {
+  if (actor.kind !== 'user') {
+    throw new BoardError('board_return_requires_user', { issueId, actorKind: actor.kind })
+  }
+
+  const card = await requireCard(store, issueId)
+  return input.toStatusName
+    ? await requireColumn(store, card.workspaceId, input.toStatusName)
+    : previousColumn(await listColumns(store, card.workspaceId), card)
 }
 
 /** A comment a person or an agent writes; the author defaults to the actor. */
@@ -542,7 +564,7 @@ export async function searchCards(store: BoardStore, query: string, limit: numbe
 }
 
 /** The column before the card's own, or the error that says there is none. */
-function previousColumn(columns: Awaited<ReturnType<typeof listColumns>>, card: Issue) {
+function previousColumn(columns: IssueStatus[], card: Issue) {
   const index = columns.findIndex(column => column.id === card.statusId)
   const previous = index > 0 ? columns[index - 1] : undefined
   if (!previous) {

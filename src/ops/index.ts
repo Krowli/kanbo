@@ -8,6 +8,7 @@ import type { AddCommentInput, CreateCardInput, CreateCommentOnceInput, UpdateCa
 import {
   addComment,
   approve,
+  assertReturnable,
   createCard,
   createCommentOnce,
   createSubCard,
@@ -126,6 +127,8 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
       await approve(store, issueId, input, actor, scope),
     returnCard: async (issueId: string, input: { comment: string, toStatusName?: string | null }, actor: BoardActor, scope?: Scope) =>
       await returnCard(store, issueId, input, actor, scope),
+    assertReturnable: async (issueId: string, input: { toStatusName?: string | null }, actor: BoardActor) =>
+      await assertReturnable(store, issueId, input, actor),
     readApproval: async (issueId: string) => await readApproval(store, issueId),
 
     // The pull requests a card names
