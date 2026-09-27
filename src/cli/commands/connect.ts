@@ -53,7 +53,7 @@ export interface ConnectOptions {
 }
 
 /** Where each agent's parts go, before `--project`/`--global` say otherwise. */
-type ScopeFlag = 'project' | 'user' | null
+export type ScopeFlag = 'project' | 'user' | null
 
 const AGENT_LIST = `${AGENT_IDS.join(', ')} (or all)`
 
@@ -254,7 +254,7 @@ function describeOutcomes(action: 'connect' | 'remove', agents: AgentId[], outco
 }
 
 /** One row of `--check`. */
-interface CheckRow {
+export interface CheckRow {
   agent: AgentId
   instructions: string
   mcp: string
@@ -291,7 +291,7 @@ function runCheck(agents: AgentId[], named: boolean, flag: ScopeFlag, projectDir
  * MCP entry still starts. An MCP entry of the person's own is theirs: it is
  * reported, left as it is, and counts as connected when it can start.
  */
-function checkAgent(agent: AgentId, flag: ScopeFlag, projectDir: string, options: ConnectOptions): { row: CheckRow, notes: string[] } {
+export function checkAgent(agent: AgentId, flag: ScopeFlag, projectDir: string, options: ConnectOptions): { row: CheckRow, notes: string[] } {
   const scopes: McpScope[] = flag ? [flag] : ['project', 'user']
   const found: McpScope[] = []
   const notes: string[] = []

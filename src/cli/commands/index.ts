@@ -22,12 +22,12 @@ import { registerUninstallCommand } from './uninstall'
 /**
  * Every command the `kanbo` binary answers to, put on one program.
  *
- * It is its own module rather than a block inside `cli/index.ts` because two
- * callers need it and only one of them wants the binary: `index.ts` runs
- * `main()` on import, so a test that imported it would parse `process.argv`.
- * The other caller is `mcp/docs.test.ts`, which walks the program to check that
- * every command has a row in the README — a check that is worth nothing if the
- * list it walks is a second copy of this one.
+ * It is its own module because more than one caller needs the list:
+ * `cli/program.ts`, which builds the binary's program (and a fresh one for
+ * each command the home screen runs from its menu), and `mcp/docs.test.ts`,
+ * which walks the program to check that every command has a row in the docs
+ * — a check that is worth nothing if the list it walks is a second copy of
+ * this one.
  */
 export function registerKanboCommands(program: Command): void {
   registerInitCommand(program)

@@ -20,6 +20,7 @@ import { Command } from 'commander'
 import { describe, expect, it } from 'vitest'
 
 import { registerKanboCommands } from '../cli/commands'
+import { NO_BOARD_AGENT_FIRST_LINE, NO_BOARD_HINT } from '../cli/home'
 import { ORCHESTRATOR_GUIDE } from '../cli/setup/orchestrator-guide'
 import { KANBO_TOOL_NAMES } from './tool-names'
 
@@ -69,7 +70,7 @@ function readDocumentedToolNames(doc: string): Set<string> {
  */
 function registeredCommandPaths(): string[] {
   const program = new Command()
-  // The binary's own registration, not a copy of it: `cli/index.ts` calls this
+  // The binary's own registration, not a copy of it: `cli/program.ts` calls this
   // same function, so a command added there is a command this walk finds.
   registerKanboCommands(program)
 
@@ -117,6 +118,14 @@ describe('the reference docs', () => {
     // not.
     const row = documentedCommands.some(spelling => spelling === path || spelling.startsWith(`${path} `))
     expect(row, `kanbo ${path} has no row in the docs/cli.md command table`).toBe(true)
+  })
+
+  it('gives bare `kanbo` a row, and shows what it prints without a terminal word for word', () => {
+    const cli = readFileSync(join(DOCS_DIRECTORY, 'cli.md'), 'utf8')
+    expect(documentedCommands).toContain('kanbo')
+    for (const line of [...NO_BOARD_HINT, NO_BOARD_AGENT_FIRST_LINE]) {
+      expect(cli).toContain(line)
+    }
   })
 })
 

@@ -1,0 +1,116 @@
+
+kanbo · weather-station (WST) · .kanbo/board.db
+Backlog 0 · To Do 0 · In Progress 0 · In Review 0 · Done 0
+Agents: Claude Code — not connected
+│
+◆  What next?
+│  ● Show the board here — kanbo card list
+│  ○ Open the board in your browser — kanbo serve
+│  ○ Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Show the board here — kanbo card list
+│  ● Open the board in your browser — kanbo serve
+│  ○ Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Open the board in your browser — kanbo serve
+│  ● Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  What next?
+│  Add a card — kanbo card create
+│
+◆  What is the card about? (Enter on an empty line to go back)
+│  e.g. Add a README
+└
+│  W█│  Wr█│  Wri█│  Writ█│  Write█│  Write █│  Write t█│  Write th█│  Write the█│  Write the █│  Write the R█│  Write the RE█│  Write the REA█│  Write the READ█│  Write the READM█│  Write the README█◇  What is the card about? (Enter on an empty line to go back)
+│  Write the README
+WST-001  To Do  worktree
+Write the README
+
+Write the README
+
+kanbo · weather-station (WST) · .kanbo/board.db
+Backlog 0 · To Do 1 · In Progress 0 · In Review 0 · Done 0
+Agents: Claude Code — not connected
+│
+◆  What next?
+│  ● Show the board here — kanbo card list
+│  ○ Open the board in your browser — kanbo serve
+│  ○ Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Show the board here — kanbo card list
+│  ● Open the board in your browser — kanbo serve
+│  ○ Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Open the board in your browser — kanbo serve
+│  ● Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Add a card — kanbo card create
+│  ● Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Connect an agent — kanbo connect
+│  ● Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Get the agent instructions — kanbo instructions
+│  ● Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Change columns — kanbo columns list
+│  ● Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Check the setup — kanbo doctor
+│  ● Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  What next?
+│  Exit
+
+--- exit 0

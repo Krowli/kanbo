@@ -37,8 +37,8 @@ First match wins:
   > databaseUrl in .kanbo/binding.json        (agentDatabaseUrl in an agent's shell, when present)
   > dbPath in .kanbo/binding.json             (written by kanbo init --file)
   > KANBO_DB_PATH
-  > exit 2: No board found. Run "kanbo init --file" in the project, pass --db or --database-url,
-            or set KANBO_DB_PATH or KANBO_DATABASE_URL.
+  > exit 2: This folder has no kanbo board yet. Run kanbo to set one up
+            (or kanbo init --yes for the defaults).
 ```
 
 The binding is the nearest `.kanbo/binding.json` at or above the current directory, so commands work from any subdirectory of the project. A relative `dbPath` is resolved against the project root (the directory holding `.kanbo/`).

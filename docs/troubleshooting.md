@@ -42,8 +42,11 @@ The `kanbo` a client would start fails before answering. The detail is its first
 
 ## Messages
 
-**`No board found. Run "kanbo init --file" in the project, pass --db or --database-url, or set KANBO_DB_PATH or KANBO_DATABASE_URL.` (exit 2)**
-No flag, environment variable or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo init --file` in the project root, or `cd` into the project. For an MCP client, check that it starts `kanbo mcp` in the project directory.
+**`This folder has no kanbo board yet. Run kanbo to set one up (or kanbo init --yes for the defaults).` (exit 2)**
+No flag (`--db`, `--database-url`), environment variable (`KANBO_DB_PATH`, `KANBO_DATABASE_URL`) or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo` in the project root, or `cd` into the project. In an agent's shell the message ends `Ask a person to run kanbo init here.` instead. For an MCP client, check that it starts `kanbo mcp` in the project directory.
+
+**`kanbo` prints `This folder has no kanbo board yet.` and `kanbo init --yes` instead of starting the setup**
+`kanbo` asks questions only when it runs in a terminal it can draw in: not when its input or output is piped or redirected, `CI` is set, `TERM=dumb`, or the shell belongs to an agent (`KANBO_ACTOR_KIND=agent`, or a mark such as `CLAUDECODE=1` — see the `actor` finding above). Run it in your own terminal, or run the printed `kanbo init --yes` (add `--connect claude` to connect Claude Code as well).
 
 **`Could not load better-sqlite3, which kanbo opens board files with, on Node … (<platform>-<arch>): …`**
 The native module kanbo reads board files with is missing or does not load on this Node, system and processor. Reinstall kanbo, which brings it along: `npm install -g kanbo-cli`. A program that uses kanbo as a library installs `better-sqlite3` itself (`npm install better-sqlite3`).

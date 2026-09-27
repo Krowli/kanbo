@@ -26,12 +26,14 @@ Requires Node.js `^22.19.0` or `>=24.11.0`. See [installation](docs/installation
 
 ```bash
 npm install -g kanbo-cli
-cd your-project && kanbo init
+cd your-project && kanbo
 ```
 
-`kanbo init` asks a few questions in the terminal: where the board lives (a file in the project, or a shared Postgres database), what card numbers start with, which columns the board starts with, and which of your coding agents to connect. It shows exactly which files it will write and writes nothing until you say yes. Then tell your agent: **"take the next card from kanbo"**.
+`kanbo` in a project with no board starts the setup (the same as `kanbo init`). It asks a few questions in the terminal: where the board lives (a file in the project, or a shared Postgres database), what card numbers start with, which columns the board starts with, and which of your coding agents to connect. It shows exactly which files it will write and writes nothing until you say yes. Then tell your agent: **"take the next card from kanbo"**.
 
-Without a terminal (a script, CI), or with `--yes`, it takes the defaults: a board file with the standard columns, and no agent files. The same answers as flags:
+Run `kanbo` again later for the home screen: what is on the board, the cards waiting for you (approve them or send them back right there), which agents are connected, and a menu that shows the command behind every item.
+
+Without a terminal (a script, CI, an agent's shell), `kanbo` asks nothing: it prints the command to run. `kanbo init --yes` takes the defaults: a board file with the standard columns, and no agent files. The same answers as flags:
 
 ```bash
 kanbo init --yes --key APP --columns standard --connect claude --first-card "Add rate limiting"

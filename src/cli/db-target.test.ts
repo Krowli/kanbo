@@ -84,6 +84,15 @@ describe('the board a command opens', () => {
   it('says what to do when nothing names a board at all', () => {
     expect(() => resolveDbTarget({ cwd: directory }))
       .toThrowError(expect.objectContaining({ exitCode: 2, message: DATABASE_NOT_FOUND_MESSAGE }))
+    expect(DATABASE_NOT_FOUND_MESSAGE)
+      .toBe('This folder has no kanbo board yet. Run kanbo to set one up (or kanbo init --yes for the defaults).')
+  })
+
+  it('tells an agent to ask a person instead', () => {
+    vi.stubEnv('CLAUDECODE', '1')
+
+    expect(() => resolveDbTarget({ cwd: directory }))
+      .toThrowError(expect.objectContaining({ exitCode: 2, message: 'This folder has no kanbo board yet. Ask a person to run kanbo init here.' }))
   })
 
   it('obeys --database-url over the environment, the binding and every board file', () => {

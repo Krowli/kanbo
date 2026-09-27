@@ -1,0 +1,132 @@
+
+kanbo · weather-station (WST) · .kanbo/board.db
+Backlog 0 · To Do 0 · In Progress 0 · In Review 2 · Done 0
+2 cards waiting for you
+Agents: none found — kanbo connect <agent>
+│
+◆  What next?
+│  ● Review the cards waiting for you (2) — kanbo approve · kanbo return
+│  ○ Show the board here — kanbo card list
+│  ○ Open the board in your browser — kanbo serve
+│  ○ Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  What next?
+│  Review the cards waiting for you (2) — kanbo approve · kanbo return
+
+WST-001  In Review
+Fix the login form
+Status: login fixed, please check
+│
+◆  What about WST-001?
+│  ● Approve
+│  ○ Send back with a comment
+│  ○ Skip
+│  ○ Stop reviewing
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  What about WST-001?
+│  Approve
+Approved WST-001.
+
+WST-002  In Review
+Add a dark theme
+Status: dark theme ready
+Last comment: Toggle is in Settings.
+│
+◆  What about WST-002?
+│  ● Approve
+│  ○ Send back with a comment
+│  ○ Skip
+│  ○ Stop reviewing
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Approve
+│  ● Send back with a comment
+│  ○ Skip
+│  ○ Stop reviewing
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  What about WST-002?
+│  Send back with a comment
+│
+◆  What should change? (the agent reads this first)
+│  _
+└
+│  K█│  Ke█│  Kee█│  Keep█│  Keep █│  Keep t█│  Keep th█│  Keep the█│  Keep the █│  Keep the l█│  Keep the li█│  Keep the lig█│  Keep the ligh█│  Keep the light█│  Keep the light █│  Keep the light t█│  Keep the light th█│  Keep the light the█│  Keep the light them█│  Keep the light theme█│  Keep the light theme █│  Keep the light theme t█│  Keep the light theme th█│  Keep the light theme the█│  Keep the light theme the █│  Keep the light theme the d█│  Keep the light theme the de█│  Keep the light theme the def█│  Keep the light theme the defa█│  Keep the light theme the defau█│  Keep the light theme the defaul█│  Keep the light theme the default█◇  What should change? (the agent reads this first)
+│  Keep the light theme the default
+Sent WST-002 back to In Progress.
+
+kanbo · weather-station (WST) · .kanbo/board.db
+Backlog 0 · To Do 0 · In Progress 1 · In Review 1 · Done 0
+Agents: none found — kanbo connect <agent>
+│
+◆  What next?
+│  ● Show the board here — kanbo card list
+│  ○ Open the board in your browser — kanbo serve
+│  ○ Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Show the board here — kanbo card list
+│  ● Open the board in your browser — kanbo serve
+│  ○ Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Open the board in your browser — kanbo serve
+│  ● Add a card — kanbo card create
+│  ○ Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Add a card — kanbo card create
+│  ● Connect an agent — kanbo connect
+│  ○ Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Connect an agent — kanbo connect
+│  ● Get the agent instructions — kanbo instructions
+│  ○ Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Get the agent instructions — kanbo instructions
+│  ● Change columns — kanbo columns list
+│  ○ Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Change columns — kanbo columns list
+│  ● Check the setup — kanbo doctor
+│  ○ Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+│  ○ Check the setup — kanbo doctor
+│  ● Exit
+│  ↑/↓ to navigate • Enter: confirm
+└
+◇  What next?
+│  Exit
+
+--- exit 0

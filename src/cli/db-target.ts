@@ -33,8 +33,23 @@ import { CliError, EXIT_NOT_RESOLVED } from './output'
  * it at all (ruling 5-4).
  */
 
-export const DATABASE_NOT_FOUND_MESSAGE = 'No board found. Run "kanbo init --file" in the project, '
-  + 'pass --db or --database-url, or set KANBO_DB_PATH or KANBO_DATABASE_URL.'
+export const DATABASE_NOT_FOUND_MESSAGE
+  = 'This folder has no kanbo board yet. Run kanbo to set one up (or kanbo init --yes for the defaults).'
+
+/** The same, in an agent's shell: setting a board up is a person's call. */
+export const DATABASE_NOT_FOUND_AGENT_MESSAGE = 'This folder has no kanbo board yet. Ask a person to run kanbo init here.'
+
+/**
+ * Nothing names a board here — not a board that failed to open. Its own class
+ * so a caller that has something better to do than fail (the MCP server, bare
+ * `kanbo`) asks by type rather than by the words of the message.
+ */
+export class BoardNotFoundError extends CliError {
+  constructor() {
+    super(EXIT_NOT_RESOLVED, isAgentShell() ? DATABASE_NOT_FOUND_AGENT_MESSAGE : DATABASE_NOT_FOUND_MESSAGE)
+    this.name = 'BoardNotFoundError'
+  }
+}
 
 /** What a caller is told when they name both kinds of board at once. */
 export const TWO_BOARDS_MESSAGE
@@ -173,7 +188,7 @@ export function resolveHostDbPath(explicitPath?: string | null): string {
 
 function requireExisting(path: string | null): string {
   if (!path || !existsSync(path)) {
-    throw new CliError(EXIT_NOT_RESOLVED, DATABASE_NOT_FOUND_MESSAGE)
+    throw new BoardNotFoundError()
   }
   return path
 }

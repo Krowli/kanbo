@@ -2,7 +2,7 @@ import type { Command } from 'commander'
 
 import { KANBO_MCP_INSTRUCTIONS } from '../../mcp/instructions'
 import { openBoardSession } from '../command'
-import { DATABASE_NOT_FOUND_MESSAGE } from '../db-target'
+import { BoardNotFoundError } from '../db-target'
 import { CliError, EXIT_NOT_RESOLVED } from '../output'
 import type { ClipboardEnvironment } from '../setup/clipboard'
 import { copyToClipboard } from '../setup/clipboard'
@@ -24,7 +24,7 @@ export type InstructionKind = typeof INSTRUCTION_KINDS[number]
 
 /** What `board` says in a folder with no board. */
 export const NO_BOARD_FOR_INSTRUCTIONS_MESSAGE
-  = 'This folder has no kanbo board, so there are no board rules to print. Run "kanbo init" here to set one up, '
+  = 'This folder has no kanbo board, so there are no board rules to print. Run kanbo here to set one up, '
     + 'or ask for a version that needs no board: agent | short | global | orchestrator | mcp.'
 
 const HEADER = 'Paste this into CLAUDE.md or AGENTS.md — or run `kanbo connect <agent>` to have kanbo do it.'
@@ -104,7 +104,7 @@ async function readInstructionText(kind: InstructionKind): Promise<string> {
     return staticText(kind)
   }
   const session = await openBoardSession({}, 'read').catch((error: unknown) => {
-    if (error instanceof CliError && error.exitCode === EXIT_NOT_RESOLVED && error.message === DATABASE_NOT_FOUND_MESSAGE) {
+    if (error instanceof BoardNotFoundError) {
       throw new CliError(EXIT_NOT_RESOLVED, NO_BOARD_FOR_INSTRUCTIONS_MESSAGE)
     }
     throw error

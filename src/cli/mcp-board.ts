@@ -1,7 +1,7 @@
 import type { KanboDbTransport, KanboDbTransportInput } from '../mcp/db-transport'
 import { createDbTransport } from '../mcp/db-transport'
 import type { KanboToolTransport } from '../mcp/transport'
-import { DATABASE_NOT_FOUND_MESSAGE } from './db-target'
+import { BoardNotFoundError } from './db-target'
 import { CliError, EXIT_NOT_RESOLVED } from './output'
 
 /**
@@ -96,5 +96,5 @@ function createDeferredBoard(input: KanboDbTransportInput): KanboDbTransport {
 
 /** The failure that means nothing names a board here — not a board that failed to open. */
 function isNoBoard(error: unknown): boolean {
-  return error instanceof CliError && error.exitCode === EXIT_NOT_RESOLVED && error.message === DATABASE_NOT_FOUND_MESSAGE
+  return error instanceof BoardNotFoundError
 }

@@ -32,6 +32,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 
 | Command | What it does |
 | --- | --- |
+| `kanbo` | Where to start: the init wizard in a folder with no board, the home screen in one with a board, a short hint with nobody to ask. Always exits `0`. |
 | `kanbo init` | Set up a board for this project and connect its agents — a wizard in a terminal, defaults with `--yes`. With `--global`, set up your own agent tools for every project instead. |
 | `kanbo connect [agents...]` | Connect your agents (`claude`, `codex`, `cursor`, `gemini`, or `all`) to kanbo: the kanbo section in their instructions and the board's MCP server. `--check` shows what is connected, `--remove` takes it out. Alias `kanbo setup`. |
 | `kanbo instructions [kind]` | Print the text to give an agent: `agent` (default, the full rules), `short`, `global`, `orchestrator`, `mcp` or `board`. `--copy` also puts it on the clipboard. No board needed except for `board`. |
@@ -71,6 +72,33 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo serve` | Serve this board over HTTP, with a board page for the browser. |
 
 **Person only** commands refuse with exit `4` in an agent's shell: `KANBO_ACTOR_KIND=agent`, or a mark Claude Code, Gemini CLI or Cursor leaves ([configuration](configuration.md#agent-shells-kanbo-recognises)). `KANBO_ACTOR_KIND=person` overrides the mark — meant for your own terminal that an agent tool marked, but nothing stops an agent from setting it too: this check keeps an honest agent from approving its own work, it does not stop one that tries. Real enforcement needs a shared Postgres board with agents on the agent role ([storage](storage.md#roles)). See [agents](agents.md#agents-and-people).
+
+## `kanbo`
+
+`kanbo` with no words is where to start. What it does depends on the folder and on who is asking:
+
+- **A person at a terminal, no board here:** the init wizard — exactly `kanbo init` (below).
+- **A person at a terminal, a board here:** the home screen. A header (`kanbo · weather-station (WST) · .kanbo/board.db`), one line with the number of cards in each column (Canceled only when it has cards), `N cards waiting for you` when any are, and your agents — those found on this machine or already connected — with how each is connected (`Claude Code ✓ instructions + MCP · Codex ✓ MCP only · Cursor — not connected`, from the same check as `kanbo connect --check`). Then **What next?**, where every item shows the command it runs:
+  - *Review the cards waiting for you* (only when there are any) — one card at a time: its key, title, column, status line and last comment, then *Approve*, *Send back with a comment* (asks for it; the agent reads it first), *Skip* or *Stop reviewing*. The same as `kanbo approve` and `kanbo return`.
+  - *Show the board here* — `kanbo board`; until that command is in your version, `kanbo card list`.
+  - *Open the board in your browser* — `kanbo serve`.
+  - *Add a card* — asks what it is about and puts it in To Do (`kanbo card create`).
+  - *Connect an agent* — `kanbo connect`. *Get the agent instructions* — `kanbo instructions`.
+  - *Change columns* — `kanbo columns`; until its menu is in your version, `kanbo columns list`.
+  - *Check the setup* — `kanbo doctor`. *Exit*.
+
+  After each item the home screen comes back with fresh counts. Exit, or Ctrl-C at the menu, leaves with exit `0`; Ctrl-C inside an item goes back to the menu.
+- **Nobody to ask** (no terminal, `CI` set, `TERM=dumb`, or an agent's shell): no question, exit `0`. With no board it prints
+
+  ```
+  This folder has no kanbo board yet.
+  Set one up with the defaults (board file in .kanbo/, no agent files touched):  kanbo init --yes
+  Also connect Claude Code:  kanbo init --yes --connect claude
+  ```
+
+  and in an agent's shell the first line is `This folder has no kanbo board yet. Ask a person to run kanbo here.` With a board it prints the header, the column counts, the waiting count and the agents as plain lines, ending `More: kanbo --help`.
+
+Any other word is a command: `kanbo frobnicate` still fails with `unknown command` (exit `1`) and suggests the nearest one (`kanbo conect` → `Did you mean connect?`). `kanbo --help` prints the help.
 
 ## `kanbo init`
 
