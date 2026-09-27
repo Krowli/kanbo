@@ -296,7 +296,7 @@ Run `kanbo migrate` before `kanbo roles apply`. See [storage](storage.md#roles).
 | `--database-url <url>` | External Postgres board to serve instead of a board file. |
 | `--workspace <nameOrId>` | Workspace the board tools are about. |
 
-Serves all sixteen tools and the `kanbo://capabilities` resources over stdio. The client is always treated as an agent. See [MCP](mcp.md).
+Serves all sixteen tools and the `kanbo://capabilities` resources over stdio. The client is always treated as an agent. See [MCP](mcp.md). In a folder with no board it starts anyway: the client connects and gets the instructions, and every tool answers that this folder has no kanbo board, until one is set up there — the next call then finds it.
 
 ## `kanbo serve`
 

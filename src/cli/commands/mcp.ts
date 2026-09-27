@@ -1,10 +1,10 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import type { Command } from 'commander'
 
-import { createDbTransport } from '../../mcp/db-transport'
 import { createKanboMcpServer } from '../../mcp/server'
 import { createCliActor } from '../actor'
 import { describeFailure } from '../failure'
+import { openMcpBoard } from '../mcp-board'
 
 /**
  * `kanbo mcp` — the board as tools, for any MCP client.
@@ -20,6 +20,9 @@ import { describeFailure } from '../failure'
  * is, and all sixteen tools are published: an agent that started itself has to
  * record its own run, which is the one thing an app that launches agents does
  * for them.
+ *
+ * In a folder with no board it starts all the same, and every tool says so
+ * until a person sets one up (`mcp-board.ts`).
  */
 
 /** What `kanbo mcp` is told, as every other command spells it. */
@@ -40,7 +43,7 @@ export function registerMcpCommand(program: Command): void {
     .option('--database-url <url>', 'external Postgres board to serve instead of a board file')
     .option('--workspace <nameOrId>', 'workspace the board tools are about')
     .action(async (options: McpOptions) => {
-      const board = await createDbTransport({
+      const board = await openMcpBoard({
         dbPath: options.db,
         databaseUrl: options.databaseUrl,
         workspaceId: options.workspace,
