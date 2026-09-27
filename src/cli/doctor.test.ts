@@ -28,7 +28,7 @@ const TSX_CLI = createRequire(import.meta.url).resolve('tsx/cli')
 /**
  * Remove a test's folder. On Windows a folder cannot go while a process has it
  * as its working directory — the server the handshake started, until it has
- * exited — so this waits for that, up to 15 seconds, and then names the
+ * exited — so this waits for that, up to 3 seconds, and then names the
  * processes still running from it.
  */
 async function removeTree(path: string): Promise<void> {
@@ -38,7 +38,7 @@ async function removeTree(path: string): Promise<void> {
       return
     }
     catch (error) {
-      if (process.platform !== 'win32' || waited >= 15_000) {
+      if (process.platform !== 'win32' || waited >= 3_000) {
         const holders = process.platform === 'win32' ? describeProcesses() : ''
         throw new Error(`${(error as Error).message}${holders ? `\nprocesses now:\n${holders}` : ''}`, { cause: error })
       }
@@ -88,7 +88,7 @@ describe('kanbo doctor', () => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
     await removeTree(root)
-  }, 20_000)
+  }, 60_000)
 
   /** A `kanbo` on PATH whose script is `body`, in JavaScript. */
   function installKanbo(body: string): void {
