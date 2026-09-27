@@ -1,5 +1,3 @@
-import { existsSync, readFileSync } from 'node:fs'
-
 import {
   COMMENT_RULE,
   MOVE_CARD_RULE,
@@ -10,6 +8,7 @@ import {
   WAIT_FOR_PERSON_RULE,
 } from '../../ops/agent-rules'
 import type { FileChange } from './file-change'
+import { planTextFile, readTextFile } from './text-file'
 
 /**
  * The instruction block kanbo writes into an agent's standing instructions,
@@ -77,9 +76,7 @@ export const GLOBAL_INSTRUCTION_BLOCK = [
  * and is never touched.
  */
 export function planInstructionBlock(path: string, block: string): FileChange {
-  const existing = readText(path)
-  const next = withBlock(existing, block)
-  return { path, next: existing === next ? null : next }
+  return planTextFile(path, existing => withBlock(existing, block))
 }
 
 /**
@@ -88,20 +85,25 @@ export function planInstructionBlock(path: string, block: string): FileChange {
  * files it created, and a person's file is not this tool's to delete.
  */
 export function planInstructionBlockRemoval(path: string): FileChange {
-  const existing = readText(path)
-  const bounds = existing === null ? null : findBlock(existing)
-  if (existing === null || bounds === null) {
-    return { path, next: null }
-  }
-  const before = existing.slice(0, bounds.start).replace(/\s*$/, '')
-  const after = existing.slice(bounds.end).trim()
-  const joined = [before, after].filter(part => part.length > 0).join('\n\n')
-  return { path, next: joined ? `${joined}\n` : '' }
+  return planTextFile(path, (existing) => {
+    const bounds = existing === null ? null : findBlock(existing)
+    if (existing === null || bounds === null) {
+      return null
+    }
+    const before = existing.slice(0, bounds.start).replace(/\s*$/, '')
+    const after = existing.slice(bounds.end).trim()
+    const joined = [before, after].filter(part => part.length > 0).join('\n\n')
+    return joined ? `${joined}\n` : ''
+  })
 }
 
-/** The block a file carries, markers included, or `null` when it carries none. */
+/**
+ * The block a file carries, markers included, or `null` when it carries none —
+ * with `\n` line endings whatever the file uses, so a CRLF copy of the current
+ * block reads as current.
+ */
 export function readInstructionBlock(path: string): string | null {
-  const existing = readText(path)
+  const existing = readTextFile(path)?.text ?? null
   const bounds = existing === null ? null : findBlock(existing)
   return existing === null || bounds === null ? null : existing.slice(bounds.start, bounds.end)
 }
@@ -121,8 +123,4 @@ function findBlock(text: string): { start: number, end: number } | null {
   const start = text.indexOf(INSTRUCTION_START)
   const end = text.indexOf(INSTRUCTION_END)
   return start >= 0 && end > start ? { start, end: end + INSTRUCTION_END.length } : null
-}
-
-function readText(path: string): string | null {
-  return existsSync(path) ? readFileSync(path, 'utf8') : null
 }

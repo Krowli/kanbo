@@ -1,9 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs'
-
 import { CliError } from '../output'
 import type { FileChange } from './file-change'
 import { findOnPath, globalMcpConfigPath } from './paths'
 import { spawnCommandSync } from './process'
+import { planTextFile, readTextFile } from './text-file'
 
 /**
  * The board's MCP server entry, in the two formats the tools keep it in: the
@@ -49,15 +48,17 @@ const TOML_COMMAND_PATTERN = /^\s*command\s*=\s*(?:"([^"]*)"|'([^']*)')/m
  * binary or carry arguments of its own — and is left as it is.
  */
 export function planJsonMcpServer(path: string): FileChange {
-  const existing = readJsonConfig(path)
-  if (existing.mcpServers && MCP_SERVER_NAME in existing.mcpServers) {
-    return { path, next: null }
-  }
-  const next = {
-    ...existing,
-    mcpServers: { ...existing.mcpServers, [MCP_SERVER_NAME]: { type: 'stdio', command: MCP_COMMAND, args: [...MCP_ARGS] } },
-  }
-  return { path, next: `${JSON.stringify(next, null, 2)}\n` }
+  return planTextFile(path, (text) => {
+    const existing = readJsonConfig(path, text)
+    if (existing.mcpServers && MCP_SERVER_NAME in existing.mcpServers) {
+      return null
+    }
+    const next = {
+      ...existing,
+      mcpServers: { ...existing.mcpServers, [MCP_SERVER_NAME]: { type: 'stdio', command: MCP_COMMAND, args: [...MCP_ARGS] } },
+    }
+    return `${JSON.stringify(next, null, 2)}\n`
+  })
 }
 
 /**
@@ -67,12 +68,14 @@ export function planJsonMcpServer(path: string): FileChange {
  * A file it cannot read as a JSON object is not touched at all.
  */
 export function planJsonMcpServerRemoval(path: string): FileChange {
-  const existing = readJsonIfObject(path)
-  if (!existing || !isPlainObject(existing.mcpServers) || !(MCP_SERVER_NAME in existing.mcpServers)) {
-    return { path, next: null }
-  }
-  const { [MCP_SERVER_NAME]: _removed, ...others } = existing.mcpServers
-  return { path, next: `${JSON.stringify({ ...existing, mcpServers: others }, null, 2)}\n` }
+  return planTextFile(path, (text) => {
+    const existing = parseJsonObject(text)
+    if (!existing || !isPlainObject(existing.mcpServers) || !(MCP_SERVER_NAME in existing.mcpServers)) {
+      return null
+    }
+    const { [MCP_SERVER_NAME]: _removed, ...others } = existing.mcpServers
+    return `${JSON.stringify({ ...existing, mcpServers: others }, null, 2)}\n`
+  })
 }
 
 /**
@@ -81,7 +84,7 @@ export function planJsonMcpServerRemoval(path: string): FileChange {
  * (a URL server, say).
  */
 export function readJsonMcpCommand(path: string): string | null | undefined {
-  const existing = readJsonIfObject(path)
+  const existing = parseJsonObject(readTextFile(path)?.text ?? null)
   const servers = existing?.mcpServers
   if (!isPlainObject(servers) || !isPlainObject(servers[MCP_SERVER_NAME])) {
     return undefined
@@ -92,12 +95,14 @@ export function readJsonMcpCommand(path: string): string | null | undefined {
 
 /** Codex keeps its servers in TOML tables, so the table is appended rather than merged. */
 export function planCodexMcpServer(path: string): FileChange {
-  const existing = existsSync(path) ? readFileSync(path, 'utf8') : ''
-  if (findCodexSections(existing).length > 0) {
-    return { path, next: null }
-  }
-  const table = `[mcp_servers.${MCP_SERVER_NAME}]\ncommand = "${MCP_COMMAND}"\nargs = ${JSON.stringify(MCP_ARGS)}\n`
-  return { path, next: existing.trim() ? `${existing.replace(/\s*$/, '')}\n\n${table}` : table }
+  return planTextFile(path, (text) => {
+    const existing = text ?? ''
+    if (findCodexSections(existing).length > 0) {
+      return null
+    }
+    const table = `[mcp_servers.${MCP_SERVER_NAME}]\ncommand = "${MCP_COMMAND}"\nargs = ${JSON.stringify(MCP_ARGS)}\n`
+    return existing.trim() ? `${existing.replace(/\s*$/, '')}\n\n${table}` : table
+  })
 }
 
 /**
@@ -106,27 +111,25 @@ export function planCodexMcpServer(path: string): FileChange {
  * the first — is kept byte for byte.
  */
 export function planCodexMcpServerRemoval(path: string): FileChange {
-  if (!existsSync(path)) {
-    return { path, next: null }
-  }
-  const existing = readFileSync(path, 'utf8')
-  const sections = findCodexSections(existing)
-  if (sections.length === 0) {
-    return { path, next: null }
-  }
-  const lines = existing.split('\n')
-  const removed = new Set(sections.flatMap(({ start, end }) => range(start, end)))
-  const kept = lines.filter((_, index) => !removed.has(index))
-  const next = kept.join('\n').replace(/^\n+/, '')
-  return { path, next: next.trim() ? `${next.replace(/\s*$/, '')}\n` : '' }
+  return planTextFile(path, (existing) => {
+    const sections = existing === null ? [] : findCodexSections(existing)
+    if (existing === null || sections.length === 0) {
+      return null
+    }
+    const lines = existing.split('\n')
+    const removed = new Set(sections.flatMap(({ start, end }) => range(start, end)))
+    const kept = lines.filter((_, index) => !removed.has(index))
+    const next = kept.join('\n').replace(/^\n+/, '')
+    return next.trim() ? `${next.replace(/\s*$/, '')}\n` : ''
+  })
 }
 
 /** The command the Codex table starts the server with, with the same `undefined`/`null` meaning as the JSON one. */
 export function readCodexMcpCommand(path: string): string | null | undefined {
-  if (!existsSync(path)) {
+  const text = readTextFile(path)?.text
+  if (text === undefined) {
     return undefined
   }
-  const text = readFileSync(path, 'utf8')
   const main = findCodexSections(text).find(section => section.main)
   if (!main) {
     return undefined
@@ -197,20 +200,21 @@ function range(start: number, end: number): number[] {
 }
 
 /**
- * The tool's configuration file as an object to merge into — or a refusal.
+ * The tool's configuration file (its text, byte order mark already gone) as
+ * an object to merge into — or a refusal.
  *
  * A file that is valid JSON but not an object (a list, a string, `null`) is
  * something this command has no idea how to merge into, and spreading it would
  * quietly throw the person's file away. The file is left exactly as it is and
  * they are told which one to look at.
  */
-function readJsonConfig(path: string): { mcpServers?: Record<string, unknown> } {
-  if (!existsSync(path)) {
+function readJsonConfig(path: string, text: string | null): { mcpServers?: Record<string, unknown> } {
+  if (text === null) {
     return {}
   }
   let parsed: unknown
   try {
-    parsed = JSON.parse(readFileSync(path, 'utf8'))
+    parsed = JSON.parse(text)
   }
   catch {
     throw new CliError(1, `${path} is not valid JSON. Fix or remove it, then run kanbo init again.`)
@@ -224,13 +228,13 @@ function readJsonConfig(path: string): { mcpServers?: Record<string, unknown> } 
   return parsed as { mcpServers?: Record<string, unknown> }
 }
 
-/** The file as a JSON object, or `null` when it is missing or anything else — for reading and removal, which never refuse. */
-function readJsonIfObject(path: string): Record<string, unknown> | null {
-  if (!existsSync(path)) {
+/** The file's text as a JSON object, or `null` when it is missing or anything else — for reading and removal, which never refuse. */
+function parseJsonObject(text: string | null): Record<string, unknown> | null {
+  if (text === null) {
     return null
   }
   try {
-    const parsed: unknown = JSON.parse(readFileSync(path, 'utf8'))
+    const parsed: unknown = JSON.parse(text)
     return isPlainObject(parsed) ? parsed : null
   }
   catch {
