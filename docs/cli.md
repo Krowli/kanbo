@@ -89,11 +89,11 @@ Bind this project to a board, and tell its agents about it. Writes `.kanbo/bindi
 | `--yes` | Take the defaults instead of asking. |
 | `--json <fields>`, `--format <format>` | Output, as everywhere. |
 
-Without `--instructions` or `--mcp`, `init` asks in an interactive terminal and does neither otherwise. The instruction block sits between `<!-- KANBO_START -->` and `<!-- KANBO_END -->` and is replaced in place on a later run. An MCP entry named `kanbo` that already exists is left alone.
+Without `--instructions` or `--mcp`, `init` asks in an interactive terminal and does neither otherwise. The instruction block sits between `<!-- KANBO_START v2 h=… -->` and `<!-- KANBO_END -->` and is replaced in place on a later run — unless you edited it, in which case `init` asks first (default no) and leaves it alone under `--yes`. An MCP entry named `kanbo` that already exists is left alone.
 
 `--file` together with `--database-url` is refused (exit `1`).
 
-A block written by an older kanbo is not refreshed on its own: `kanbo doctor` reports it as stale, and running `kanbo init --instructions <file>` again (or `kanbo init --global` for your own files) rewrites it. No other command touches it.
+A block written by an older kanbo (including the bare `<!-- KANBO_START -->` block of 0.1–0.2) is not refreshed on its own: `kanbo doctor` warns about it, and running `kanbo init --instructions <file>` again (or `kanbo init --global` for your own files) rewrites it. No other command touches it.
 
 ### `kanbo init --global`
 
@@ -104,7 +104,7 @@ Writes, for every project on this machine:
 | Instruction block (`--instructions`, default `claude,codex`) | `claude`: `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`) · `codex`: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) · `gemini`: `$GEMINI_CLI_HOME/.gemini/GEMINI.md` (default `~/.gemini/GEMINI.md`, only when asked for) |
 | MCP registration (`--mcp`, default `claude,codex,cursor`) | `claude`: runs `claude mcp add --scope user kanbo -- kanbo mcp` (prints the line instead when `claude` is not on `PATH`) · `codex`: `[mcp_servers.kanbo]` in `$CODEX_HOME/config.toml` · `cursor`: `~/.cursor/mcp.json`. On Windows each starts `node.exe <kanbo's cli.cjs> mcp` (see [agents](agents.md)) |
 
-The global block binds no board and no board is created. It tells an agent to use kanbo in a project that has a `.kanbo/` directory, and to leave a project without one alone; a project gets a board with a plain `kanbo init`. It uses the same `<!-- KANBO_START -->` / `<!-- KANBO_END -->` markers, so a second run reports every file `unchanged`.
+The global block binds no board and no board is created. It tells an agent to use kanbo in a project that has a `.kanbo/` directory, and to leave a project without one alone; a project gets a board with a plain `kanbo init`. It uses the same markers, so a second run reports every file `unchanged`.
 
 Every change is shown first and nothing is written until you confirm, or pass `--yes`. In a shell with no terminal and without `--yes` it writes nothing and exits `1`. With `--json`/`--format`, the preview goes to stderr. `--file`, `--db`, `--database-url`, `--workspace`, `--board`, `--identifier` and `--agent-url` are refused with `--global` (exit `1`).
 
@@ -125,7 +125,7 @@ Checks, each `ok`, `warn` or `fail`, with a `fix` on everything that is not `ok`
 | `binding` | The nearest `.kanbo/` at or above this folder has a readable `binding.json` (`fail` when it does not; `warn` outside any project). |
 | `sqlite` | `better-sqlite3` loads (a board-file project only). |
 | `board` | The board opens and its schema is current (`fail` with `kanbo migrate` as the fix). A Postgres board gets 5 seconds. |
-| `instructions` | Every kanbo block in the project's `CLAUDE.md`/`AGENTS.md` and your own files is the block this version writes (`fail` when stale). `warn` when there is no block anywhere. |
+| `instructions` | Every kanbo block in the project's `CLAUDE.md`/`AGENTS.md` and your own files is the block this version writes. `warn` when a block was written by an older kanbo, when you edited one, or when there is no block anywhere. |
 | `mcp:<client>` | Every `kanbo` registration in `.mcp.json`, `~/.claude.json`, `.codex/config.toml`, `$CODEX_HOME/config.toml`, `.cursor/mcp.json`, `~/.cursor/mcp.json`: its `command` is on `PATH`. `warn` when there is none. |
 | `mcp:handshake` | Starts `kanbo mcp` in the project (the command a registration names), sends `initialize`, and expects server name `kanbo` with instructions, within 10 seconds. |
 | `actor` | `warn` when `KANBO_ACTOR_KIND=agent` is set in this shell. |
@@ -157,7 +157,7 @@ Opens no board.
 
 ## `kanbo prime`
 
-Print the columns of this board and the rules a card travels by. Common options only.
+Print the columns of this board and the rules a card travels by, then the commands an agent uses (the `kanbo_prime` MCP tool leaves the commands out). Common options only.
 
 ## `kanbo ready`
 

@@ -83,7 +83,7 @@ kanbo never edits your own `.gitignore`.
 
 | Flag | File | Content |
 | --- | --- | --- |
-| `--instructions claude` | `CLAUDE.md` | The instruction block between `<!-- KANBO_START -->` and `<!-- KANBO_END -->`. |
+| `--instructions claude` | `CLAUDE.md` | The instruction block between the `<!-- KANBO_START … -->` and `<!-- KANBO_END -->` markers. |
 | `--instructions agents` | `AGENTS.md` | The same block. |
 | `--mcp claude` | `.mcp.json` | `{"mcpServers":{"kanbo":{"type":"stdio","command":"kanbo","args":["mcp"]}}}`, merged. |
 | `--mcp cursor` | `.cursor/mcp.json` | The same entry, merged. |

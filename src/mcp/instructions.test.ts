@@ -2,7 +2,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { describe, expect, it } from 'vitest'
 
-import { INSTRUCTION_BLOCK } from '../cli/setup/instructions'
+import { AGENT_GUIDE_TEXT } from '../cli/setup/instructions'
 import { BOARD_RULES, SUBTASK_RULE, WAIT_FOR_PERSON_RULE } from '../ops/agent-rules'
 import { KANBO_MCP_INSTRUCTIONS } from './instructions'
 import { createKanboMcpServer } from './server'
@@ -34,10 +34,10 @@ describe('the kanbo MCP server instructions', () => {
     expect(KANBO_MCP_INSTRUCTIONS.length).toBeLessThanOrEqual(2500)
   })
 
-  it('say the same rules as the init block and prime', () => {
+  it('say the same rules as the command-line guide and prime', () => {
     for (const rule of [SUBTASK_RULE, WAIT_FOR_PERSON_RULE]) {
       expect(KANBO_MCP_INSTRUCTIONS).toContain(rule)
-      expect(INSTRUCTION_BLOCK).toContain(rule)
+      expect(AGENT_GUIDE_TEXT).toContain(rule)
       expect(BOARD_RULES).toContain(rule)
     }
   })

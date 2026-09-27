@@ -16,7 +16,8 @@ import { resolveDbTarget } from './db-target'
 import { describeFailure } from './failure'
 import { openPostgresBoard } from './postgres-board'
 import { assertInstalledBoard, FILE_SCHEMA_OUTDATED_MESSAGE, SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
-import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, readInstructionBlock } from './setup/instructions'
+import type { InstructionBlockState } from './setup/instructions'
+import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, readInstructionBlockState } from './setup/instructions'
 import { MCP_ARGS, MCP_COMMAND, readCodexMcpEntry, readJsonMcpEntry } from './setup/mcp-config'
 import { resolveShimTarget } from './setup/npm-shim'
 import type { McpClient } from './setup/paths'
@@ -263,17 +264,17 @@ function checkInstructions(root: string | null): DoctorFinding[] {
   if (root) {
     for (const [target, name] of Object.entries(PROJECT_INSTRUCTION_FILES)) {
       const path = join(root, name)
-      const block = readInstructionBlock(path)
-      if (block !== null) {
-        findings.push(blockFinding(path, block === INSTRUCTION_BLOCK, `cd ${root} && kanbo init --instructions ${target} --yes`))
+      const state = readInstructionBlockState(path, INSTRUCTION_BLOCK)
+      if (state !== null) {
+        findings.push(blockFinding(path, state, `cd ${root} && kanbo init --instructions ${target}`))
       }
     }
   }
   for (const client of GLOBAL_INSTRUCTION_CLIENTS) {
     const path = globalInstructionPath(client)
-    const block = readInstructionBlock(path)
-    if (block !== null) {
-      findings.push(blockFinding(path, block === GLOBAL_INSTRUCTION_BLOCK, `kanbo init --global --instructions ${client}`))
+    const state = readInstructionBlockState(path, GLOBAL_INSTRUCTION_BLOCK)
+    if (state !== null) {
+      findings.push(blockFinding(path, state, `kanbo init --global --instructions ${client}`))
     }
   }
   if (findings.length === 0) {
@@ -287,10 +288,30 @@ function checkInstructions(root: string | null): DoctorFinding[] {
   return findings
 }
 
-function blockFinding(path: string, current: boolean, fix: string): DoctorFinding {
-  return current
-    ? { check: 'instructions', status: 'ok', detail: `${path}: block is current.` }
-    : { check: 'instructions', status: 'fail', detail: `${path}: block differs from the one this kanbo writes (stale).`, fix: `Run ${fix} to rewrite it.` }
+/**
+ * A block kanbo wrote and nobody changed is only out of date: it still sends
+ * the agent to `kanbo prime`, so it is a warning, and `--yes` rewrites it. A
+ * block the person changed is theirs, and only they can say to replace it.
+ */
+function blockFinding(path: string, state: InstructionBlockState, command: string): DoctorFinding {
+  switch (state) {
+    case 'current':
+      return { check: 'instructions', status: 'ok', detail: `${path}: block is current.` }
+    case 'edited':
+      return {
+        check: 'instructions',
+        status: 'warn',
+        detail: `${path}: you edited the kanbo block, so kanbo leaves it alone.`,
+        fix: `Keep it, or run ${command} in a terminal and answer yes to replace it with the current one.`,
+      }
+    default:
+      return {
+        check: 'instructions',
+        status: 'warn',
+        detail: `${path}: block was written by an older kanbo.`,
+        fix: `Run ${command} --yes to rewrite it.`,
+      }
+  }
 }
 
 /** Every `kanbo` registration in the project's and the person's own tool configuration. */

@@ -43,22 +43,21 @@ It binds no board and creates none. What it writes:
 
 On Windows, `kanbo` is npm's `kanbo.cmd`, which clients that start programs without a shell (Codex) cannot run. So these registrations name the Node that runs kanbo and kanbo's own script instead — `node.exe C:\…\kanbo-cli\dist\cli.cjs mcp` — which every client can start. A project's files (`kanbo init --mcp`) are shared with other machines and keep the portable `kanbo mcp`; `kanbo init` says so when it writes them on Windows. `kanbo doctor` fails a registration whose Node or script is gone (after a Node upgrade, say).
 
-The global block is a shorter version of the project one, and binds nothing:
+The global block binds nothing:
 
 ```markdown
-<!-- KANBO_START -->
+<!-- KANBO_START v2 h=4b740256 -->
 ## Kanbo boards
 
-A project with a `.kanbo/` directory tracks its work on a kanbo board. In such a project, before starting a task run `kanbo prime` (or call the `kanbo_prime` tool) — it prints the board's columns and what each one means. A project without `.kanbo/` has no board: ignore this section there, and do not create one — a person sets a board up with `kanbo init`.
-
-- Take a card from `kanbo ready`.
-- …the same rules as the project block…
+In a project with a `.kanbo/` folder, before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
+Take work with `kanbo ready`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
+A project without `.kanbo/` has no board: ignore this section there, and do not create one — a person sets a board up with `kanbo init`.
 <!-- KANBO_END -->
 ```
 
 `kanbo mcp` resolves the board from the directory the client starts it in, so one global registration serves every project that has run `kanbo init`. In a folder that is not bound to a board, the tools fail with the "No board found" message; run `kanbo init` there first.
 
-Run `kanbo doctor` afterwards to check it. `kanbo uninstall --global` takes it all out again. After upgrading kanbo, `kanbo doctor` reports a block written by the old version as stale; run `kanbo init --global` again to rewrite it.
+Run `kanbo doctor` afterwards to check it. `kanbo uninstall --global` takes it all out again. After upgrading kanbo, `kanbo doctor` warns about a block written by the old version; run `kanbo init --global` again to rewrite it.
 
 To register by hand instead, the entries `kanbo init --global` writes are:
 
@@ -98,32 +97,25 @@ kanbo init --file --identifier APP --instructions claude --mcp claude,codex,curs
 
 | Flag | Writes |
 | --- | --- |
-| `--instructions claude` / `agents` | The instruction block in `CLAUDE.md` / `AGENTS.md`, between `<!-- KANBO_START -->` and `<!-- KANBO_END -->`. Rerunning replaces the block in place. Codex and Cursor read `AGENTS.md`; recent Claude Code reads it too. |
+| `--instructions claude` / `agents` | The instruction block in `CLAUDE.md` / `AGENTS.md`, between the `<!-- KANBO_START … -->` and `<!-- KANBO_END -->` markers. Rerunning replaces the block in place. Codex and Cursor read `AGENTS.md`; recent Claude Code reads it too. |
 | `--mcp claude` | `.mcp.json` (Claude Code project scope) |
 | `--mcp codex` | `.codex/config.toml` (Codex project config — Codex loads it only for a trusted project) |
 | `--mcp cursor` | `.cursor/mcp.json` |
 
 Commit these files; none of them holds a secret. The board connection stays in `.kanbo/binding.json`, which is never committed.
 
-The block `kanbo init` writes:
+The block `kanbo init` writes is a short pointer; the rules themselves come from `kanbo prime` (which, on the command line, also lists the commands) or from the MCP server:
 
 ```markdown
-<!-- KANBO_START -->
+<!-- KANBO_START v2 h=4842e336 -->
 ## Kanbo board
 
-Work on this project is tracked on a kanbo board. Before starting a task run `kanbo prime` — it prints the board's columns and what each one means.
-
-- Take a card from `kanbo ready`.
-- You move the card between columns yourself, at the moment its real state changes. The board never moves a card for you. (`kanbo card move <id> <column>`)
-- Write a status line at every step, including before and after anything long-running. One sentence, present tense, about what is happening right now. (`kanbo card status-line <id> --text "..."`)
-- Create subtasks only when the person asks for them, or when a task has parts that can be done and checked separately (different stages, owners or pull requests); do not split small work you will finish in one go. When you do split a card, make the parts subtasks of it (the parent card's id), not separate top-level cards. (`kanbo card create --description "..." --parent <id>`)
-- Findings, results, decisions and questions go on the card as comments. (`kanbo card comment <id> --content "..."`)
-- When you need a person, mark the card as waiting for approval and end your turn. You will be told when the answer comes. (`kanbo card wait-approval <id>`)
-- Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
-- Started the work yourself, not launched by an app that tracks the run for you? Say so when you start the run — `claude:<session id>` from Claude Code, `codex:<session id>` from Codex (the session id Codex prints) — so your own log of it can be found later. (`kanbo run start <id> --agent <name> --session <ref>`)
-- Run `kanbo capabilities` for the full list of tools, commands and rules.
+This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
+Take work with `kanbo ready`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
 <!-- KANBO_END -->
 ```
+
+The start marker carries the block's version and a hash of its text. kanbo replaces a block it wrote — current, from an older version, or the bare `<!-- KANBO_START -->` block of kanbo 0.1–0.2 — in place. A block you edited between the markers is replaced only when you answer yes to "You changed the kanbo section in … Replace it with the current one?" (default no); with `--yes` or without a terminal it is left alone, with a note.
 
 To mark agent shells per project instead of globally: `"env": { "KANBO_ACTOR_KIND": "agent" }` in the project's `.claude/settings.json` (Claude Code applies project `env` after the folder is trusted), or `[shell_environment_policy] set = { KANBO_ACTOR_KIND = "agent" }` in `.codex/config.toml`.
 

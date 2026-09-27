@@ -131,16 +131,28 @@ describe('kanbo doctor', () => {
     expect(binding.fix).toMatch(/kanbo init/)
   })
 
-  it('fails a stale instruction block and says how to rewrite it', async () => {
+  it('warns about a block an older kanbo wrote, and says how to rewrite it', async () => {
     installKanbo('process.exit(1)')
     const path = join(projectDir, 'CLAUDE.md')
-    writeFileSync(path, readFileSync(path, 'utf8').replace('Take a card', 'Grab a card'))
+    writeFileSync(path, '# Notes\n\n<!-- KANBO_START -->\n## Kanbo board\n\n- Take a card from `kanbo ready`.\n<!-- KANBO_END -->\n')
 
     const instructions = finding(await doctor(), 'instructions')
 
-    expect(instructions.status).toBe('fail')
-    expect(instructions.detail).toContain('stale')
+    expect(instructions.status).toBe('warn')
+    expect(instructions.detail).toContain('older kanbo')
     expect(instructions.fix).toContain('kanbo init --instructions claude --yes')
+  })
+
+  it('warns about a block the person edited, without offering --yes', async () => {
+    installKanbo('process.exit(1)')
+    const path = join(projectDir, 'CLAUDE.md')
+    writeFileSync(path, readFileSync(path, 'utf8').replace('Take work with', 'Pick work with'))
+
+    const instructions = finding(await doctor(), 'instructions')
+
+    expect(instructions.status).toBe('warn')
+    expect(instructions.detail).toContain('you edited')
+    expect(instructions.fix).not.toContain('--yes')
   })
 
   it('fails an MCP registration whose command is not on PATH', async () => {

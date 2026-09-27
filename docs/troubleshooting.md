@@ -16,8 +16,11 @@ See `Could not load better-sqlite3 …` below.
 **`board` fail: `Board file is older than this build. Run kanbo migrate.`**
 Run `kanbo migrate` in the project.
 
-**`instructions` fail: `block differs from the one this kanbo writes (stale)`**
-The block was written by another kanbo version, or edited by hand between the markers. Run the command in the fix (`kanbo init --instructions claude --yes` in the project, or `kanbo init --global --instructions <client>`). Blocks are not refreshed automatically.
+**`instructions` warn: `block was written by an older kanbo`**
+Run the command in the fix (`kanbo init --instructions claude --yes` in the project, or `kanbo init --global --instructions <client> --yes`). Blocks are not refreshed automatically.
+
+**`instructions` warn: `you edited the kanbo block`**
+The text between the markers no longer matches what kanbo wrote. kanbo leaves it alone; to replace it, run `kanbo init --instructions claude` in a terminal and answer yes.
 
 **`mcp:<client>` fail: `starts …, which is not on PATH`**
 The client cannot start the server. Install kanbo globally, or change `command` in the named file to an absolute path.

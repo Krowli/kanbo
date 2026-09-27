@@ -18,7 +18,7 @@ When a client connects, the server sends `instructions` in its MCP initialize re
 - when a person is needed, `kanbo_wait_approval` and end the turn; never approve a card or take it out of waiting;
 - the full manifest is the resource `kanbo://capabilities.md`.
 
-The text is static (about 1.3k characters) and names no column, so it is valid before a board is resolved; the board's own columns come from `kanbo_prime`. Its rule sentences are the same ones `kanbo prime` and the `kanbo init` instruction block use. `kanbo/mcp` exports it as `KANBO_MCP_INSTRUCTIONS`; `createKanboMcpServer` sends it, `registerKanboTools` does not — a server of your own decides its own instructions.
+The text is static (about 1.3k characters) and names no column, so it is valid before a board is resolved; the board's own columns come from `kanbo_prime`. Its rule sentences are the same ones `kanbo prime` uses. `kanbo/mcp` exports it as `KANBO_MCP_INSTRUCTIONS`; `createKanboMcpServer` sends it, `registerKanboTools` does not — a server of your own decides its own instructions.
 
 ## Resources
 

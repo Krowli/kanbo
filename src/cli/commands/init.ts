@@ -21,7 +21,7 @@ import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
 import type { FileOutcome } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
 import { renameWithRetry } from '../setup/fs-retry'
-import { INSTRUCTION_BLOCK, planInstructionBlock } from '../setup/instructions'
+import { INSTRUCTION_BLOCK, planInstructionBlockAsking } from '../setup/instructions'
 import { planCodexMcpServer, planJsonMcpServer } from '../setup/mcp-config'
 import { mcpLaunchSpec } from '../setup/mcp-launch'
 import type { McpClient, ProjectInstructionTarget } from '../setup/paths'
@@ -513,7 +513,11 @@ async function writeInstructions(projectDir: string, options: InitOptions): Prom
   if (target === 'none') {
     return null
   }
-  return applyFileChange(planInstructionBlock(join(projectDir, PROJECT_INSTRUCTION_FILES[target]), INSTRUCTION_BLOCK))
+  const planned = await planInstructionBlockAsking(join(projectDir, PROJECT_INSTRUCTION_FILES[target]), INSTRUCTION_BLOCK, options)
+  if (planned.note) {
+    console.error(planned.note)
+  }
+  return applyFileChange(planned.change)
 }
 
 async function askInstructionTarget(options: InitOptions): Promise<InstructionTarget> {

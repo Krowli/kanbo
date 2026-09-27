@@ -3,7 +3,7 @@ import { CliError, printResult, readFormat } from '../output'
 import { confirmPlan } from '../setup/confirm'
 import type { FileChange } from '../setup/file-change'
 import { applyFileChange } from '../setup/file-change'
-import { GLOBAL_INSTRUCTION_BLOCK, planInstructionBlock } from '../setup/instructions'
+import { GLOBAL_INSTRUCTION_BLOCK, planInstructionBlockAsking } from '../setup/instructions'
 import {
   claudeUserAddArgv,
   displayCommand,
@@ -73,10 +73,15 @@ export async function initGlobal(options: InitOptions): Promise<void> {
   const instructionClients = parseGlobalInstructions(options.instructions)
   const mcpClients = options.mcp ?? [...MCP_CLIENTS]
 
-  const instructionChanges = instructionClients.map(client => ({
-    client,
-    change: planInstructionBlock(globalInstructionPath(client), GLOBAL_INSTRUCTION_BLOCK),
-  }))
+  // One at a time: a block the person changed is asked about on its own.
+  const instructionChanges: { client: GlobalInstructionClient, change: FileChange }[] = []
+  for (const client of instructionClients) {
+    const planned = await planInstructionBlockAsking(globalInstructionPath(client), GLOBAL_INSTRUCTION_BLOCK, options)
+    if (planned.note) {
+      console.error(planned.note)
+    }
+    instructionChanges.push({ client, change: planned.change })
+  }
   const fileMcpChanges = mcpClients.filter(client => client !== 'claude').map(client => ({
     client,
     change: planGlobalMcpFile(client),
