@@ -4,6 +4,18 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-09-27
+
+### Removed (breaking)
+
+- The board-copy API: `readBoardSlice`, `writeBoardSlice`, `deleteBoardSlice`, `emptyCopyCounts` and the `BoardSlice` / `BoardCopyCounts` types. Nothing in kanbo used them; copying a workspace's board between storages belongs to the application that owns those storages.
+- Six `BoardErrorCode` values kanbo never raises, and their `BOARD_ERROR_RESPONSES` rows: `board_copy_conflict`, `board_mixed_workspaces`, `board_storage_not_configured`, `board_storage_not_empty`, `board_storage_not_prepared` and `board_storage_unavailable`.
+
+### Added
+
+- `assertReturnable(issueId, { toStatusName? }, actor)` on `createBoardOps(...)`: every reason `returnCard` would refuse, asked on reads alone, resolving to the column the card would go back to. `returnCard` runs the same check inside its write.
+- Releases are published to npm from GitHub Actions with npm trusted publishing and provenance.
+
 ## [0.1.3] — 2026-09-26
 
 ### Added
@@ -48,6 +60,7 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
+[0.2.0]: https://github.com/Krowli/kanbo/releases/tag/v0.2.0
 [0.1.3]: https://github.com/Krowli/kanbo/releases/tag/v0.1.3
 [0.1.2]: https://github.com/Krowli/kanbo/releases/tag/v0.1.2
 [0.1.1]: https://github.com/Krowli/kanbo/releases/tag/v0.1.1

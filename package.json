@@ -1,6 +1,6 @@
 {
   "name": "kanbo-cli",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "A Kanban board your AI agents drive through a CLI and an MCP server, and you watch and approve.",
   "keywords": [
     "kanban",
