@@ -1,26 +1,24 @@
-import { existsSync, mkdirSync, rmSync } from 'node:fs'
-import { basename, dirname, join, relative, resolve } from 'node:path'
+import { existsSync } from 'node:fs'
+import { basename, join, relative, resolve } from 'node:path'
 
 import type { Command } from 'commander'
 
 import { DEFAULT_BOARD_FILE_PATH } from '../../default-board-file-path'
 import { maskDatabaseUrl } from '../../domain/database-url'
 import type { BoardWorkspaceIdentity } from '../../domain/numbering'
-import { migrateBoardFile } from '../../sqlite/migrate'
-import type { BoardFileContents } from '../../sqlite/open-database'
-import { markBoardFileOwnedByKanbo, openBoardDatabase, readBoardFileContents } from '../../sqlite/open-database'
+import { openBoardDatabase } from '../../sqlite/open-database'
 import type { SqliteDatabase } from '../../sqlite/transaction'
 import type { KanboBinding } from '../binding'
-import { ignoreBoardFile, readProjectBinding, writeBinding } from '../binding'
+import { findBinding, readProjectBinding } from '../binding'
 import type { BoardCommandOptions } from '../command'
-import { runBoardCommand } from '../command'
+import { openBoardSession } from '../command'
 import type { BoardTarget } from '../db-target'
 import { describeTarget, resolveDatabaseUrl, resolveDbTarget, resolveHostDbPath } from '../db-target'
 import type { CliResult } from '../output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
 import type { FileOutcome } from '../setup/file-change'
-import { applyFileChange } from '../setup/file-change'
-import { renameWithRetry } from '../setup/fs-retry'
+import type { AppliedInitPlan, InitFileChange, InitPlan } from '../setup/init-plan'
+import { applyInitPlan, assertOwnBoardFile, describeInitPlan } from '../setup/init-plan'
 import { INSTRUCTION_BLOCK, planInstructionBlockAsking } from '../setup/instructions'
 import { planCodexMcpServer, planJsonMcpServer } from '../setup/mcp-config'
 import { mcpLaunchSpec } from '../setup/mcp-launch'
@@ -41,6 +39,10 @@ import { initGlobal } from './init-global'
  * without being handed them; and a registration of the board's MCP server with
  * whichever tools the person actually uses. Nothing is written to a file the
  * person did not ask for, and nothing is written twice.
+ *
+ * Every question comes first. The answers become a plan (`setup/init-plan.ts`)
+ * that a person at a terminal is shown and asked about once; only then is any
+ * of it written, the binding included.
  */
 
 /**
@@ -115,28 +117,79 @@ export function registerInitCommand(program: Command): void {
         await initGlobal(options)
         return
       }
-      // Refused before anything is written, as a parse-time check would be.
+      // Refused before anything is asked or written, as a parse-time check would be.
       if (options.instructions !== undefined) {
         parseInstructions(options.instructions)
       }
-      const projectDir = process.cwd()
-      if (options.file !== undefined) {
-        await initOwnFile(projectDir, options)
-        return
-      }
-      const target = resolveInitTarget(projectDir, options)
-
-      if (target.kind === 'postgres') {
-        await initExternalBoard(projectDir, target, options)
-        return
-      }
-      await runBoardCommand(options, 'read', async session => await initProject(
-        projectDir,
-        target,
-        session.workspace,
-        options,
-      ))
+      readFormat(options)
+      const plan = await planInit(process.cwd(), options)
+      await confirmInitPlan(plan, options)
+      warnAboutOwnerAccess(plan.target, options)
+      const applied = await applyInitPlan(plan)
+      printResult(describeInit(plan, applied, options), options)
     })
+}
+
+/**
+ * Everything `init` will do, with every question asked — nothing is written
+ * here. The board comes first: which one, and which workspace it is about.
+ * A board file of the project's own is created only when the plan is applied.
+ */
+async function planInit(projectDir: string, options: InitOptions): Promise<InitPlan> {
+  const { target, workspace, boardFile } = await resolveBoard(projectDir, options)
+  const fileChanges = [
+    ...await planInstructions(projectDir, options),
+    ...planMcpServers(projectDir, await askMcpClientsUnlessGiven(options)),
+  ]
+  return {
+    projectDir,
+    target,
+    workspace,
+    binding: buildBinding(projectDir, target, workspace, options),
+    boardFile,
+    ...(boardFile && !boardFile.exists ? { columns: 'default' as const } : {}),
+    fileChanges,
+  }
+}
+
+/** The board this project is bound to, and the workspace on it. */
+async function resolveBoard(
+  projectDir: string,
+  options: InitOptions,
+): Promise<Pick<InitPlan, 'target' | 'workspace' | 'boardFile'>> {
+  if (options.file !== undefined || namesNoBoard(projectDir, options)) {
+    return resolveOwnFile(projectDir, options)
+  }
+  const target = resolveInitTarget(projectDir, options)
+  if (target.kind === 'postgres') {
+    return { target, workspace: await resolveExternalWorkspace(projectDir, options), boardFile: null }
+  }
+  return { target, workspace: await readSessionWorkspace(options), boardFile: null }
+}
+
+/**
+ * Nothing says where a board is: no flag, no environment, no binding at or
+ * above this folder. Then a plain `kanbo init` does what `kanbo init --file`
+ * does — a person on a machine with nothing else installed gets a board, not a
+ * refusal that names a flag.
+ */
+function namesNoBoard(projectDir: string, options: InitOptions): boolean {
+  return !options.db?.trim()
+    && !options.databaseUrl?.trim()
+    && !process.env.KANBO_DB_PATH?.trim()
+    && !process.env.KANBO_DATABASE_URL?.trim()
+    && findBinding(projectDir) === null
+}
+
+/** The workspace a host database — or the board file this project is already bound to — says this project is. */
+async function readSessionWorkspace(options: InitOptions): Promise<BoardWorkspaceIdentity> {
+  const session = await openBoardSession(options, 'read')
+  try {
+    return session.workspace
+  }
+  finally {
+    await session.close()
+  }
 }
 
 /**
@@ -155,46 +208,22 @@ function resolveInitTarget(projectDir: string, options: InitOptions): BoardTarge
 }
 
 /**
- * Bind a project to an external board.
+ * A board file of this project's own — `.kanbo/board.db` by default — with no
+ * host app and no Postgres anywhere near it.
  *
- * The board is never opened. `init` is what a person runs *before*
- * `kanbo migrate`, and a database that holds no board yet is not a reason to
- * refuse to write down where it will be — nor could it answer the one question
- * that matters here, since it has no `workspaces` table to be asked.
- */
-async function initExternalBoard(
-  projectDir: string,
-  target: Extract<BoardTarget, { kind: 'postgres' }>,
-  options: InitOptions,
-): Promise<void> {
-  readFormat(options)
-  const workspace = await resolveExternalWorkspace(projectDir, options)
-  printResult(await initProject(projectDir, target, workspace, options), options)
-}
-
-/**
- * Create and use a board file of this project's own — `.kanbo/board.db` by
- * default — with no host app and no Postgres anywhere near it.
- *
- * The file is migrated with this package's own chain right here, because
- * nothing else ever will: a host app migrates its own database and an
+ * Nothing is created here: the file is created, migrated with this package's
+ * own chain and marked as kanbo's when the plan is applied (`init-plan.ts`),
+ * because nothing else ever will — a host app migrates its own database and an
  * external database is migrated by `kanbo migrate`, but a file of this
- * package's own has no other owner to do it later — `kanbo migrate` runs the
- * same chain again afterwards, and idempotently, for the day it falls behind a
- * newer build (ruling 5-5). The marker written right after is what every later
- * command reads to know not to look for a host `workspaces` table in it
- * (ruling 5-4).
+ * package's own has no other owner to do it later (rulings 5-4, 5-5). A file
+ * already at the path that is not kanbo's is refused now, before any question.
  *
- * The workspace is settled before a single byte is written, and nothing here
- * opens a host database at all (ruling 5-9): this is the one command that has
- * to work on a machine with nothing else installed, and the answer it needs —
- * an id and a card-key stem — is either typed, already in the binding, or the
- * folder's own name. Asking a host database first would turn `--workspace <id>`
- * into a refusal on every machine that has one, and leave a board file behind
- * with no binding beside it.
+ * The workspace is settled without opening a host database at all (ruling
+ * 5-9): this is the one command that has to work on a machine with nothing
+ * else installed, and the answer it needs — an id and a card-key stem — is
+ * either typed, already in the binding, or the folder's own name.
  */
-async function initOwnFile(projectDir: string, options: InitOptions): Promise<void> {
-  readFormat(options)
+function resolveOwnFile(projectDir: string, options: InitOptions): Pick<InitPlan, 'target' | 'workspace' | 'boardFile'> {
   if (options.databaseUrl) {
     throw new CliError(1, FILE_AND_DATABASE_URL_MESSAGE)
   }
@@ -202,106 +231,30 @@ async function initOwnFile(projectDir: string, options: InitOptions): Promise<vo
   const relativePath = typeof options.file === 'string' && options.file.trim() ? options.file.trim() : DEFAULT_BOARD_FILE_PATH
   const absolutePath = resolve(projectDir, relativePath)
   const workspace = resolveOwnFileWorkspace(projectDir, options)
-
-  await createOwnBoardFile(absolutePath)
-  ignoreBoardFile(projectDir, absolutePath)
-
-  const target: BoardTarget = { kind: 'sqlite', path: absolutePath, owner: 'kanbo' }
-  printResult(await initProject(projectDir, target, workspace, options), options)
+  const exists = existsSync(absolutePath)
+  if (exists) {
+    assertOwnBoardFile(absolutePath)
+  }
+  return {
+    target: { kind: 'sqlite', path: absolutePath, owner: 'kanbo' },
+    workspace,
+    boardFile: { path: absolutePath, exists },
+  }
 }
 
 /**
- * Put a migrated, marked board at this path — or leave the folder exactly as it
- * was found (ruling 5-9).
- *
- * A new board is built beside its own path and moved onto it at the end, so a
- * migration that fails half-way leaves no half-built file for the next command
- * to open and believe in. `rename` within one directory is the filesystem's own
- * atomic swap; a temporary name elsewhere would be a copy across devices and
- * not atomic at all. A file that is already there is a different question — it
- * may hold this project's cards — so it is migrated in place, idempotently,
- * which is what makes a second `kanbo init --file` a no-op.
- *
- * A file that is there and is *not* this package's is refused, for the reason
- * any careful host refuses it: migrating a board into somebody's own
- * database leaves it readable but contaminated, and only a different path
- * helps.
+ * Show the plan to a person at a terminal and ask once. `--yes`, or a shell
+ * nobody is at, goes ahead without asking — the questions that decide what is
+ * written into a person's own files were not asked there either.
  */
-async function createOwnBoardFile(absolutePath: string): Promise<void> {
-  mkdirSync(dirname(absolutePath), { recursive: true })
-  if (existsSync(absolutePath)) {
-    assertOwnBoardFile(absolutePath)
-    await migrateBoardFileAt(absolutePath)
+async function confirmInitPlan(plan: InitPlan, options: InitOptions): Promise<void> {
+  if (options.yes || !canPrompt()) {
     return
   }
-
-  const temporaryPath = `${absolutePath}.${process.pid}.tmp`
-  try {
-    await migrateBoardFileAt(temporaryPath)
-    renameWithRetry(temporaryPath, absolutePath)
-  }
-  catch (error) {
-    // Its WAL siblings too: SQLite removes them on a clean close, and a close
-    // is exactly what a failure half-way through may not have reached.
-    for (const leftover of [temporaryPath, `${temporaryPath}-wal`, `${temporaryPath}-shm`]) {
-      rmSync(leftover, { force: true })
-    }
-    throw error
-  }
-}
-
-/** Refuse a file already at the board's path that this package did not write. */
-function assertOwnBoardFile(absolutePath: string): void {
-  let contents: BoardFileContents
-  try {
-    contents = readBoardFileContents(absolutePath)
-  }
-  catch {
-    throw new CliError(1, notABoardFileMessage(absolutePath))
-  }
-  if (!contents.empty && contents.owner !== 'kanbo') {
-    throw new CliError(1, notABoardFileMessage(absolutePath))
-  }
-}
-
-function notABoardFileMessage(absolutePath: string): string {
-  return `${absolutePath} already holds a database of its own. Name another path with --file, `
-    + 'or move that file out of the way.'
-}
-
-async function migrateBoardFileAt(path: string): Promise<void> {
-  const board = await openBoardDatabase(path)
-  try {
-    migrateBoardFile(board.database)
-    markBoardFileOwnedByKanbo(board.database)
-  }
-  finally {
-    board.close()
-  }
-}
-
-/** The three things `init` writes, whichever kind of board it was given. */
-async function initProject(
-  projectDir: string,
-  target: BoardTarget,
-  workspace: BoardWorkspaceIdentity,
-  options: InitOptions,
-): Promise<CliResult> {
-  warnAboutOwnerAccess(target, options)
-  const bindingPath = writeBinding(projectDir, buildBinding(projectDir, target, workspace, options))
-  const instructions = await writeInstructions(projectDir, options)
-  const mcp = await registerMcpServers(projectDir, options)
-
-  return {
-    value: {
-      binding: bindingPath,
-      workspaceId: workspace.id,
-      boardId: options.board ?? null,
-      database: describeTarget(target),
-      instructions,
-      mcp,
-    },
-    text: describeInit(workspace, target, bindingPath, instructions, mcp),
+  const print = options.json || options.format ? console.error : console.log
+  print(describeInitPlan(plan))
+  if (!await getUi().confirm({ message: 'Make these changes?', initialValue: true })) {
+    throw new CliError(1, 'Nothing was changed.')
   }
 }
 
@@ -501,23 +454,23 @@ function warnAboutOwnerAccess(target: BoardTarget, options: InitOptions): void {
 }
 
 /**
- * Put the block in the file the caller named — or, when they named none, show
- * them what it says and ask.
+ * The block in the file the caller named — or, when they named none, show them
+ * what it says and ask.
  *
  * A shell that is nobody's terminal is never asked anything: an `init` in a
  * script prints the block and stops there, because writing into a project's
  * instructions is the kind of thing a person says yes to.
  */
-async function writeInstructions(projectDir: string, options: InitOptions): Promise<FileOutcome | null> {
+async function planInstructions(projectDir: string, options: InitOptions): Promise<InitFileChange[]> {
   const target = options.instructions === undefined ? await askInstructionTarget(options) : parseInstructions(options.instructions)
   if (target === 'none') {
-    return null
+    return []
   }
   const planned = await planInstructionBlockAsking(join(projectDir, PROJECT_INSTRUCTION_FILES[target]), INSTRUCTION_BLOCK, options)
   if (planned.note) {
     console.error(planned.note)
   }
-  return applyFileChange(planned.change)
+  return [{ kind: 'instructions', change: planned.change }]
 }
 
 async function askInstructionTarget(options: InitOptions): Promise<InstructionTarget> {
@@ -554,13 +507,21 @@ function showBlock(options: InitOptions): void {
  * `kanbo` entry that is already there belongs to them — it may point at
  * a different binary or carry arguments of its own — and overwriting it would
  * be this command deciding something it was not asked to decide.
+ *
+ * A project file is shared across machines, so it gets the portable form on every system.
  */
-async function registerMcpServers(projectDir: string, options: InitOptions): Promise<FileOutcome[]> {
-  const clients = options.mcp ?? await askMcpClients(options)
-  return clients.map(client => registerMcpServer(projectDir, client))
+function planMcpServers(projectDir: string, clients: McpClient[]): InitFileChange[] {
+  const launch = mcpLaunchSpec({ scope: 'project' })
+  return clients.map((client) => {
+    const path = projectMcpConfigPath(projectDir, client)
+    return { kind: 'mcp', change: client === 'codex' ? planCodexMcpServer(path, launch) : planJsonMcpServer(path, launch) }
+  })
 }
 
-async function askMcpClients(options: InitOptions): Promise<McpClient[]> {
+async function askMcpClientsUnlessGiven(options: InitOptions): Promise<McpClient[]> {
+  if (options.mcp) {
+    return options.mcp
+  }
   if (options.yes || !canPrompt()) {
     return []
   }
@@ -576,21 +537,13 @@ async function askMcpClients(options: InitOptions): Promise<McpClient[]> {
   })
 }
 
-/** A project file is shared across machines, so it gets the portable form on every system. */
-function registerMcpServer(projectDir: string, client: McpClient): FileOutcome {
-  const path = projectMcpConfigPath(projectDir, client)
-  const launch = mcpLaunchSpec({ scope: 'project' })
-  return applyFileChange(client === 'codex' ? planCodexMcpServer(path, launch) : planJsonMcpServer(path, launch))
-}
+function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: InitOptions): CliResult {
+  const { workspace, target } = plan
+  const outcome = ({ path, state }: FileOutcome): FileOutcome => ({ path, state })
+  const instructions = applied.files.filter(file => file.kind === 'instructions').map(outcome)[0] ?? null
+  const mcp = applied.files.filter(file => file.kind === 'mcp').map(outcome)
 
-function describeInit(
-  workspace: BoardWorkspaceIdentity,
-  target: BoardTarget,
-  bindingPath: string,
-  instructions: FileOutcome | null,
-  mcp: FileOutcome[],
-): string {
-  const lines = [`Bound this project to ${workspace.name} — ${bindingPath}`]
+  const lines = [`Bound this project to ${workspace.name} — ${applied.bindingPath}`]
   if (target.kind === 'postgres') {
     lines.push(`Board: ${maskDatabaseUrl(target.url)}`)
   }
@@ -600,14 +553,25 @@ function describeInit(
   if (instructions) {
     lines.push(`Instructions: ${instructions.path} (${instructions.state})`)
   }
-  for (const outcome of mcp) {
-    lines.push(`MCP: ${outcome.path} (${outcome.state})`)
+  for (const entry of mcp) {
+    lines.push(`MCP: ${entry.path} (${entry.state})`)
   }
   const warning = mcp.length > 0 ? mcpLaunchSpec({ scope: 'project' }).warning : undefined
   if (warning) {
     lines.push(`Note: ${warning}`)
   }
-  return lines.join('\n')
+
+  return {
+    value: {
+      binding: applied.bindingPath,
+      workspaceId: workspace.id,
+      boardId: options.board ?? null,
+      database: describeTarget(target),
+      instructions,
+      mcp,
+    },
+    text: lines.join('\n'),
+  }
 }
 
 function parseInstructions(value: string): InstructionTarget {

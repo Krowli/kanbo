@@ -74,9 +74,13 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 
 Bind this project to a board, and tell its agents about it. Writes `.kanbo/binding.json` (mode `0600`) and `.kanbo/.gitignore`; with the options below it also writes an instruction block and MCP registrations. Running it again merges into the existing binding and changes nothing that is already current.
 
+When nothing names a board — no `--db`/`--database-url`, no `KANBO_DB_PATH`/`KANBO_DATABASE_URL`, no binding at or above the folder — a plain `kanbo init` creates a board file of the project's own, exactly like `--file`. A new board file gets the standard columns straight away, so `kanbo prime` has them to show.
+
+`init` works out everything first: it asks its questions, then (in a terminal, without `--yes`) shows the list of files it will create or write and asks `Make these changes?`. Nothing — not even the binding — is written before that yes; Ctrl-C at any question leaves the folder as it was.
+
 | Option | Meaning |
 | --- | --- |
-| `--file [path]` | Use a board file of this project's own instead of a host database or an external board (default `.kanbo/board.db`). Creates and migrates the file. |
+| `--file [path]` | Use a board file of this project's own instead of a host database or an external board (default `.kanbo/board.db`). Creates and migrates the file, and seeds the standard columns into a new one. What a plain `kanbo init` does when nothing names a board. |
 | `--database-url <url>` | External Postgres board to bind this project to. Needs a workspace id and a card-key prefix (`--workspace`, `--identifier`). |
 | `--db <path>` | Host database file to read this project's workspace from (for a board that lives inside another app's SQLite database). |
 | `--workspace <nameOrId>` | Workspace this project is. With `--file` and no binding yet, defaults to the folder name. |

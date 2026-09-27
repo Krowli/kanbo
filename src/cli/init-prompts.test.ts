@@ -51,6 +51,8 @@ describe('kanbo init, asked in a terminal', () => {
     driver.press('down', 'enter')
     await driver.waitFor('Register the board\'s MCP server with which tools?')
     driver.press('enter')
+    await driver.waitFor('Make these changes?')
+    driver.press('enter')
     await running
 
     expect(readFileSync(join(projectDir, 'AGENTS.md'), 'utf8')).toBe(`${INSTRUCTION_BLOCK}\n`)
@@ -70,8 +72,7 @@ describe('kanbo init, asked in a terminal', () => {
     }
   })
 
-  // T11: init writes the binding before it asks anything; this holds once it asks first.
-  it.fails('stops at Ctrl-C before writing the binding', async () => {
+  it('stops at Ctrl-C before writing the binding', async () => {
     const running = init()
 
     await driver.waitFor('Add this block to the project\'s agent instructions?')
