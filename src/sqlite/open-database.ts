@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { getTableConfig } from 'drizzle-orm/sqlite-core'
 
 import { BoardError } from '../domain/errors'
+import { boardQueryLogger } from '../perf/query-counter'
 import { BOARD_SCHEMA_EPOCH, BOARD_TABLES_ADDED_WITHIN_EPOCH } from '../schema-epoch'
 import { boardSqliteSchema } from './schema'
 import type { SqliteDatabase } from './transaction'
@@ -98,7 +99,7 @@ export async function openBoardDatabase(path: string): Promise<BoardDatabase> {
   // NORMAL is the recommended durability tradeoff with WAL (vs FULL fsync on every commit).
   connection.pragma('synchronous = NORMAL')
   return {
-    database: drizzle(connection, { schema: boardSqliteSchema }),
+    database: drizzle(connection, { schema: boardSqliteSchema, logger: boardQueryLogger() }),
     connection,
     close: () => connection.close(),
   }

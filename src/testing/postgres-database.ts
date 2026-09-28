@@ -2,6 +2,7 @@ import { PGlite } from '@electric-sql/pglite'
 import type { PgliteDatabase } from 'drizzle-orm/pglite'
 import { drizzle } from 'drizzle-orm/pglite'
 
+import { boardQueryLogger } from '../perf/query-counter'
 import { migrateBoardDatabase } from '../postgres/migrate'
 import { BOARD_POSTGRES_TABLES, boardPostgresSchema } from '../postgres/schema'
 import { BOARD_SCHEMA_EPOCH } from '../schema-epoch'
@@ -51,7 +52,7 @@ const SEED_META = `insert into "kanban_meta" ("key", "revision") values ('board'
  */
 export async function createTestPostgresDatabase(): Promise<TestPostgresDatabase> {
   const client = await PGlite.create()
-  const database = drizzle(client, { schema: boardPostgresSchema })
+  const database = drizzle(client, { schema: boardPostgresSchema, logger: boardQueryLogger() })
   await migrateBoardDatabase(database)
 
   return {

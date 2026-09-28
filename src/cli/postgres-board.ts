@@ -2,6 +2,7 @@ import { drizzle } from 'drizzle-orm/postgres-js'
 import { migrate } from 'drizzle-orm/postgres-js/migrator'
 import postgres from 'postgres'
 
+import { boardQueryLogger } from '../perf/query-counter'
 import { getBoardMigrationsPath } from '../postgres/migrations-path'
 import type { BoardPostgresDatabase } from '../postgres/open-database'
 
@@ -53,7 +54,7 @@ export async function openPostgresBoard(url: string): Promise<OpenPostgresBoard>
 
 async function openWithPostgresJs(url: string): Promise<OpenPostgresBoard> {
   const client = postgres(url, { prepare: false, max: 1 })
-  const database = drizzle(client)
+  const database = drizzle(client, { logger: boardQueryLogger() })
   return {
     database,
     migrate: async () => {
