@@ -43,24 +43,31 @@ describe('where the board\'s migrations are', () => {
       .toBe(join('/repo', 'packages', 'kanbo', 'drizzle-sqlite'))
   })
 
-  it('finds the package root from the library build, one directory deeper than the checkout', () => {
+  it('finds the copy in dist/ from a library entry, one directory deeper than the checkout', () => {
     // `tsdown.lib.config.ts` nests each entry under its own subpath —
-    // `dist/lib/postgres/index.mjs` — one level deeper than `src/postgres/`,
-    // so the package root sits one `..` further up.
-    const here = join('/repo', 'packages', 'kanbo', 'dist', 'lib', 'postgres')
-    const packageRoot = join('/repo', 'packages', 'kanbo', 'drizzle-postgres')
+    // `dist/lib/postgres/index.mjs` — so two `..` land in `dist/`, where the
+    // build copied the folder.
+    const here = join('/proj', 'node_modules', 'kanbo-cli', 'dist', 'lib', 'postgres')
+    const inDist = join('/proj', 'node_modules', 'kanbo-cli', 'dist', 'drizzle-postgres')
 
-    expect(resolveBoardMigrationsPath(here, 'drizzle-postgres', only(packageRoot))).toBe(packageRoot)
+    expect(resolveBoardMigrationsPath(here, 'drizzle-postgres', only(inDist))).toBe(inDist)
   })
 
-  it('finds the published copy from the library build inside an installed tarball', () => {
-    // An external consumer's `node_modules/kanbo` has no `src/` —
-    // `drizzle-sqlite/` is there because `package.json`'s `files` publishes it
-    // at the package root, the same place a checkout keeps it.
-    const here = join('/proj', 'node_modules', 'kanbo', 'dist', 'lib', 'sqlite')
-    const packageRoot = join('/proj', 'node_modules', 'kanbo', 'drizzle-sqlite')
+  it('finds the copy in dist/ from a shared chunk of the library build inside an installed tarball', () => {
+    // The migrators land in a chunk directly under `dist/lib/`. The tarball
+    // publishes `dist/` and no package-root `drizzle-sqlite/`, so the copy
+    // beside the command's bundle is the one there is.
+    const here = join('/proj', 'node_modules', 'kanbo-cli', 'dist', 'lib')
+    const inDist = join('/proj', 'node_modules', 'kanbo-cli', 'dist', 'drizzle-sqlite')
 
-    expect(resolveBoardMigrationsPath(here, 'drizzle-sqlite', only(packageRoot))).toBe(packageRoot)
+    expect(resolveBoardMigrationsPath(here, 'drizzle-sqlite', only(inDist))).toBe(inDist)
+  })
+
+  it('still prefers the package root from a chunk in a checkout, where both are there', () => {
+    const here = join('/repo', 'dist', 'lib')
+    const packageRoot = join('/repo', 'drizzle-sqlite')
+
+    expect(resolveBoardMigrationsPath(here, 'drizzle-sqlite', only(packageRoot, join('/repo', 'dist', 'drizzle-sqlite')))).toBe(packageRoot)
   })
 
   it('hands both migrators a folder that is really there, running from where it runs now', () => {

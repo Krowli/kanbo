@@ -39,7 +39,9 @@ export default defineConfig({
   format: ['esm', 'cjs'],
   platform: 'node',
   target: 'node22',
-  sourcemap: true,
+  // No source maps: they were over half the npm tarball, and a map of a
+  // bundle is no use to anyone reading a stack trace from an installed kanbo.
+  sourcemap: false,
   clean: true,
   dts: true,
   // Rolldown's own format string is `es`, not the `esm` alias `format` above accepts.

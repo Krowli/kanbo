@@ -34,7 +34,9 @@ export default defineConfig({
   format: ['cjs'],
   platform: 'node',
   target: 'node22',
-  sourcemap: true,
+  // No source maps: they were over half the npm tarball, and a map of a
+  // bundle is no use to anyone reading a stack trace from an installed kanbo.
+  sourcemap: false,
   clean: true,
   outExtensions: () => ({ js: '.cjs' }),
   // A dynamic import has to stay one: rolldown hoists every external `require`

@@ -91,9 +91,8 @@
   },
   "files": [
     "dist",
-    "drizzle-sqlite",
-    "drizzle-postgres",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {

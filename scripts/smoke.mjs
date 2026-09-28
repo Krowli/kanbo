@@ -77,7 +77,7 @@ function pathKey(env) {
 /** The environment every kanbo run gets: the installed bin first, a throwaway home, no agent shell. */
 function kanboEnv(extra = {}) {
   const env = { ...process.env }
-  for (const name of ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'GEMINI_CLI', 'CURSOR_AGENT', 'CODEX_SANDBOX', 'KANBO_DB_PATH', 'KANBO_DATABASE_URL', 'KANBO_ACTOR_KIND', 'KANBO_SERVE_TOKEN', 'KANBO_DEBUG']) {
+  for (const name of ['CLAUDECODE', 'CLAUDE_CODE_ENTRYPOINT', 'GEMINI_CLI', 'CURSOR_AGENT', 'CODEX_THREAD_ID', 'CODEX_SANDBOX', 'KANBO_DB_PATH', 'KANBO_DATABASE_URL', 'KANBO_ACTOR_KIND', 'KANBO_SERVE_TOKEN', 'KANBO_DEBUG']) {
     delete env[name]
   }
   const key = pathKey(env)
