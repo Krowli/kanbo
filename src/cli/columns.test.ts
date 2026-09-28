@@ -340,7 +340,7 @@ describe('kanbo columns', () => {
 
     const outcome = await kanbo('columns', ...args)
 
-    expect(outcome).toMatchObject({ exitCode: 4, message: expect.stringContaining(describeColumnChangesRefusal('KANBO_ACTOR_KIND=agent', `kanbo columns ${args.join(' ')}`)) })
+    expect(outcome).toMatchObject({ exitCode: 4, message: expect.stringContaining(describeColumnChangesRefusal('KANBO_ACTOR_KIND=agent', ['columns', ...args])) })
     expect(await names()).toEqual(STANDARD)
     expect(await readChangeSeq(store)).toBe(before)
   })

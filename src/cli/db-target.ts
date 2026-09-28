@@ -49,7 +49,7 @@ export const DATABASE_NOT_FOUND_AGENT_MESSAGE = 'This folder has no kanbo board 
  * `kanbo`) asks by type rather than by the words of the message.
  */
 export class BoardNotFoundError extends CliError {
-  constructor(message = isAgentShell() ? `${DATABASE_NOT_FOUND_AGENT_MESSAGE}\n${describePersonOverride('kanbo')}` : DATABASE_NOT_FOUND_MESSAGE) {
+  constructor(message = isAgentShell() ? `${DATABASE_NOT_FOUND_AGENT_MESSAGE}\n${describePersonOverride([])}` : DATABASE_NOT_FOUND_MESSAGE) {
     super(EXIT_NOT_RESOLVED, message)
     this.name = 'BoardNotFoundError'
   }

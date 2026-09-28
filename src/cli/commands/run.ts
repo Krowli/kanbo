@@ -4,7 +4,7 @@ import { sessionRefFromEnvironment } from '../../domain/external-session-ref'
 import type { FinishRunInput } from '../../ops/runs'
 import { readRunFinishState, RUN_FINISH_STATES } from '../../ops/runs'
 import type { Issue, IssueRun } from '../../sqlite/schema'
-import { createCliActor, requireHumanActor, typedCommand } from '../actor'
+import { createCliActor, requireHumanActor, typedWords } from '../actor'
 import type { BoardCommandOptions, BoardSession } from '../command'
 import { parseExecutionMode, requireCard, requireRun, runBoardCommand, withBoardOptions } from '../command'
 import { CliError } from '../output'
@@ -73,7 +73,7 @@ export function registerRunCommands(program: Command): void {
     .option('--replace', 'replace the session already given (a person only)'))
     .action(async (runId: string, ref: string, options: AttachSessionOptions, command: Command) => {
       // Checked before the board is opened, the same as `approve`.
-      const actor = options.replace ? requireHumanActor('run attach-session --replace', typedCommand(command)) : null
+      const actor = options.replace ? requireHumanActor('run attach-session --replace', typedWords(command)) : null
       await runBoardCommand(options, 'write', async (session) => {
         const found = await requireRun(session, runId)
         const attached = actor
@@ -89,7 +89,7 @@ export function registerRunCommands(program: Command): void {
     .description('Remove the session given for this work (a person only)')
     .argument('<runId>', 'the run, as `kanbo run start` printed it'))
     .action(async (runId: string, options: BoardCommandOptions, command: Command) => {
-      const actor = requireHumanActor('run clear-session', typedCommand(command))
+      const actor = requireHumanActor('run clear-session', typedWords(command))
       await runBoardCommand(options, 'write', async (session) => {
         const found = await requireRun(session, runId)
         const cleared = await session.ops.clearRunSessionRef(found.id, actor)

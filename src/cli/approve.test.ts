@@ -11,7 +11,7 @@ import type { BoardActor } from '../ops/types'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
-import { describeApprovalRefusal, describeReturnRefusal, describeRunSessionRefRefusal, describeSprintCloseRefusal } from './actor'
+import { describeApprovalRefusal, describePersonOverride, describeReturnRefusal, describeRunSessionRefRefusal, describeSprintCloseRefusal } from './actor'
 import { registerApproveCommand } from './commands/approve'
 import { registerReturnCommand } from './commands/return'
 import { registerRunCommands } from './commands/run'
@@ -72,8 +72,8 @@ describe('approving and returning from a terminal', () => {
   }
 
   /** The refusal for `argv`, as the command line would print it: the command it names is the one typed. */
-  function refusalOf(describe: (marker: string, command: string) => string, argv: string[], marker = 'KANBO_ACTOR_KIND=agent') {
-    return expect.objectContaining({ exitCode: 4, message: describe(marker, ['kanbo', ...typed(argv)].join(' ')) })
+  function refusalOf(describe: (marker: string, words: readonly string[]) => string, argv: string[], marker = 'KANBO_ACTOR_KIND=agent') {
+    return expect.objectContaining({ exitCode: 4, message: describe(marker, typed(argv)) })
   }
 
   it.each(AGENT_SHELL)('refuses an approval in a shell started for an agent (%s)', async (variable) => {
@@ -92,11 +92,11 @@ describe('approving and returning from a terminal', () => {
     const card = await createWaitingCard()
     vi.stubEnv(variable, value)
 
-    const message = describeApprovalRefusal(label, ['kanbo', ...typed(['approve', card.id])].join(' '))
+    const message = describeApprovalRefusal(label, typed(['approve', card.id]))
     await expect(run(['approve', card.id])).rejects.toThrowError(expect.objectContaining({ exitCode: 4, message }))
     const [refused, override] = message.split('\n')
     expect(refused).toBe(`Only a person can approve a card. This shell belongs to an agent (${label}): ask a person to approve it on the board page (kanbo serve).`)
-    expect(override).toBe(`If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo approve ${card.id} --db ${board.path} --workspace ${WORKSPACE.id}`)
+    expect(override).toBe(describePersonOverride(['approve', card.id, '--db', board.path, '--workspace', WORKSPACE.id]))
     expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')
   })
 
@@ -135,11 +135,11 @@ describe('approving and returning from a terminal', () => {
 
     const refusal = expect.objectContaining({
       exitCode: 4,
-      message: describeReturnRefusal('KANBO_ACTOR_KIND=agent', ['kanbo', 'return', card.id, '--comment', '\'not yet\'', ...typed([])].join(' ')),
+      message: describeReturnRefusal('KANBO_ACTOR_KIND=agent', typed(['return', card.id, '--comment', 'not yet'])),
     })
     await expect(run(['return', card.id, '--comment', 'not yet'])).rejects.toThrowError(refusal)
     await expect(run(['return', card.id, '--comment', 'it\'s not'])).rejects.toThrowError(expect.objectContaining({
-      message: expect.stringContaining(`KANBO_ACTOR_KIND=person kanbo return ${card.id} --comment 'it'\\''s not' --db`),
+      message: expect.stringContaining(describePersonOverride(typed(['return', card.id, '--comment', 'it\'s not']))),
     }))
     expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')
   })

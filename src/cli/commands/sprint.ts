@@ -1,7 +1,7 @@
 import type { Command } from 'commander'
 
 import { BoardError } from '../../domain/errors'
-import { requireHumanActor, typedCommand } from '../actor'
+import { requireHumanActor, typedWords } from '../actor'
 import type { BoardCommandOptions } from '../command'
 import { runBoardCommand, withBoardOptions } from '../command'
 import { CliError } from '../output'
@@ -87,7 +87,7 @@ export function registerSprintCommands(program: Command): void {
     .argument('<id>', 'the sprint to close')
     .option('--carry-to <id>', 'the open sprint unfinished cards move to; without it they leave the sprint'))
     .action(async (id: string, options: CloseOptions, command: Command) => {
-      const actor = requireHumanActor('sprint close', typedCommand(command))
+      const actor = requireHumanActor('sprint close', typedWords(command))
 
       await runBoardCommand(options, 'write', async (session) => {
         // A board can hold several workspaces: a sprint of another one is not

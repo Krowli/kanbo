@@ -1,6 +1,6 @@
 import type { Command } from 'commander'
 
-import { requireHumanActor, typedCommand } from '../actor'
+import { requireHumanActor, typedWords } from '../actor'
 import type { BoardCommandOptions } from '../command'
 import { requireCard, runBoardCommand, withBoardOptions } from '../command'
 import { CARD_VIEW_FIELDS, describeCard, projectCard } from '../view'
@@ -24,7 +24,7 @@ export function registerApproveCommand(program: Command): void {
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
     .option('--comment <text>', 'a note to leave on the card'))
     .action(async (reference: string, options: ApproveOptions, command: Command) => {
-      const actor = requireHumanActor('approve', typedCommand(command))
+      const actor = requireHumanActor('approve', typedWords(command))
 
       await runBoardCommand(options, 'write', async (session) => {
         const existing = await requireCard(session, reference)

@@ -20,18 +20,28 @@ import { CliError, EXIT_HUMAN_ONLY } from './output'
  * What an agent's shell is told when it tries a person's command, as two
  * lines: the refusal, addressed to the agent, and — for a person whose own
  * editor terminal carries an agent tool's mark — the same command with
- * `KANBO_ACTOR_KIND=person` in front, which lets it through.
+ * `KANBO_ACTOR_KIND=person` set, which lets it through.
  */
-function refusal(what: string, askAPerson: string): (marker: string, command: string) => string {
-  return (marker, command) => [
+function refusal(what: string, askAPerson: string): (marker: string, words: readonly string[]) => string {
+  return (marker, words) => [
     `Only a person can ${what}. This shell belongs to an agent (${marker}): ask a person to ${askAPerson} on the board page (kanbo serve).`,
-    describePersonOverride(command),
+    describePersonOverride(words),
   ].join('\n')
 }
 
-/** The line every refusal and "no board" in an agent's shell ends with: how a person in an editor terminal runs `command` anyway. */
-export function describePersonOverride(command: string): string {
-  return `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person ${command}`
+/**
+ * The line every refusal and "no board" in an agent's shell ends with: how a
+ * person in an editor terminal runs `kanbo` with `words` anyway.
+ *
+ * The line is written for the shell a person there types into: a POSIX shell's
+ * `VAR=value command`, and on Windows PowerShell's — its default terminal —
+ * where that form is not a command at all.
+ */
+export function describePersonOverride(words: readonly string[], platform: NodeJS.Platform = process.platform): string {
+  if (platform === 'win32') {
+    return `If you are a person in an editor terminal, run in PowerShell: $env:KANBO_ACTOR_KIND='person'; ${['kanbo', ...words.map(quoteForPowerShell)].join(' ')}`
+  }
+  return `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person ${['kanbo', ...words.map(quoteForPosixShell)].join(' ')}`
 }
 
 /** What a person is told when an agent's shell tries to answer for them. */
@@ -79,7 +89,7 @@ export const HUMAN_ONLY_ACTIONS = [
 /** What only a person may do: the commands above, and one option of a command anyone may run. */
 type HumanOnlyAction = typeof HUMAN_ONLY_ACTIONS[number] | 'run attach-session --replace'
 
-const HUMAN_ONLY_MESSAGES: Record<HumanOnlyAction, (marker: string, command: string) => string> = {
+const HUMAN_ONLY_MESSAGES: Record<HumanOnlyAction, (marker: string, words: readonly string[]) => string> = {
   'approve': describeApprovalRefusal,
   'return': describeReturnRefusal,
   'sprint close': describeSprintCloseRefusal,
@@ -116,12 +126,12 @@ export function createCliActor(): BoardActor {
  * sets the variable. Real enforcement needs a shared Postgres board with agents
  * on the agent role, where the database itself refuses.
  *
- * `command` is what was typed (`typedCommand`), for the refusal's last line.
+ * `words` are what was typed after `kanbo` (`typedWords`), for the refusal's last line.
  */
-export function requireHumanActor(action: HumanOnlyAction, command: string): BoardActor {
+export function requireHumanActor(action: HumanOnlyAction, words: readonly string[]): BoardActor {
   const marker = readAgentShellMarker()
   if (marker !== null) {
-    throw new CliError(EXIT_HUMAN_ONLY, HUMAN_ONLY_MESSAGES[action](marker, command))
+    throw new CliError(EXIT_HUMAN_ONLY, HUMAN_ONLY_MESSAGES[action](marker, words))
   }
   return createPersonActor()
 }
@@ -190,21 +200,32 @@ export function isAgentShell(): boolean {
 }
 
 /**
- * The command line that reached `command`, as a person would type it again:
- * `kanbo` and every word given to the program, quoted for a POSIX shell where
- * a word needs it.
+ * The words given to the program that reached `command`, as a person typed them
+ * after `kanbo`.
  */
-export function typedCommand(command: Command): string {
+export function typedWords(command: Command): string[] {
   let root = command
   while (root.parent) {
     root = root.parent
   }
   // Commander keeps the words it was parsed from on the root as `rawArgs`
-  // (every `parse` sets it); its typings leave the property out.
+  // (every `parse` sets it); its typings leave the property out. `runKanbo`
+  // parses them `from: 'user'`, so they hold no node or script path.
   const { rawArgs } = root as Command & { rawArgs: string[] }
-  return ['kanbo', ...rawArgs.map(quoteForShell)].join(' ')
+  return [...rawArgs]
 }
 
-function quoteForShell(word: string): string {
+/** `word` as a POSIX shell reads it back: bare when it is safe, else in single quotes with each `'` closed, escaped and reopened. */
+function quoteForPosixShell(word: string): string {
   return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll('\'', '\'\\\'\'')}'`
+}
+
+/**
+ * `word` as PowerShell reads it back: bare when it holds nothing PowerShell
+ * treats specially (a Windows path's backslashes, drive colon and short-name
+ * `~` are fine; a leading `~` is not), else in single quotes — where nothing
+ * expands — with each `'` doubled.
+ */
+function quoteForPowerShell(word: string): string {
+  return /^[\w.\\/:-][\w.\\/:~-]*$/.test(word) ? word : `'${word.replaceAll('\'', '\'\'')}'`
 }

@@ -10,6 +10,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { APPROVED_COMMENT } from '../ops/approval'
 import type { PromptDriver } from '../testing/prompt-driver'
 import { createPromptDriver } from '../testing/prompt-driver'
+import { describePersonOverride } from './actor'
 import { readBinding } from './binding'
 import { openBoardSession } from './command'
 import { registerKanboCommands } from './commands'
@@ -203,7 +204,7 @@ describe('kanbo with no words', () => {
 
       expect(printed[0]!.split('\n').slice(0, 2)).toEqual([
         'This folder has no kanbo board yet. Ask a person to run kanbo here.',
-        'If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo',
+        describePersonOverride([]),
       ])
       expect(printed.join('\n')).toContain('kanbo init --yes --connect claude')
       expect(driver.transcript()).toBe(printed.join('\n').concat('\n'))

@@ -146,7 +146,7 @@ export const NO_BOARD_AGENT_FIRST_LINE = DATABASE_NOT_FOUND_AGENT_MESSAGE
 /** No board and nobody to ask: the commands that set one up. */
 function describeNoBoard(): string {
   const [first, ...rest] = NO_BOARD_HINT
-  return [...(isAgentShell() ? [NO_BOARD_AGENT_FIRST_LINE, describePersonOverride('kanbo')] : [first]), ...rest].join('\n')
+  return [...(isAgentShell() ? [NO_BOARD_AGENT_FIRST_LINE, describePersonOverride([])] : [first]), ...rest].join('\n')
 }
 
 /** A board and nobody to ask: the summary, and where to read more. */
@@ -292,8 +292,8 @@ type Decision = 'approve' | 'return' | 'skip' | 'stop'
  * same board operations as `kanbo approve` and `kanbo return`.
  */
 async function review(ui: Ui, cards: CardView[]): Promise<void> {
-  const approver = requireHumanActor('approve', 'kanbo')
-  const returner = requireHumanActor('return', 'kanbo')
+  const approver = requireHumanActor('approve', [])
+  const returner = requireHumanActor('return', [])
   const session = await openBoardSession({}, 'write')
   try {
     for (const card of cards) {

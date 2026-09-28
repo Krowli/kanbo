@@ -1,6 +1,6 @@
 import type { Command } from 'commander'
 
-import { requireHumanActor, typedCommand } from '../actor'
+import { requireHumanActor, typedWords } from '../actor'
 import type { BoardCommandOptions } from '../command'
 import { requireCard, runBoardCommand, withBoardOptions } from '../command'
 import { describeCard, projectCard } from '../view'
@@ -30,7 +30,7 @@ export function registerReturnCommand(program: Command): void {
     .requiredOption('--comment <text>', 'why the card is coming back')
     .option('--to <column>', 'send it to this column instead, by slug, name or id'))
     .action(async (reference: string, options: ReturnOptions, command: Command) => {
-      const actor = requireHumanActor('return', typedCommand(command))
+      const actor = requireHumanActor('return', typedWords(command))
 
       await runBoardCommand(options, 'write', async (session) => {
         const existing = await requireCard(session, reference)

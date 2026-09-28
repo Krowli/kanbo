@@ -71,9 +71,9 @@ describe('column entry rules from a terminal', () => {
 
     const refusal = expect.objectContaining({
       exitCode: 4,
-      message: expect.stringMatching(/^Only a person can set what a column asks of a card\. .*\nIf you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo columns rules in_review --clear /),
+      message: describeColumnRulesRefusal('KANBO_ACTOR_KIND=agent', ['columns', 'rules', 'in_review', '--clear', '--db', board.path, '--workspace', WORKSPACE.id]),
     })
-    expect(describeColumnRulesRefusal('KANBO_ACTOR_KIND=agent', 'kanbo columns rules x')).toContain('(KANBO_ACTOR_KIND=agent)')
+    expect(describeColumnRulesRefusal('KANBO_ACTOR_KIND=agent', ['columns', 'rules', 'x'])).toContain('(KANBO_ACTOR_KIND=agent)')
     await expect(run(['columns', 'rules', 'in_review', '--clear'])).rejects.toThrowError(refusal)
 
     expect(await readChangeSeq(store)).toBe(before)

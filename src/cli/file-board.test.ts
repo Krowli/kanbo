@@ -165,7 +165,7 @@ describe('the command line on a board file of this project\'s own', () => {
     const before = await readChangeSeq(store)
     vi.stubEnv('KANBO_ACTOR_KIND', 'agent')
 
-    const refusal = expect.objectContaining({ exitCode: 4, message: expect.stringContaining(describeApprovalRefusal('KANBO_ACTOR_KIND=agent', `kanbo approve ${card.id}`)) })
+    const refusal = expect.objectContaining({ exitCode: 4, message: expect.stringContaining(describeApprovalRefusal('KANBO_ACTOR_KIND=agent', ['approve', card.id])) })
     await expect(run(['approve', card.id])).rejects.toThrowError(refusal)
 
     expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')

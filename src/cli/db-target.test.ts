@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { migrateBoardFile } from '../sqlite/migrate'
 import { markBoardFileOwnedByKanbo, openBoardDatabase } from '../sqlite/open-database'
 import { seedHostWorkspace } from '../testing/board-database'
+import { describePersonOverride } from './actor'
 import { writeBinding } from './binding'
 import { DATABASE_NOT_FOUND_MESSAGE, resolveDbTarget, TWO_BOARDS_MESSAGE } from './db-target'
 import { CliError, EXIT_NOT_RESOLVED } from './output'
@@ -95,7 +96,7 @@ describe('the board a command opens', () => {
       .toThrowError(expect.objectContaining({
         exitCode: 2,
         message: 'This folder has no kanbo board yet. Ask a person to run kanbo here.\n'
-          + 'If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo',
+          + describePersonOverride([]),
       }))
   })
 

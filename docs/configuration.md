@@ -44,7 +44,7 @@ No check is made when `CI` is set (to anything but empty, `0` or `false`), with 
 
 ## Agent shells kanbo recognises
 
-Some agent tools leave a mark in the environment of every command their agent runs. kanbo reads a shell carrying one as an agent's, exactly as if `KANBO_ACTOR_KIND=agent` were set: `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo columns add|rename|move|remove|template|add-standard`, `kanbo run clear-session` and `kanbo run attach-session --replace` exit `4` with `Only a person can …. This shell belongs to an agent (<mark>): ask a person to … on the board page (kanbo serve).`, then a second line, `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo <the command as typed>` — and nothing asks a question (so `kanbo uninstall --purge` keeps the board file).
+Some agent tools leave a mark in the environment of every command their agent runs. kanbo reads a shell carrying one as an agent's, exactly as if `KANBO_ACTOR_KIND=agent` were set: `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo columns add|rename|move|remove|template|add-standard`, `kanbo run clear-session` and `kanbo run attach-session --replace` exit `4` with `Only a person can …. This shell belongs to an agent (<mark>): ask a person to … on the board page (kanbo serve).`, then a second line, `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo <the command as typed>` (on Windows: `If you are a person in an editor terminal, run in PowerShell: $env:KANBO_ACTOR_KIND='person'; kanbo <the command as typed>`) — and nothing asks a question (so `kanbo uninstall --purge` keeps the board file).
 
 | Mark | Set by | Source |
 | --- | --- | --- |
@@ -53,7 +53,7 @@ Some agent tools leave a mark in the environment of every command their agent ru
 | `CURSOR_AGENT` (any value) | Cursor, in the Agent's terminal | [cursor.com/docs/agent/tools/terminal](https://cursor.com/docs/agent/tools/terminal) |
 | `CODEX_THREAD_ID` (any value) | Codex, in every shell command it runs | not in Codex's own documentation — `populate_env`, codex-rs `shell_environment.rs`, and seen in headless runs (Codex 0.153.0, 2026-09-28) |
 
-**Your own terminal carries a mark** — typically an IDE terminal where the Claude Code extension sets `CLAUDECODE=1`, or a shell Codex started that inherits `CODEX_THREAD_ID` — so person-only commands refuse there: set `KANBO_ACTOR_KIND=person` in that terminal (or its profile), or run the command the refusal's second line prints. `KANBO_ACTOR_KIND` always wins over the marks. `kanbo doctor` shows which mark it saw (`actor` warn).
+**Your own terminal carries a mark** — typically an IDE terminal where the Claude Code extension sets `CLAUDECODE=1`, or a shell Codex started that inherits `CODEX_THREAD_ID` — so person-only commands refuse there: set `KANBO_ACTOR_KIND=person` in that terminal (or its profile; in PowerShell `$env:KANBO_ACTOR_KIND='person'`), or run the command the refusal's second line prints. `KANBO_ACTOR_KIND` always wins over the marks. `kanbo doctor` shows which mark it saw (`actor` warn).
 
 ## The session a run records
 
