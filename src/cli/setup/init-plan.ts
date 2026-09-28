@@ -107,7 +107,7 @@ export function describeInitPlan(plan: InitPlan): string {
   if (plan.target.kind === 'postgres' && plan.migrate) {
     lines.push(`  create  the board's tables in ${maskDatabaseUrl(plan.target.url)}${columns}`)
   }
-  lines.push(`  write   ${BINDING_FILE_PATH} (binds this project to ${plan.workspace.name})`)
+  lines.push(`  write   ${BINDING_FILE_PATH} (this project uses board ${plan.workspace.name})`)
   for (const { kind, change } of plan.fileChanges) {
     if (change.next !== null) {
       lines.push(`  write   ${relativeTo(plan, change.path)} (${kind === 'instructions' ? 'the kanbo section for agents' : 'the kanbo MCP server'})`)

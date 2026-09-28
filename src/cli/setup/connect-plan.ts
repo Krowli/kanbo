@@ -331,9 +331,10 @@ export function explainItem(item: ConnectItem, removal = false): string {
   switch (item.kind) {
     case 'instructions': {
       const readers = item.agents.map(agent => AGENTS[agent].label).join(' and ')
+      const one = item.agents.length === 1
       return removal
-        ? `the kanbo section ${readers} reads ${where}`
-        : `the kanbo section: ${readers} read${item.agents.length === 1 ? 's' : ''} it ${where} and runs kanbo prime before a task`
+        ? `the kanbo section ${readers} read${one ? 's' : ''} ${where}`
+        : `the kanbo section: ${readers} read${one ? 's' : ''} it ${where} and run${one ? 's' : ''} kanbo prime before a task`
     }
     case 'mcp':
       return removal

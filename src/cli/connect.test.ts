@@ -159,6 +159,27 @@ describe('kanbo connect', () => {
     expect(readdirSync(projectDir)).toEqual([])
   })
 
+  it('says Cursor\'s rules note once: with the plan, not again after it', async () => {
+    const printed = await connect('cursor', '--global', '--yes')
+
+    expect(printed.split('Cursor keeps its rules for every project in its settings')).toHaveLength(2)
+    expect(printed).toContain('Cursor: ')
+  })
+
+  it('says the note after the outcome when nothing was left to change, so no plan said it', async () => {
+    await connect('cursor', '--global', '--yes')
+    const printed = await connect('cursor', '--global', '--yes')
+
+    expect(printed).not.toContain('kanbo connect will:')
+    expect(printed.split('Cursor keeps its rules for every project in its settings')).toHaveLength(2)
+  })
+
+  it('says two agents sharing a file read it and run kanbo prime', async () => {
+    const printed = await connect('codex', 'cursor', '--no-mcp', '--dry-run')
+
+    expect(printed).toContain('(the kanbo section: Codex and Cursor read it in this project and run kanbo prime before a task)')
+  })
+
   it('keeps the shared AGENTS.md section while Codex still uses it, and removes it with the last one', async () => {
     await connect('codex', 'cursor', '--yes')
     expect(read(projectDir, 'AGENTS.md')).toBe(`${INSTRUCTION_BLOCK}\n`)

@@ -634,7 +634,7 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
   const instructions = applied.files.filter(file => file.kind === 'instructions').map(outcome)[0] ?? null
   const mcp = applied.files.filter(file => file.kind === 'mcp').map(outcome)
 
-  const lines = [`Bound this project to ${workspace.name} — ${applied.bindingPath}`]
+  const lines = [`This project uses board ${workspace.name} — ${applied.bindingPath}`]
   if (target.kind === 'postgres') {
     lines.push(`Board: ${maskDatabaseUrl(target.url)}`)
   }

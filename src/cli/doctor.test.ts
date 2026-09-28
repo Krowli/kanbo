@@ -122,7 +122,7 @@ describe('kanbo doctor', () => {
     expect(findings.map(entry => entry.check)).toEqual([
       'version',
       'path',
-      'binding',
+      'settings',
       'sqlite',
       'board',
       'instructions',
@@ -138,7 +138,7 @@ describe('kanbo doctor', () => {
     installKanbo('process.exit(1)')
     rmSync(join(projectDir, '.kanbo', 'binding.json'))
 
-    const binding = finding(await doctor(), 'binding')
+    const binding = finding(await doctor(), 'settings')
 
     expect(binding.status).toBe('fail')
     expect(binding.fix).toMatch(/kanbo init/)
@@ -328,7 +328,7 @@ describe('kanbo doctor', () => {
       .toThrowError(expect.objectContaining({ exitCode: 1 }))
 
     const report = JSON.parse(printed.join('\n')) as { findings: DoctorFinding[] }
-    expect(finding(report.findings, 'binding').status).toBe('fail')
+    expect(finding(report.findings, 'settings').status).toBe('fail')
   })
 
   it('prints only the fields --json names, as every other command does', async () => {

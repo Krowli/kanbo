@@ -119,7 +119,8 @@ async function connect(names: string[], options: ConnectOptions): Promise<void> 
     printResult(describeOutcomes('connect', agents, [], plan, true), outputOptions(options))
     return
   }
-  if (pendingItems(plan).length > 0) {
+  const previewed = pendingItems(plan).length > 0
+  if (previewed) {
     if (interactive) {
       await chooseAndConfirm(plan)
     }
@@ -133,7 +134,7 @@ async function connect(names: string[], options: ConnectOptions): Promise<void> 
       throw new CliError(1, 'Nothing was changed.')
     }
   }
-  printResult(describeOutcomes('connect', agents, applyConnectPlan(plan), plan, false), outputOptions(options))
+  printResult(describeOutcomes('connect', agents, applyConnectPlan(plan), plan, false, previewed), outputOptions(options))
 }
 
 /** What one agent gets: its instructions where the scope says, and its MCP server where the scope — or the agent — says. */
@@ -159,7 +160,8 @@ async function disconnect(agents: AgentId[], scope: ScopeFlag, projectDir: strin
     printResult(describeOutcomes('remove', agents, [], plan, true), outputOptions(options))
     return
   }
-  if (pendingItems(plan).length > 0 && !await confirmPlan({
+  const previewed = pendingItems(plan).length > 0
+  if (previewed && !await confirmPlan({
     preview: describeConnectPlan(plan, 'kanbo connect --remove will:', true),
     question: 'Remove these?',
     yes: options.yes,
@@ -168,7 +170,7 @@ async function disconnect(agents: AgentId[], scope: ScopeFlag, projectDir: strin
   })) {
     throw new CliError(1, 'Nothing was changed.')
   }
-  printResult(describeOutcomes('remove', agents, applyConnectPlan(plan), plan, false), outputOptions(options))
+  printResult(describeOutcomes('remove', agents, applyConnectPlan(plan), plan, false, previewed), outputOptions(options))
 }
 
 /** Which agents, asked at a terminal: the ones found on this machine or in this project already ticked. */
@@ -216,7 +218,12 @@ async function chooseAndConfirm(plan: ConnectPlan): Promise<void> {
   }
 }
 
-function describeOutcomes(action: 'connect' | 'remove', agents: AgentId[], outcomes: ConnectOutcome[], plan: ConnectPlan, dryRun: boolean): CliResult {
+/**
+ * What was done. The plan's notes end it only when no preview said them
+ * already — a plan with changes to make was printed, notes and all, before
+ * anything was done.
+ */
+function describeOutcomes(action: 'connect' | 'remove', agents: AgentId[], outcomes: ConnectOutcome[], plan: ConnectPlan, dryRun: boolean, notesShown = false): CliResult {
   const lines: string[] = []
   if (dryRun) {
     lines.push('Dry run: nothing was changed.')
@@ -232,7 +239,7 @@ function describeOutcomes(action: 'connect' | 'remove', agents: AgentId[], outco
       lines.push(`${who}: ${where} (${state === 'ran' ? `ran ${outcome.command}` : state})`)
     }
   }
-  if (!dryRun) {
+  if (!dryRun && !notesShown) {
     lines.push(...plan.notes.map(note => `Note: ${note}`))
   }
   if (action === 'connect' && !dryRun) {

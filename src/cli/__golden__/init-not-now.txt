@@ -65,7 +65,7 @@ kanbo — set up a board for this project
 │
 kanbo init will:
   create  .kanbo/board.db (a board file of this project's own, with the columns To Do, In Progress, Done)
-  write   .kanbo/binding.json (binds this project to MET)
+  write   .kanbo/binding.json (this project uses board MET)
 Nothing else is changed.
 │
 ◆  Write these changes?

@@ -50,7 +50,7 @@ kanbo: agents in this project will reach the board with the connection string yo
 ◇  Which coding agents do you use here?
 │  none
 kanbo init will:
-  write   .kanbo/binding.json (binds this project to WST)
+  write   .kanbo/binding.json (this project uses board WST)
 Nothing else is changed.
 │
 ◆  Write these changes?

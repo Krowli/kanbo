@@ -33,7 +33,7 @@ This project already has a board: .kanbo/board.db (cards WST-001, WST-002, …).
 ◇  Add a first card? (optional — Enter to skip)
 │
 kanbo init will:
-  write   .kanbo/binding.json (binds this project to WST)
+  write   .kanbo/binding.json (this project uses board WST)
 Note: CLAUDE.md: you changed the kanbo section, so it was left as it is.
 Nothing else is changed.
 │

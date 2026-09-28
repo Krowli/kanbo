@@ -84,7 +84,7 @@ To Do stays on the board: agents take their work from it.
 │
 kanbo init will:
   create  .kanbo/board.db (a board file of this project's own, with the columns Backlog, To Do, In Progress, In Review, QA, Blocked, Design, Done, Canceled)
-  write   .kanbo/binding.json (binds this project to WST)
+  write   .kanbo/binding.json (this project uses board WST)
 Nothing else is changed.
 │
 ◆  Write these changes?

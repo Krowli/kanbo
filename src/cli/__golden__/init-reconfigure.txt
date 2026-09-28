@@ -45,7 +45,7 @@ Take work with `kanbo ready`. Only a person approves a card, and only a person t
 ◇  Add a first card? (optional — Enter to skip)
 │
 kanbo init will:
-  write   .kanbo/binding.json (binds this project to WEA)
+  write   .kanbo/binding.json (this project uses board WEA)
   write   CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs kanbo prime before a task)
   write   .mcp.json (lets Claude Code call the board's tools in this project)
 Nothing else is changed.

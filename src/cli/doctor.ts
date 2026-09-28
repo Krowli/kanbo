@@ -202,7 +202,7 @@ export function findKanboProject(cwd: string): ProjectState | null {
 function checkProject(project: ProjectState | null): DoctorFinding {
   if (!project) {
     return {
-      check: 'binding',
+      check: 'settings',
       status: 'warn',
       detail: 'Not inside a kanbo project (no .kanbo/ here or above); board checks are skipped.',
       fix: 'Run kanbo init in a project to give it a board.',
@@ -211,15 +211,15 @@ function checkProject(project: ProjectState | null): DoctorFinding {
   const path = join(project.root, BINDING_FILE_PATH)
   if (!project.binding) {
     return {
-      check: 'binding',
+      check: 'settings',
       status: 'fail',
       detail: existsSync(path)
-        ? `${path} is not a binding this build can read.`
+        ? `This build can't read the project settings in ${path}.`
         : `${join(project.root, dirname(BINDING_FILE_PATH))} has no ${BINDING_FILE_PATH.split(/[\\/]/).pop()}: nothing says which board this project is on.`,
-      fix: `Run kanbo init (with --file, or the --database-url you used) in ${project.root} to bind it again.`,
+      fix: `Run kanbo init (with --file, or the --database-url you used) in ${project.root} to write its project settings again.`,
     }
   }
-  return { check: 'binding', status: 'ok', detail: `${path}: workspace ${project.binding.workspaceId}` }
+  return { check: 'settings', status: 'ok', detail: `Project settings ${path}: workspace ${project.binding.workspaceId}` }
 }
 
 function resolveTarget(root: string): BoardTarget | Error {
@@ -256,7 +256,7 @@ async function checkBoard(target: BoardTarget | Error | null, workspaceId: strin
     return []
   }
   if (target instanceof Error) {
-    return [{ check: 'board', status: 'fail', detail: describeFailure(target).message, fix: 'Run kanbo init in the project to bind it to a board.' }]
+    return [{ check: 'board', status: 'fail', detail: describeFailure(target).message, fix: 'Run kanbo init in the project to give it a board.' }]
   }
   if (target.kind === 'postgres') {
     return await checkPostgresBoard(target.url, workspaceId)
