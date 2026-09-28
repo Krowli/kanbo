@@ -219,7 +219,7 @@ export interface KanboRunResult {
  */
 
 /** What `kanbo_card_create` needs to open a card. */
-interface KanboCardCreateInput {
+export interface KanboCardCreateInput {
   /** Optional: a card without one is titled with its own key. */
   title?: string
   description?: string
@@ -231,7 +231,7 @@ interface KanboCardCreateInput {
 }
 
 /** The fields `kanbo_card_update` may change. */
-interface KanboCardUpdateInput {
+export interface KanboCardUpdateInput {
   card: string
   title?: string
   description?: string
@@ -241,7 +241,7 @@ interface KanboCardUpdateInput {
 }
 
 /** What `kanbo_run_start` records about a launch. */
-interface KanboRunStartInput {
+export interface KanboRunStartInput {
   card: string
   agent: string
   branch?: string
@@ -251,7 +251,7 @@ interface KanboRunStartInput {
 }
 
 /** How `kanbo_run_finish` says a run ended. */
-interface KanboRunFinishInput {
+export interface KanboRunFinishInput {
   run: string
   state: 'finished' | 'failed' | 'stopped'
   errorText?: string

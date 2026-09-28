@@ -120,7 +120,7 @@ export {
 } from './mcp/tool-names'
 export { type BoardOps, createBoardOps } from './ops'
 export type { IssueActivityResolver } from './ops/activity'
-export type { BoardApproval } from './ops/approval'
+export type { BoardApproval, CardAttention, CardLastComment } from './ops/approval'
 export type { BulkUpdateCardsInput, BulkUpdateCardsResult } from './ops/card-batch'
 export type {
   AddCommentInput,

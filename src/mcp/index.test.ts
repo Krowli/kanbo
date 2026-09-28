@@ -1,11 +1,16 @@
 import { describe, expect, expectTypeOf, it } from 'vitest'
 
 import type {
+  KanboCardCreateInput,
   KanboCardDetailResult,
   KanboCardInclude,
   KanboCardPage,
   KanboCardQuery,
   KanboCardResult,
+  KanboCardUpdateInput,
+  KanboReadyPage,
+  KanboRunFinishInput,
+  KanboRunStartInput,
   KanboToolTransport,
 } from './index'
 import { KANBO_CARD_INCLUDES, matchesKanboCardQuery, pageOf } from './index'
@@ -23,6 +28,11 @@ describe('kanbo/mcp exports', () => {
     expectTypeOf<Awaited<ReturnType<KanboToolTransport['cardGet']>>>().toEqualTypeOf<KanboCardDetailResult>()
     expectTypeOf<NonNullable<Parameters<KanboToolTransport['cardGet']>[0]['include']>[number]>().toEqualTypeOf<KanboCardInclude>()
     expectTypeOf<KanboCardPage['cards'][number]>().toEqualTypeOf<KanboCardResult>()
+    expectTypeOf<Awaited<ReturnType<KanboToolTransport['readyPage']>>>().toEqualTypeOf<KanboReadyPage>()
+    expectTypeOf<Parameters<KanboToolTransport['cardCreate']>[0]>().toEqualTypeOf<KanboCardCreateInput>()
+    expectTypeOf<Parameters<KanboToolTransport['cardUpdate']>[0]>().toEqualTypeOf<KanboCardUpdateInput>()
+    expectTypeOf<Parameters<KanboToolTransport['runStart']>[0]>().toEqualTypeOf<KanboRunStartInput>()
+    expectTypeOf<Parameters<KanboToolTransport['runFinish']>[0]>().toEqualTypeOf<KanboRunFinishInput>()
   })
 
   it('exports the helpers that filter and page cards already read', () => {
