@@ -27,8 +27,19 @@ export function sanitizeTerminalText(text: string, options: { multiline?: boolea
   return options.multiline ? stripped.replace(/\t/g, '  ') : stripped.replace(/[\n\t]/g, ' ')
 }
 
+/**
+ * Text every character of which is one column and one grapheme — most titles
+ * and status lines. Measured by its length rather than grapheme by grapheme,
+ * which on a board of thousands of cards was most of the time `kanbo board`
+ * took.
+ */
+const PRINTABLE_ASCII = /^[\x20-\x7E]*$/
+
 /** How many terminal columns the text takes: wide characters and emoji two, combining marks none. */
 export function displayWidth(text: string): number {
+  if (PRINTABLE_ASCII.test(text)) {
+    return text.length
+  }
   let width = 0
   for (const { segment } of segmenter.segment(text)) {
     width += graphemeWidth(segment)
@@ -44,6 +55,9 @@ export function displayWidth(text: string): number {
 export function truncateToWidth(text: string, room: number): string {
   if (displayWidth(text) <= room) {
     return text
+  }
+  if (PRINTABLE_ASCII.test(text)) {
+    return `${text.slice(0, Math.max(0, room - 1)).trimEnd()}…`
   }
   let kept = ''
   let width = 0

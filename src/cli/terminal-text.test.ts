@@ -28,6 +28,15 @@ describe('terminal text', () => {
     expect(truncateToWidth('short', 10)).toBe('short')
   })
 
+  it('cuts plain ASCII the same as the same text with one wide character after it', () => {
+    const title = 'Tidy the settings page, then  write the tests'
+    for (const room of [0, 1, 2, 5, 10, 29, 30, 44, 45, 46]) {
+      // The appended CJK character is past every cut here, so both must agree.
+      const graphemeWise = truncateToWidth(`${title}漢`, room)
+      expect(truncateToWidth(title, room), `room ${room}`).toBe(room >= title.length ? title : graphemeWise)
+    }
+  })
+
   it('pads by columns', () => {
     expect(padToWidth('漢', 4)).toBe('漢  ')
   })
