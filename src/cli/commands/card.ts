@@ -1,13 +1,14 @@
 import type { Command } from 'commander'
 import { Option } from 'commander'
 
+import { READY_COLUMN_SLUG } from '../../domain/column-templates'
 import { BoardError } from '../../domain/errors'
 import { readUnixSeconds } from '../../domain/time'
 import type { KanboCardInclude } from '../../mcp/transport'
 import { DEFAULT_KANBO_CARD_INCLUDES, DEFAULT_KANBO_COMMENT_LIMIT, KANBO_CARD_INCLUDES } from '../../mcp/transport'
 import type { BoardCardWrite, UpdateCardInput } from '../../ops/cards'
 import type { Issue, IssuePullRequest } from '../../sqlite/schema'
-import { createCliActor, createPlacementActor } from '../actor'
+import { createCliActor, createPlacementActor, isAgentShell } from '../actor'
 import { describeCardExtras, readCardExtras } from '../card-extras'
 import type { BoardCommandOptions, BoardSession } from '../command'
 import { parseCount, parseExecutionMode, requireCard, runBoardCommand, withBoardOptions } from '../command'
@@ -25,6 +26,22 @@ import { CARD_DETAIL_VIEW_FIELDS, CARD_VIEW_FIELDS, describeCard, describeCards,
  */
 
 const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
+
+/**
+ * Where `card create` puts a card no `--column` placed. A person's card goes
+ * to To Do, as the home screen and the wizard put it: they wrote it down to
+ * have it done. An agent's goes where the board's operations put any card with
+ * no column — the first one (Backlog on the standard board) — as it did in
+ * 0.2: an agent writing down follow-up work should not hand it straight to the
+ * next agent that runs `kanbo ready`. A board with no To Do gets the default
+ * for a person too.
+ */
+async function readDefaultColumn(session: BoardSession): Promise<string | undefined> {
+  if (isAgentShell()) {
+    return undefined
+  }
+  return (await session.ops.findColumn(session.workspace.id, READY_COLUMN_SLUG))?.name
+}
 
 interface ListOptions extends BoardCommandOptions {
   column?: string[]
@@ -150,7 +167,7 @@ export function registerCardCommands(program: Command): void {
     .description('Add a card to the board')
     .option('--title <title>', 'what the card is called (its number when left out)')
     .option('--description <text>', 'what the card is about')
-    .option('--column <column>', 'the column to put it in, by slug, name or id')
+    .option('--column <column>', 'the column to put it in, by slug, name or id (default: To Do for a person, the board\'s first column for an agent)')
     .option('--parent <card>', 'the card this one is part of')
     .option('--execution-mode <mode>', 'where the work happens: worktree (its own checkout) or main', parseExecutionMode))
     .action(async (options: CreateOptions) => {
@@ -160,7 +177,7 @@ export function registerCardCommands(program: Command): void {
           workspace: session.workspace,
           title: options.title,
           description: options.description,
-          statusName: options.column,
+          statusName: options.column ?? await readDefaultColumn(session),
           parentIssueId: parent?.id,
           executionMode: options.executionMode,
         }, createPlacementActor())

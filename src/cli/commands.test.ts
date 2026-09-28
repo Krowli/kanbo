@@ -81,6 +81,23 @@ describe('board commands', () => {
     expect(await readChangeSeq(store)).toBe(before + 1)
   })
 
+  it('creates a person\'s card with no --column in To Do, and an agent\'s in the board\'s first column as before', async () => {
+    const columnOf = async (id: string): Promise<string | undefined> => {
+      const card = await store.issues.findById(id)
+      return (await store.statuses.listByWorkspace(WORKSPACE.id)).find(column => column.id === card?.statusId)?.name
+    }
+    await createCardIn('Puts the standard columns up', 'Done')
+    const first = (await store.statuses.listByWorkspace(WORKSPACE.id))[0]!.name
+    expect(first).toBe('Backlog')
+
+    const mine = JSON.parse(await run(['card', 'create', '--title', 'Mine', '--json', 'id'])) as { id: string }
+    expect(await columnOf(mine.id)).toBe('To Do')
+
+    vi.stubEnv('KANBO_ACTOR_KIND', 'agent')
+    const theirs = JSON.parse(await run(['card', 'create', '--title', 'Theirs', '--json', 'id'])) as { id: string }
+    expect(await columnOf(theirs.id)).toBe(first)
+  })
+
   it('says a column the board has not got in plain words, with what to run next', async () => {
     vi.stubEnv('KANBO_DEBUG', '')
     const card = await createCardIn('Card', 'To Do')
