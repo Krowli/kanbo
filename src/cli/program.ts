@@ -7,8 +7,8 @@ import type { BareKanboContext } from './home'
 import { runBareKanbo } from './home'
 import { canPrompt } from './ui/environment'
 import { getUi } from './ui/ui'
-import type { UpdateCheckDeps, UpdateInstaller } from './update-check'
-import { canUpdateInPlace, describeUpdateForShell, installUpdate, offerUpdate, skipsUpdateCheck, startUpdateCheck } from './update-check'
+import type { InstallKind, UpdateCheckDeps, UpdateInstaller } from './update-check'
+import { canUpdateInPlace, describeUpdateLine, installUpdate, offerUpdate, readInstallKind, skipsUpdateCheck, startUpdateCheck, UPDATE_COMMANDS } from './update-check'
 
 /**
  * The `kanbo` program: every command on one `Command`, and what `kanbo` with
@@ -27,10 +27,11 @@ export function createKanboProgram(context: KanboProgramContext = {}): Command {
   return program
 }
 
-/** What the update check runs on, for a test: npm, the clock, the environment, the installer, the OS. */
+/** What the update check runs on, for a test: npm, the clock, the environment, the installer, the OS, how kanbo was installed. */
 export interface UpdateRunOptions extends UpdateCheckDeps {
   install?: UpdateInstaller
   platform?: NodeJS.Platform
+  installKind?: InstallKind
 }
 
 /**
@@ -55,6 +56,7 @@ export async function runKanbo(
   const check = skipsUpdateCheck(args, updates.env) ? null : startUpdateCheck(updates)
   const context: KanboProgramContext = { update: check }
   const platform = updates.platform ?? process.platform
+  const kind = updates.installKind ?? readInstallKind({ platform })
   const ui = getUi()
   const interactive = canPrompt(ui)
   let fromHome = false
@@ -69,7 +71,8 @@ export async function runKanbo(
           ? {
               update: {
                 peek: check.peek,
-                inPlace: canUpdateInPlace(platform),
+                inPlace: canUpdateInPlace(platform) && kind === 'global',
+                command: UPDATE_COMMANDS[kind],
                 install: () => {
                   // Tried from the menu: its outcome has been said, so nothing is said again on leaving.
                   told = true
@@ -77,7 +80,7 @@ export async function runKanbo(
                 },
                 tell: (update) => {
                   told = true
-                  console.error(describeUpdateForShell(update, platform))
+                  console.error(describeUpdateLine(update, platform, kind))
                 },
               },
             }
@@ -99,10 +102,10 @@ export async function runKanbo(
   }
   if (fromHome) {
     // The person has left the menu: no question now, one line.
-    console.error(describeUpdateForShell(update, platform))
+    console.error(describeUpdateLine(update, platform, kind))
     return
   }
-  await offerUpdate(update, { ui, interactive, install: updates.install, platform })
+  await offerUpdate(update, { ui, interactive, install: updates.install, platform, kind })
 }
 
 /**

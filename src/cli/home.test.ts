@@ -509,6 +509,23 @@ describe('kanbo with no words', () => {
     expect(printed).toEqual([WINDOWS_NOTICE])
   })
 
+  it('for a project\'s own install, the menu item gives the project\'s command and installs nothing', async () => {
+    await createBoard()
+    const install = installed()
+    const notice = 'kanbo 9.0.0 is available (you have 0.3.0). This project installs kanbo; update it here: npm install kanbo-cli@latest'
+
+    const running = runKanbo([], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'darwin', installKind: 'project' }).then(() => null, (error: unknown) => error)
+    await driver.waitFor('How to update kanbo to 9.0.0 — npm install kanbo-cli@latest')
+    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+    await driver.waitFor(notice)
+    await driver.waitFor('What next?')
+    exitMenu(driver)
+
+    expect(await running).toBeNull()
+    expect(install).not.toHaveBeenCalled()
+    expect(printed).toEqual([notice])
+  })
+
   it('leaves quietly with exit 0 on Ctrl-C at the menu', async () => {
     await createBoard()
 

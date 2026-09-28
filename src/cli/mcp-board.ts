@@ -113,7 +113,7 @@ export function withUpdateNote<T extends KanboToolTransport>(board: T, peek: () 
     prime: async () => {
       const { text } = await board.prime()
       const update = peek()
-      return { text: update ? `${text}\n\n${describeUpdateForAgent(update)}` : text }
+      return { text: update ? `${text}\n\nNote: ${describeUpdateForAgent(update)}` : text }
     },
   }
 }

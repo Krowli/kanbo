@@ -411,7 +411,7 @@ Fields `--json` can name on a run: `id`, `issueId`, `agentName`, `state`, `execu
 | --- | --- |
 | `sprint list` | — |
 | `sprint create` | `--title <title>` (required); `--start <date>` (required) first day, `YYYY-MM-DD` (UTC) or unix seconds; `--due <date>` (required) last day, `YYYY-MM-DD` (UTC, through its end) or unix seconds; `--description <text>`. |
-| `sprint close <id>` | `--carry-to <id>` the open milestone unfinished cards move to; without it they leave the milestone. Person only. |
+| `sprint close <id>` | `--carry-to <id>` the open sprint unfinished cards move to; without it they leave the sprint. Person only. |
 
 ## `kanbo migrate`
 

@@ -23,7 +23,6 @@ import { tildify } from './tildify'
 import type { Ui } from './ui/ui'
 import { CancelledError } from './ui/ui'
 import type { AvailableUpdate } from './update-check'
-import { UPDATE_COMMAND } from './update-check'
 import type { CardView } from './view'
 import { projectCard } from './view'
 
@@ -59,8 +58,10 @@ export interface BareKanboContext {
 /** The update check as the home screen sees it: what npm said so far, and how to install it. */
 export interface HomeUpdate {
   peek: () => AvailableUpdate | null
-  /** Can the menu install it? Not on Windows, where the running kanbo cannot replace itself. */
+  /** Can the menu install it? Not on Windows, where the running kanbo cannot replace itself, and only a global install. */
   inPlace: boolean
+  /** What updates this install (`UPDATE_COMMANDS`), shown in the menu item. */
+  command: string
   /** Install it; `true` when it worked (a failure has been explained). */
   install: () => boolean
   /** Say it in one line with the command to run, for when the menu cannot install it. */
@@ -164,7 +165,7 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
 
     let choice: MenuChoice
     try {
-      choice = await ui.select<MenuChoice>({ message: 'What next?', options: menuOptions(board, update, context.update?.inPlace ?? true) })
+      choice = await ui.select<MenuChoice>({ message: 'What next?', options: menuOptions(board, update, context.update) })
     }
     catch (error) {
       // Ctrl-C at the menu is how a person leaves; nothing went wrong.
@@ -204,7 +205,7 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
   }
 }
 
-function menuOptions(board: HomeBoard, update: AvailableUpdate | null, inPlace: boolean): { value: MenuChoice, label: string }[] {
+function menuOptions(board: HomeBoard, update: AvailableUpdate | null, updates: HomeUpdate | undefined): { value: MenuChoice, label: string }[] {
   const item = (value: MenuChoice, text: string, command: string): { value: MenuChoice, label: string } =>
     ({ value, label: `${text} — kanbo ${command}` })
   return [
@@ -216,8 +217,9 @@ function menuOptions(board: HomeBoard, update: AvailableUpdate | null, inPlace: 
     item('instructions', 'Get the agent instructions', 'instructions'),
     item('columns', 'Change columns', MENU_COMMANDS.columns.join(' ')),
     item('doctor', 'Check the setup', 'doctor'),
-    // On Windows the item says how to update after closing kanbo; it cannot replace itself while running.
-    ...(update ? [{ value: 'update' as const, label: `${inPlace ? 'Update kanbo' : 'How to update kanbo'} to ${update.latest} — ${UPDATE_COMMAND}` }] : []),
+    // On Windows the item says how to update after closing kanbo, which cannot replace itself while running;
+    // a project's install or npx is told its own command, and nothing is installed.
+    ...(update && updates ? [{ value: 'update' as const, label: `${updates.inPlace ? 'Update kanbo' : 'How to update kanbo'} to ${update.latest} — ${updates.command}` }] : []),
     { value: 'exit', label: 'Exit' },
   ]
 }

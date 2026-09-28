@@ -1,6 +1,10 @@
 import type { SpawnSyncReturns } from 'node:child_process'
+import { realpathSync } from 'node:fs'
+import { dirname, join, sep } from 'node:path'
 
 import { KANBO_PACKAGE_VERSION } from '../package-version'
+import { isAgentShell } from './actor'
+import { isNpxScript } from './setup/launch-warning'
 import { spawnCommandSync } from './setup/process'
 import type { Ui } from './ui/ui'
 import { CancelledError } from './ui/ui'
@@ -12,9 +16,11 @@ import { CancelledError } from './ui/ui'
  * There is no schedule and no cache: each run starts one request for the
  * `latest` version, gives it ~1.5 s, and uses the answer only if it came
  * before the command finished (waiting ~300 ms more at most). A person at a
- * terminal is then asked whether to update; an agent's shell, any shell
- * with nobody to ask, and Windows (where a running kanbo cannot replace
- * itself) get one line on stderr; `kanbo mcp` puts one line into
+ * terminal running a global install is then asked whether to update; an
+ * agent's shell (told to ask a person), any shell with nobody to ask, Windows
+ * (where a running kanbo cannot replace itself), a project's own install
+ * (`npm install kanbo-cli@latest` there) and npx (`npx kanbo-cli@latest`) get
+ * one line on stderr instead, and nothing is installed; `kanbo mcp` puts one line into
  * `kanbo_prime`; `kanbo doctor` shows it as a finding. A network that fails
  * says nothing (`KANBO_DEBUG=1` says why).
  *
@@ -29,6 +35,67 @@ export const LATEST_VERSION_URL = 'https://registry.npmjs.org/kanbo-cli/latest'
 export const UPDATE_COMMAND = 'npm install -g kanbo-cli@latest'
 
 const UPDATE_ARGV = ['npm', ['install', '-g', 'kanbo-cli@latest']] as const
+
+/**
+ * How the running kanbo was installed: `global` (`npm install -g`), `project`
+ * (a `node_modules/kanbo-cli` of this project or a folder above it), or `npx`
+ * (npm's cache, for one command). Only a global install is updated in place.
+ */
+export type InstallKind = 'global' | 'project' | 'npx'
+
+/** What updates each kind of install, as the person would type it. */
+export const UPDATE_COMMANDS: Record<InstallKind, string> = {
+  global: UPDATE_COMMAND,
+  project: 'npm install kanbo-cli@latest',
+  npx: 'npx kanbo-cli@latest',
+}
+
+export interface InstallKindInput {
+  /** The script this process runs — `process.argv[1]`. */
+  script?: string
+  cwd?: string
+  /** This Node — `process.execPath` — whose prefix holds the global `node_modules`. */
+  execPath?: string
+  platform?: NodeJS.Platform
+}
+
+/**
+ * How the running kanbo was installed. npx runs it from a folder under npm's
+ * cache named `_npx` (`isNpxScript`). A project's own install is a
+ * `node_modules/kanbo-cli` in the current folder or one above it — except the
+ * global one, which sits under this Node's prefix (`<prefix>/lib/node_modules`,
+ * `<prefix>\node_modules` on Windows) and may be above the current folder too.
+ * Anything else is a global install.
+ */
+export function readInstallKind(input: InstallKindInput = {}): InstallKind {
+  const script = realPath(input.script ?? process.argv[1] ?? '')
+  if (isNpxScript(script)) {
+    return 'npx'
+  }
+  const platform = input.platform ?? process.platform
+  const execPath = input.execPath ?? process.execPath
+  const globalParent = realPath(platform === 'win32' ? dirname(execPath) : join(dirname(dirname(execPath)), 'lib'))
+  let folder = realPath(input.cwd ?? process.cwd())
+  while (true) {
+    if (folder !== globalParent && script.startsWith(join(folder, 'node_modules', 'kanbo-cli') + sep)) {
+      return 'project'
+    }
+    const parent = dirname(folder)
+    if (parent === folder) {
+      return 'global'
+    }
+    folder = parent
+  }
+}
+
+function realPath(path: string): string {
+  try {
+    return realpathSync(path)
+  }
+  catch {
+    return path
+  }
+}
 
 /** How long npm gets to answer. */
 export const UPDATE_CHECK_TIMEOUT_MS = 1_500
@@ -192,13 +259,28 @@ export function canUpdateInPlace(platform: NodeJS.Platform = process.platform): 
 }
 
 /**
- * The one line an agent's shell, a shell with nobody to ask, or anyone on
- * Windows gets. On Windows it says to close kanbo first (`canUpdateInPlace`).
+ * The one line a shell with nobody to ask, anyone on Windows, or anyone not
+ * running a global install gets. On Windows a global install is told to close
+ * kanbo first (`canUpdateInPlace`); a project's install is updated in that
+ * project; npx takes the newest only when asked for `@latest` — without it,
+ * it keeps running the copy it has cached.
  */
-export function describeUpdateForShell(update: AvailableUpdate, platform: NodeJS.Platform = process.platform): string {
+export function describeUpdateForShell(update: AvailableUpdate, platform: NodeJS.Platform = process.platform, kind: InstallKind = 'global'): string {
+  const available = `kanbo ${update.latest} is available (you have ${update.current})`
+  if (kind === 'project') {
+    return `${available}. This project installs kanbo; update it here: ${UPDATE_COMMANDS.project}`
+  }
+  if (kind === 'npx') {
+    return `${available}. npx runs the newest kanbo when you pass @latest: ${UPDATE_COMMANDS.npx}`
+  }
   return canUpdateInPlace(platform)
-    ? `kanbo ${update.latest} is available (you have ${update.current}) — ${UPDATE_COMMAND}`
-    : `kanbo ${update.latest} is available (you have ${update.current}). Close kanbo and run: ${UPDATE_COMMAND}`
+    ? `${available} — ${UPDATE_COMMAND}`
+    : `${available}. Close kanbo and run: ${UPDATE_COMMAND}`
+}
+
+/** The line about a newer kanbo for whoever ran this: an agent's shell is told to ask a person (`describeUpdateForAgent`). */
+export function describeUpdateLine(update: AvailableUpdate, platform: NodeJS.Platform = process.platform, kind: InstallKind = 'global'): string {
+  return isAgentShell() ? describeUpdateForAgent(update, kind) : describeUpdateForShell(update, platform, kind)
 }
 
 /** The question a person at a terminal is asked. */
@@ -206,9 +288,9 @@ export function describeUpdateQuestion(update: AvailableUpdate): string {
   return `kanbo ${update.latest} is available (you have ${update.current}). Update now?`
 }
 
-/** The line `kanbo_prime` ends with when `kanbo mcp` runs an older kanbo. */
-export function describeUpdateForAgent(update: AvailableUpdate): string {
-  return `Note: kanbo ${update.latest} is available (running ${update.current}). Ask a person to update: ${UPDATE_COMMAND}`
+/** What an agent is told about a newer kanbo — in its shell, and (after `Note: `) at the end of `kanbo_prime`: updating is a person's call. */
+export function describeUpdateForAgent(update: AvailableUpdate, kind: InstallKind = 'global'): string {
+  return `kanbo ${update.latest} is available (running ${update.current}). Ask a person to update: ${UPDATE_COMMANDS[kind]}`
 }
 
 /**
@@ -256,17 +338,20 @@ function isPermissionFailure(result: SpawnSyncReturns<string>): boolean {
 }
 
 /**
- * Tell whoever ran the command about a newer kanbo: a person at a terminal is
- * asked (default No) and a yes installs it; anyone else — and anyone on
- * Windows, where a running kanbo cannot replace itself — gets one line on stderr.
+ * Tell whoever ran the command about a newer kanbo: a person at a terminal
+ * running a global install is asked (default No) and a yes installs it;
+ * anyone else — an agent's shell, anyone on Windows, where a running kanbo
+ * cannot replace itself, and a project's install or npx, which `npm install
+ * -g` would not update — gets one line on stderr.
  */
 export async function offerUpdate(
   update: AvailableUpdate,
-  context: { ui: Ui, interactive: boolean, install?: UpdateInstaller, platform?: NodeJS.Platform },
+  context: { ui: Ui, interactive: boolean, install?: UpdateInstaller, platform?: NodeJS.Platform, kind?: InstallKind },
 ): Promise<void> {
   const platform = context.platform ?? process.platform
-  if (!context.interactive || !canUpdateInPlace(platform)) {
-    console.error(describeUpdateForShell(update, platform))
+  const kind = context.kind ?? 'global'
+  if (!context.interactive || !canUpdateInPlace(platform) || kind !== 'global') {
+    console.error(describeUpdateLine(update, platform, kind))
     return
   }
   let yes: boolean

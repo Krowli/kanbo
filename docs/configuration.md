@@ -130,6 +130,6 @@ kanbo never edits your own `.gitignore`.
 | `--instructions agents` | `AGENTS.md` | The same block. |
 | `--mcp claude` | `.mcp.json` | `{"mcpServers":{"kanbo":{"type":"stdio","command":"kanbo","args":["mcp"]}}}`, merged. |
 | `--mcp cursor` | `.cursor/mcp.json` | The same entry, merged. |
-| `--mcp codex` | `.codex/config.toml` | `[mcp_servers.kanbo]` with `command = "kanbo"` and `args = ["mcp"]`, appended. |
+| `--mcp codex` | `.codex/config.toml` | `[mcp_servers.kanbo]` with `command = "kanbo"`, `args = ["mcp"]` and `default_tools_approval_mode = "approve"` (so `codex exec` can call the board's tools without asking), appended. |
 
 These are committed project files, and none of them contains a secret: `kanbo mcp` reads the board from the binding like every other command.

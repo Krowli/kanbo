@@ -1,4 +1,7 @@
 import type { SpawnSyncReturns } from 'node:child_process'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join } from 'node:path'
 import { PassThrough } from 'node:stream'
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
@@ -13,7 +16,7 @@ import { withUpdateNote } from './mcp-board'
 import { runKanbo } from './program'
 import { createUi, setUiForTests } from './ui/ui'
 import type { UpdateInstaller } from './update-check'
-import { isNewerVersion, LATEST_VERSION_URL, startUpdateCheck } from './update-check'
+import { isNewerVersion, LATEST_VERSION_URL, readInstallKind, startUpdateCheck } from './update-check'
 
 /** npm answering with this `latest` version. */
 function npmSays(version: string): ReturnType<typeof vi.fn<typeof fetch>> {
@@ -123,7 +126,36 @@ describe('the update check on start', () => {
     setUiForTests(createPromptDriver().ui)
     vi.stubEnv('CLAUDECODE', '1')
     await runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', platform: 'linux' })
-    expect(errors).toEqual(['kanbo 9.0.0 is available (you have 0.3.0) — npm install -g kanbo-cli@latest'])
+    expect(errors).toEqual(['kanbo 9.0.0 is available (running 0.3.0). Ask a person to update: npm install -g kanbo-cli@latest'])
+  })
+
+  it('tells a project\'s own install to update in the project, without asking or installing', async () => {
+    const driver = createPromptDriver()
+    setUiForTests(driver.ui)
+    const install = vi.fn<UpdateInstaller>(succeeded)
+
+    await runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'linux', installKind: 'project' })
+
+    expect(install).not.toHaveBeenCalled()
+    expect(driver.transcript()).not.toContain('Update now?')
+    expect(errors).toEqual(['kanbo 9.0.0 is available (you have 0.3.0). This project installs kanbo; update it here: npm install kanbo-cli@latest'])
+
+    errors = []
+    vi.stubEnv('CLAUDECODE', '1')
+    await runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'linux', installKind: 'project' })
+    expect(errors).toEqual(['kanbo 9.0.0 is available (running 0.3.0). Ask a person to update: npm install kanbo-cli@latest'])
+  })
+
+  it('offers npx nothing to install, and says it takes the newest with @latest', async () => {
+    const driver = createPromptDriver()
+    setUiForTests(driver.ui)
+    const install = vi.fn<UpdateInstaller>(succeeded)
+
+    await runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'linux', installKind: 'npx' })
+
+    expect(install).not.toHaveBeenCalled()
+    expect(driver.transcript()).not.toContain('Update now?')
+    expect(errors).toEqual(['kanbo 9.0.0 is available (you have 0.3.0). npx runs the newest kanbo when you pass @latest: npx kanbo-cli@latest'])
   })
 
   it.each([
@@ -239,6 +271,51 @@ describe('the update check on start', () => {
       `kanbo was not updated: ${why}. Run it yourself: npm install -g kanbo-cli@latest\n`
       + 'Your npm global folder needs permissions — see https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally',
     ])
+  })
+})
+
+describe('readInstallKind', () => {
+  let root: string
+
+  beforeEach(() => {
+    root = realpathSync(mkdtempSync(join(tmpdir(), 'kanbo-install-kind-')))
+  })
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true })
+  })
+
+  /** A file at `path` under the temporary root, with its folders. */
+  function file(...path: string[]): string {
+    const at = join(root, ...path)
+    mkdirSync(dirname(at), { recursive: true })
+    writeFileSync(at, '')
+    return at
+  }
+
+  it('reads npm\'s npx cache as npx', () => {
+    const script = file('cache', '_npx', 'abc', 'node_modules', 'kanbo-cli', 'dist', 'cli.cjs')
+    expect(readInstallKind({ script, cwd: root, execPath: join(root, 'node', 'bin', 'node'), platform: 'linux' })).toBe('npx')
+  })
+
+  it('reads a node_modules/kanbo-cli of the current folder or one above it as the project\'s own', () => {
+    const script = file('app', 'node_modules', 'kanbo-cli', 'dist', 'cli.cjs')
+    mkdirSync(join(root, 'app', 'src', 'deep'), { recursive: true })
+    const execPath = join(root, 'node', 'bin', 'node')
+
+    expect(readInstallKind({ script, cwd: join(root, 'app'), execPath, platform: 'linux' })).toBe('project')
+    expect(readInstallKind({ script, cwd: join(root, 'app', 'src', 'deep'), execPath, platform: 'linux' })).toBe('project')
+    // Another project's install, run from outside it, is not this folder's.
+    mkdirSync(join(root, 'elsewhere'))
+    expect(readInstallKind({ script, cwd: join(root, 'elsewhere'), execPath, platform: 'linux' })).toBe('global')
+  })
+
+  it('reads the global node_modules under this Node\'s prefix as global, even from a folder under that prefix', () => {
+    const script = file('node', 'lib', 'node_modules', 'kanbo-cli', 'dist', 'cli.cjs')
+    const execPath = join(root, 'node', 'bin', 'node')
+
+    expect(readInstallKind({ script, cwd: join(root, 'node', 'lib'), execPath, platform: 'linux' })).toBe('global')
+    expect(readInstallKind({ script, cwd: root, execPath, platform: 'linux' })).toBe('global')
   })
 })
 
