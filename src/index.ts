@@ -1,6 +1,9 @@
 export type {
   BoardActiveRun,
+  BoardCardPage,
+  BoardCardQuery,
   BoardLinkedPullRequest,
+  BoardMilestoneCardCount,
   BoardRunProjection,
   BoardRunProjectionScope,
   BoardStore,
@@ -126,6 +129,7 @@ export type {
   CreateCommentOnceInput,
   UpdateCardInput,
 } from './ops/cards'
+export type { CardQueryInput, CardQueryResult } from './ops/card-query'
 export { type BoardWriteScope, readChangeSeq, runBoardWrite } from './ops/change-seq'
 export type { AddColumnInput, ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch, ColumnPosition, RemoveColumnOptions, RemoveColumnResult } from './ops/columns'
 export type { MigrateCardsInput, MigrateCardsResult } from './ops/migrate'

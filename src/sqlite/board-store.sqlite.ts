@@ -1,7 +1,10 @@
-import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 
 import type {
   BoardActiveRun,
+  BoardCardPage,
+  BoardCardQuery,
+  BoardMilestoneCardCount,
   BoardRunProjection,
   BoardRunProjectionScope,
   BoardStore,
@@ -17,6 +20,7 @@ import type {
   IssueStatusStore,
   KanbanMetaStore,
 } from '../board-store'
+import { containsLikePattern } from '../domain/like-pattern'
 import {
   issueComments,
   issueFieldChanges,
@@ -165,6 +169,59 @@ function selectRunProjection(database: SqliteDatabase, scope: BoardRunProjection
 }
 
 /**
+ * One page of the cards a query picks, and how many it picks in all, in one
+ * statement: `count(*) over ()` is taken over every picked row before `limit`
+ * and `offset` cut the page out of them. Only a page past the last card — no
+ * row to carry the count — asks a second time.
+ */
+function selectCardPage(database: SqliteDatabase, query: BoardCardQuery): BoardCardPage {
+  if (query.statusIds?.length === 0 || query.priorities?.length === 0) {
+    return { cards: [], total: 0 }
+  }
+  const where = and(...cardQueryPredicates(query))
+  const rows = database
+    .select({ ...getTableColumns(issues), pickedTotal: sql<number>`count(*) over ()` })
+    .from(issues)
+    .where(where)
+    .orderBy(issues.order, desc(issues.createdAt))
+    // SQLite takes no offset without a limit; this one is no limit at all.
+    .limit(query.limit ?? Number.MAX_SAFE_INTEGER)
+    .offset(query.offset ?? 0)
+    .all()
+  if (rows.length === 0) {
+    const total = (query.offset ?? 0) > 0
+      ? database.select({ count: sql<number>`count(*)` }).from(issues).where(where).get()?.count ?? 0
+      : 0
+    return { cards: [], total }
+  }
+  return {
+    cards: rows.map(({ pickedTotal: _total, ...card }) => card),
+    total: rows[0]!.pickedTotal,
+  }
+}
+
+function cardQueryPredicates(query: BoardCardQuery) {
+  // One set of running cards for the whole statement, not a lookup per card.
+  const running = sql`${issues.id} in (select ${issueRuns.issueId} from ${issueRuns} where ${issueRuns.state} = 'running')`
+  const pattern = containsLikePattern(query.text ?? '')
+  return [
+    eq(issues.workspaceId, query.workspaceId),
+    query.statusIds === undefined ? undefined : inArray(issues.statusId, [...query.statusIds]),
+    query.waitingForPerson === undefined
+      ? undefined
+      : query.waitingForPerson ? eq(issues.waitingFor, 'human') : isNull(issues.waitingFor),
+    query.parentIssueId === undefined ? undefined : eq(issues.parentIssueId, query.parentIssueId),
+    query.hasActiveRun === undefined ? undefined : query.hasActiveRun ? running : sql`not ${running}`,
+    query.text === undefined
+      ? undefined
+      : sql`(${issues.id} like ${pattern} escape '\\' or ${issues.title} like ${pattern} escape '\\' or coalesce(${issues.description}, '') like ${pattern} escape '\\')`,
+    query.updatedSince === undefined ? undefined : gte(issues.updatedAt, query.updatedSince),
+    ...(query.labels ?? []).map(label => sql`exists (select 1 from json_each(${issues.labels}) where value = ${label})`),
+    query.priorities === undefined ? undefined : inArray(issues.priority, [...query.priorities]),
+  ]
+}
+
+/**
  * Bind the store's statements to one SQLite handle. `resolveDatabase` is called
  * per statement rather than captured, so the store follows a host that swaps its
  * database out (a server that resets its infrastructure between tests, say).
@@ -275,6 +332,13 @@ function createSqliteBoardStoreCore(resolveDatabase: () => SqliteDatabase): Sqli
         .select()
         .from(issues)
         .where(eq(issues.workspaceId, workspaceId))
+        .all(),
+      listPage: query => selectCardPage(resolveDatabase(), query),
+      countByMilestone: (workspaceId): BoardMilestoneCardCount[] => resolveDatabase()
+        .select({ milestoneId: sql<string>`${issues.milestoneId}`, statusId: issues.statusId, count: sql<number>`count(*)` })
+        .from(issues)
+        .where(and(eq(issues.workspaceId, workspaceId), isNotNull(issues.milestoneId)))
+        .groupBy(issues.milestoneId, issues.statusId)
         .all(),
       listByIds: issueIds => resolveDatabase().select().from(issues).where(inArray(issues.id, issueIds)).all(),
       findById: issueId => resolveDatabase().select().from(issues).where(eq(issues.id, issueId)).get() ?? null,
@@ -611,6 +675,8 @@ export function createSqliteBoardStore(options: { database: () => SqliteDatabase
       listNewestFirst: async () => core.issues.listNewestFirst(),
       listAll: async () => core.issues.listAll(),
       listByWorkspace: async workspaceId => core.issues.listByWorkspace(workspaceId),
+      listPage: async query => core.issues.listPage(query),
+      countByMilestone: async workspaceId => core.issues.countByMilestone(workspaceId),
       listByIds: async issueIds => core.issues.listByIds(issueIds),
       findById: async issueId => core.issues.findById(issueId),
       findInWorkspace: async (workspaceId, issueId) => core.issues.findInWorkspace(workspaceId, issueId),

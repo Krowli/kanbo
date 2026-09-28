@@ -49,7 +49,9 @@ import type { MigrateCardsInput } from './migrate'
 import { migrateCards } from './migrate'
 import { buildPrimeText } from './prime'
 import { linkPullRequest, listPullRequests, listPullRequestStandings, unlinkPullRequest } from './pull-requests'
-import { listReady } from './ready'
+import type { CardQueryInput } from './card-query'
+import { queryCards } from './card-query'
+import { listReady, queryReady } from './ready'
 import type { CreateRelationInput } from './relations'
 import { createRelation, deleteRelation, listRelations } from './relations'
 import type { AttachRunExecutionInput, FinishRunInput, StartRunInput } from './runs'
@@ -105,6 +107,7 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
       await deleteComment(store, commentId, actor, scope),
     deleteCard: async (issueId: string, scope?: Scope) => await deleteCard(store, issueId, scope),
     searchCards: async (query: string, limit: number) => await searchCards(store, query, limit),
+    queryCards: async (input: CardQueryInput) => await queryCards(store, input),
 
     // Many cards at once
     bulkUpdateCards: async (issueIds: string[], input: BulkUpdateCardsInput, actor: BoardActor, scope?: Scope) =>
@@ -207,6 +210,7 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
 
     // The board as a whole
     listReady: async (input: { workspaceId: string, limit?: number }) => await listReady(store, input),
+    queryReady: async (input: { workspaceId: string, limit?: number, offset?: number }) => await queryReady(store, input),
     buildPrimeText: async (workspaceId: string) => await buildPrimeText(store, workspaceId),
   }
 }

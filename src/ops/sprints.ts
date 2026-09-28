@@ -171,9 +171,9 @@ export async function listSprints(
   workspaceId: string,
   now: number = currentUnixSeconds(),
 ): Promise<BoardSprint[]> {
-  const [milestones, cards, columns] = await Promise.all([
+  const [milestones, counts, columns] = await Promise.all([
     store.milestones.listByWorkspace(workspaceId),
-    store.issues.listByWorkspace(workspaceId),
+    store.issues.countByMilestone(workspaceId),
     store.statuses.listByWorkspace(workspaceId),
   ])
   const finishedColumns = new Set(columns
@@ -187,9 +187,12 @@ export async function listSprints(
       || (a.dueDate ?? Number.MAX_SAFE_INTEGER) - (b.dueDate ?? Number.MAX_SAFE_INTEGER)
       || a.createdAt - b.createdAt)
     .map((milestone) => {
-      const own = cards.filter(card => card.milestoneId === milestone.id)
-      const done = own.filter(card => card.statusId !== null && finishedColumns.has(card.statusId)).length
-      return { ...milestone, cards: { open: own.length - done, done }, current: milestone.id === current?.id }
+      const own = counts.filter(count => count.milestoneId === milestone.id)
+      const all = own.reduce((sum, count) => sum + count.count, 0)
+      const done = own
+        .filter(count => count.statusId !== null && finishedColumns.has(count.statusId))
+        .reduce((sum, count) => sum + count.count, 0)
+      return { ...milestone, cards: { open: all - done, done }, current: milestone.id === current?.id }
     })
 }
 

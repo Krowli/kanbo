@@ -46,7 +46,11 @@ export async function listColumns(store: BoardStore, workspaceId: string): Promi
  * the workspace holds no such column.
  */
 export async function findColumn(store: BoardStore, workspaceId: string, nameOrId: string): Promise<IssueStatus | null> {
-  const columns = await listColumns(store, workspaceId)
+  return matchColumn(await listColumns(store, workspaceId), workspaceId, nameOrId)
+}
+
+/** `findColumn` among columns already read. */
+export function matchColumn(columns: readonly IssueStatus[], workspaceId: string, nameOrId: string): IssueStatus | null {
   const byId = columns.find(column => column.id === nameOrId)
   if (byId) {
     return byId

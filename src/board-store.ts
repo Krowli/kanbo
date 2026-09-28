@@ -68,6 +68,17 @@ export interface IssueRowStore {
   listAll: () => Promise<Issue[]>
   /** Issues of one workspace, in no particular order. */
   listByWorkspace: (workspaceId: string) => Promise<Issue[]>
+  /**
+   * The cards of one workspace a query picks, in board order, one page of them,
+   * and how many it picks in all — in one statement. The filters are conjoined;
+   * a filter left out does not narrow.
+   */
+  listPage: (query: BoardCardQuery) => Promise<BoardCardPage>
+  /**
+   * How many cards of the workspace each milestone holds, per column — one
+   * statement, cards with no milestone left out. What a sprint list counts.
+   */
+  countByMilestone: (workspaceId: string) => Promise<BoardMilestoneCardCount[]>
   /** Issues with the given ids, in no particular order. Missing ids are simply absent. */
   listByIds: (issueIds: string[]) => Promise<Issue[]>
   findById: (issueId: string) => Promise<Issue | null>
@@ -103,6 +114,52 @@ export interface IssueRowStore {
     updatedAt: number,
   ) => Promise<number>
   delete: (issueId: string) => Promise<void>
+}
+
+/**
+ * Which cards of a workspace `listPage` reads, and which page of them.
+ *
+ * Every filter is optional and they all apply together. Text is matched
+ * ignoring case — ASCII case on SQLite, where `like` folds nothing else; every
+ * letter on Postgres (`ilike`).
+ */
+export interface BoardCardQuery {
+  workspaceId: string
+  /** Cards in any of these columns. An empty list picks nothing. */
+  statusIds?: readonly string[]
+  /** `true`: only cards waiting for a person; `false`: only cards waiting for no one. */
+  waitingForPerson?: boolean
+  /** Only the cards directly under this card. */
+  parentIssueId?: string
+  /** `true`: only cards with a run going on now; `false`: only cards with none. */
+  hasActiveRun?: boolean
+  /** Cards whose key, title or description contains this text. */
+  text?: string
+  /** Cards changed at or after this moment, in unix seconds. */
+  updatedSince?: number
+  /** Cards carrying every one of these labels. */
+  labels?: readonly string[]
+  /** Cards of any of these priorities. An empty list picks nothing. */
+  priorities?: readonly Issue['priority'][]
+  /** How many picked cards to skip, in board order. */
+  offset?: number
+  /** How many picked cards to return at most; every one when absent. */
+  limit?: number
+}
+
+/** One page of the cards a `BoardCardQuery` picks. */
+export interface BoardCardPage {
+  /** The page, in board order. */
+  cards: Issue[]
+  /** How many cards the query picks in all, before `offset` and `limit`. */
+  total: number
+}
+
+/** How many cards of one milestone sit in one column. */
+export interface BoardMilestoneCardCount {
+  milestoneId: string
+  statusId: string | null
+  count: number
 }
 
 /** Comments on an issue. */

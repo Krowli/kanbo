@@ -1,12 +1,16 @@
-import { and, asc, desc, eq, getTableColumns, inArray, isNotNull, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 
 import type {
+  BoardCardPage,
+  BoardCardQuery,
   BoardLinkedPullRequest,
+  BoardMilestoneCardCount,
   BoardRunProjection,
   BoardRunProjectionScope,
   BoardStore,
   BoardTransactionMode,
 } from '../board-store'
+import { containsLikePattern } from '../domain/like-pattern'
 import type { IssueComment, IssueFieldChange, IssuePullRequest, IssueRun } from '../sqlite/schema'
 import type { BoardPostgresDatabase } from './open-database'
 import {
@@ -140,6 +144,58 @@ async function selectRunProjection(
 }
 
 /**
+ * One page of the cards a query picks, and how many it picks in all, in one
+ * statement — the SQLite store's read, with the count cast to `int` (Postgres
+ * counts in `bigint`) and text matched with `ilike`, which folds every letter.
+ */
+async function selectCardPage(database: BoardPostgresDatabase, query: BoardCardQuery): Promise<BoardCardPage> {
+  if (query.statusIds?.length === 0 || query.priorities?.length === 0) {
+    return { cards: [], total: 0 }
+  }
+  const where = and(...cardQueryPredicates(query))
+  const page = database
+    .select({ ...getTableColumns(issues), pickedTotal: sql<number>`cast(count(*) over () as int)` })
+    .from(issues)
+    .where(where)
+    .orderBy(issues.order, desc(issues.createdAt))
+    .offset(query.offset ?? 0)
+    .$dynamic()
+  const rows = await (query.limit === undefined ? page : page.limit(query.limit))
+  if (rows.length === 0) {
+    if ((query.offset ?? 0) === 0) {
+      return { cards: [], total: 0 }
+    }
+    const [row] = await database.select({ count: sql<number>`cast(count(*) as int)` }).from(issues).where(where)
+    return { cards: [], total: row?.count ?? 0 }
+  }
+  return {
+    cards: rows.map(({ pickedTotal: _total, ...card }) => card),
+    total: rows[0]!.pickedTotal,
+  }
+}
+
+function cardQueryPredicates(query: BoardCardQuery) {
+  // One set of running cards for the whole statement, not a lookup per card.
+  const running = sql`${issues.id} in (select ${issueRuns.issueId} from ${issueRuns} where ${issueRuns.state} = 'running')`
+  const pattern = containsLikePattern(query.text ?? '')
+  return [
+    eq(issues.workspaceId, query.workspaceId),
+    query.statusIds === undefined ? undefined : inArray(issues.statusId, [...query.statusIds]),
+    query.waitingForPerson === undefined
+      ? undefined
+      : query.waitingForPerson ? eq(issues.waitingFor, 'human') : isNull(issues.waitingFor),
+    query.parentIssueId === undefined ? undefined : eq(issues.parentIssueId, query.parentIssueId),
+    query.hasActiveRun === undefined ? undefined : query.hasActiveRun ? running : sql`not ${running}`,
+    query.text === undefined
+      ? undefined
+      : sql`(${issues.id} ilike ${pattern} escape '\\' or ${issues.title} ilike ${pattern} escape '\\' or coalesce(${issues.description}, '') ilike ${pattern} escape '\\')`,
+    query.updatedSince === undefined ? undefined : gte(issues.updatedAt, query.updatedSince),
+    ...(query.labels ?? []).map(label => sql`cast(${issues.labels} as jsonb) @> cast(${JSON.stringify([label])} as jsonb)`),
+    query.priorities === undefined ? undefined : inArray(issues.priority, [...query.priorities]),
+  ]
+}
+
+/**
  * The board's statements against one Postgres handle — a connection, or a
  * transaction on one.
  *
@@ -244,6 +300,12 @@ function createStoreOver(database: BoardPostgresDatabase): BoardStore {
         .select()
         .from(issues)
         .where(eq(issues.workspaceId, workspaceId)),
+      listPage: async query => await selectCardPage(database, query),
+      countByMilestone: async (workspaceId): Promise<BoardMilestoneCardCount[]> => await database
+        .select({ milestoneId: sql<string>`${issues.milestoneId}`, statusId: issues.statusId, count: sql<number>`cast(count(*) as int)` })
+        .from(issues)
+        .where(and(eq(issues.workspaceId, workspaceId), isNotNull(issues.milestoneId)))
+        .groupBy(issues.milestoneId, issues.statusId),
       listByIds: async issueIds => await database.select().from(issues).where(inArray(issues.id, issueIds)),
       findById: async (issueId) => {
         const [row] = await database.select().from(issues).where(eq(issues.id, issueId)).limit(1)

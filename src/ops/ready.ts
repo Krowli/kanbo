@@ -1,8 +1,8 @@
 import type { BoardStore } from '../board-store'
 import { normalizeStatusName } from '../domain/status-name'
 import type { Issue } from '../sqlite/schema'
+import type { CardQueryResult } from './card-query'
 import { listColumns } from './columns'
-import { readBoardProjectionForIssues } from './runs'
 
 /** The column an agent takes its next card from. */
 const READY_COLUMN_SLUG = 'to_do'
@@ -20,18 +20,30 @@ export async function listReady(
   store: BoardStore,
   input: { workspaceId: string, limit?: number },
 ): Promise<Issue[]> {
-  const column = (await listColumns(store, input.workspaceId))
-    .find(candidate => normalizeStatusName(candidate.name) === READY_COLUMN_SLUG)
+  return (await queryReady(store, input)).cards
+}
+
+/**
+ * One page of the ready cards, how many are ready in all, and the columns read
+ * on the way — the rule above, asked of the database in one statement rather
+ * than of every card on the board.
+ */
+export async function queryReady(
+  store: BoardStore,
+  input: { workspaceId: string, limit?: number, offset?: number },
+): Promise<CardQueryResult> {
+  const columns = await listColumns(store, input.workspaceId)
+  const column = columns.find(candidate => normalizeStatusName(candidate.name) === READY_COLUMN_SLUG)
   if (!column) {
-    return []
+    return { cards: [], total: 0, columns }
   }
-
-  const candidates = (await store.issues.listInBoardOrder(input.workspaceId))
-    .filter(card => card.statusId === column.id && card.waitingFor === null)
-  const running = new Set((await readBoardProjectionForIssues(store, candidates.map(card => card.id)))
-    .filter(projection => projection.activeRun !== null)
-    .map(projection => projection.issueId))
-
-  const ready = candidates.filter(card => !running.has(card.id))
-  return input.limit === undefined ? ready : ready.slice(0, input.limit)
+  const page = await store.issues.listPage({
+    workspaceId: input.workspaceId,
+    statusIds: [column.id],
+    waitingForPerson: false,
+    hasActiveRun: false,
+    limit: input.limit,
+    offset: input.offset,
+  })
+  return { ...page, columns }
 }
