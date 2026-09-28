@@ -38,7 +38,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo init` | Set up a board for this project and connect its agents — a wizard in a terminal, defaults with `--yes`. With `--global`, set up your own agent tools for every project instead. |
 | `kanbo connect [agents...]` | Connect your agents (`claude`, `codex`, `cursor`, `gemini`, or `all`) to kanbo: the kanbo section in their instructions and the board's MCP server. `--check` shows what is connected, `--remove` takes it out. Alias `kanbo setup`. |
 | `kanbo instructions [kind]` | Print the text to give an agent: `agent` (default, the full rules), `short`, `global`, `orchestrator`, `mcp` or `board`. `--copy` also puts it on the clipboard. No board needed except for `board`. |
-| `kanbo doctor [--fix [--yes]]` | Check that kanbo, this project's board and your agents' setup work: the install, `.kanbo/binding.json`, the board, instruction blocks and MCP registrations. `--fix` repairs what is kanbo's own after one confirmation, and never deletes anything. |
+| `kanbo doctor [--fix [--yes]]` | Check that kanbo, this project's board and your agents' setup work: the install, the project settings (`.kanbo/binding.json`), the board, instruction blocks and MCP registrations. `--fix` repairs what is kanbo's own after one confirmation, and never deletes anything. |
 | `kanbo uninstall` | Remove what `kanbo init` wrote: instruction blocks and `kanbo` MCP entries. Boards stay unless `--purge`. |
 | `kanbo capabilities` | List what kanbo offers agents: tools, commands, rules and limits — machine-readable, no board needed. |
 | `kanbo prime` | Print the board's columns and rules for an agent to read first. |
@@ -256,7 +256,7 @@ Checks, each `ok`, `info`, `warn` or `fail`, with a `fix` on everything that is 
 | `update` | `info` when npm has a newer kanbo (the run's own [update check](configuration.md#update-check), with its skips — none with `--json`; `--fix` reports the same answer twice rather than asking again); the fix is `npm install -g kanbo-cli@latest`. Only shown when there is one. |
 | `install` | `warn` when this kanbo runs from npx's cache: agents cannot start it. Install it globally (`npm install -g kanbo-cli`). Only shown then. |
 | `path` | The first `kanbo` on `PATH` is this one (`warn` when another one shadows it, or none is on `PATH`). |
-| `binding` | The nearest `.kanbo/` at or above this folder has a readable `binding.json` (`fail` when it does not; `warn` outside any project). |
+| `settings` | The nearest `.kanbo/` at or above this folder has readable project settings (`binding.json`) (`fail` when it does not; `warn` outside any project). |
 | `sqlite` | `better-sqlite3` loads (a board-file project only). |
 | `board` | The board opens and its schema is current (`fail` with `kanbo migrate` as the fix). A Postgres board gets 5 seconds. |
 | `columns` | `warn` when the board (a board file of the project's own, or a Postgres board) has no columns — boards from kanbo 0.1–0.2 got them only with the first card. Only shown then. |

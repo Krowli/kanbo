@@ -1,14 +1,14 @@
 # Troubleshooting
 
-Start with `kanbo doctor` in the project: it checks the install, the binding, the board, the instruction blocks and the MCP registrations, and prints a fix for each problem. Then `kanbo doctor --fix` fixes what it can — an old instruction block, kanbo's own MCP entry whose Node moved, a board with no columns, a board file a migration behind — after showing the plan and asking once (`--yes` to skip the question). It never deletes anything, and never changes a block you edited or an MCP entry of your own.
+Start with `kanbo doctor` in the project: it checks the install, the project settings, the board, the instruction blocks and the MCP registrations, and prints a fix for each problem. Then `kanbo doctor --fix` fixes what it can — an old instruction block, kanbo's own MCP entry whose Node moved, a board with no columns, a board file a migration behind — after showing the plan and asking once (`--yes` to skip the question). It never deletes anything, and never changes a block you edited or an MCP entry of your own.
 
 ## `kanbo doctor` findings
 
 **`path` warn: `… comes first on PATH and is not this kanbo`**
 Two installs; agents and MCP clients start the first one. Remove the other (`npm uninstall -g …`, or delete the old binary), or put this one first on `PATH`.
 
-**`binding` fail: `.kanbo has no binding.json` / `… is not a binding this build can read`**
-The project's binding is gone or damaged. Run `kanbo init --file` (or `kanbo init --database-url …` with the same flags as before) in the project root.
+**`settings` fail: `… has no binding.json: nothing says which board this project is on` / `This build can't read the project settings in …`**
+The project's settings file is gone or damaged. Run `kanbo init --file` (or `kanbo init --database-url …` with the same flags as before) in the project root.
 
 **`sqlite` fail: `better-sqlite3 cannot be loaded`**
 See `Could not load better-sqlite3 …` below.
