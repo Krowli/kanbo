@@ -10,8 +10,9 @@ export const cardMoveTool = defineKanboTool({
     + 'and a column with entryRules refuses a card that does not meet them yet, listing what is missing.',
   inputSchema: {
     card: cardArgument,
-    column: z.string().min(1).describe('The column to move it to, by its slug or name: in_progress, "In Progress".'),
+    column: z.string().min(1).describe('The column to move it to, by its slug or name: in_progress, "In Progress". Also accepted as `to`.'),
   },
+  aliases: { column: ['to'] },
   needs: { column: 'the column slug, e.g. in_progress' },
   example: { card: 'TST-5', column: 'in_progress' },
   run: async (transport, input) => await transport.cardMove(input),

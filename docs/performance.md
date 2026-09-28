@@ -161,22 +161,30 @@ a read that asks once per card (an N+1) — or changes from the numbers here.
 
 | read | SQLite | Postgres | before (SQLite / Postgres) |
 | --- | ---: | ---: | --- |
-| `kanbo card list` | 4 | 6 | same |
-| `kanbo card list` with every filter | 5 | 7 | new |
-| `kanbo ready` | 4 | 6 | 6 / 8 |
-| `kanbo prime` | 2 | 4 | same |
+| `kanbo card list` | 6 | 8 | 4 / 6 |
+| `kanbo card list` with every filter | 7 | 9 | 5 / 7 |
+| `kanbo ready` | 6 | 8 | 4 / 6 |
+| `kanbo prime` | 3 | 5 | 2 / 4 |
 | `kanbo card get` (now with comments and sub-cards) | 6 | 8 | 4 / 6 |
 | `kanbo board` | 4 | 6 | same |
 | a card with its comments (`ops`) | 5 | 5 | same |
-| `kanbo_card_list` | 3 | 3 | same |
-| `kanbo_card_list` with every filter | 4 | 4 | new |
-| `kanbo_ready` | 3 | 3 | 5 / 5 |
-| `kanbo_prime` | 1 | 1 | same |
+| `kanbo_card_list` | 5 | 5 | 3 / 3 |
+| `kanbo_card_list` with every filter | 6 | 6 | 4 / 4 |
+| `kanbo_ready` | 5 | 5 | 3 / 3 |
+| `kanbo_prime` | 2 | 2 | 1 / 1 |
 | `kanbo_card_get` (now with comments and sub-cards) | 5 | 5 | 4 / 4 |
 | `kanbo_card_get` with every part | 8 | 8 | new |
 | `kanbo_sprints` | 3 | 3 | new in the guard; now counts in SQL |
 | `GET /issues` | 2 | 2 | same |
 | `GET /issues/:id/comments` | 3 | 3 | same |
+
+"Before" is the 0.3.0 agent-efficiency build (3e69998). Since the
+[real-agent](#real-agents) fixes, a list page costs two more — which of its cards
+a person returned, and the last comment of the waiting and returned ones, two
+statements for the whole page — `kanbo_ready` and `kanbo ready` two more for the
+returned cards they name first, and `kanbo_prime` one. At 1,000 cards on SQLite
+(p50): `kanbo_card_list` 1.78 → 2.49 ms, `kanbo_ready` 0.78 → 1.75 ms,
+`kanbo_prime` 0.08 → 0.89 ms.
 
 A command on Postgres runs two more than on SQLite: the check that the database
 holds a board this build can write to. A filter adds no statement — it is part
@@ -212,6 +220,13 @@ Before and after, default arguments:
 | `kanbo_card_list` | 20,520 → 1,779 tok | 178,117 → 1,776 tok |
 | `kanbo_ready` | 5,239 → 300 tok | 49,543 → 289 tok |
 | `kanbo_card_get` | 161 → 353 tok | 161 → 354 tok |
+
+Since the real-agent fixes (1,000 cards, SQLite): `kanbo_card_list` 7,799 ch ≈
+1,950 tok (a waiting card now carries its last comment, up to 200 characters),
+`waitingForPerson: true` 15,165 ch ≈ 3,791 tok (every row a waiting card with
+its comment), `kanbo_ready` 1,219 ch ≈ 305 tok, `kanbo_prime` 1,960 ch ≈ 490 tok
+(no returned card on the seeded board). The default list stays under 3,000
+tokens.
 
 A list answer no longer grows with the board: one page (50 cards, 10 for
 `kanbo_ready`) of compact cards, about 140 characters each, and the total. A

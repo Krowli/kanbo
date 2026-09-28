@@ -42,6 +42,7 @@ All tools take the card as `card`, spelled as the board prints it (`MAN-012`), a
 | `text` | `content` | `kanbo_status_line`, `kanbo_wait_approval` |
 | `run` | `runId`, `id` | `kanbo_run_finish` |
 | `agent` | `agentName` | `kanbo_run_start` |
+| `column` | `to` | `kanbo_card_move` |
 | `state` `finished` | `completed`, `succeeded`, `success`, `done` | `kanbo_run_finish` (any case) |
 | `state` `failed` | `error`, `errored` | `kanbo_run_finish` |
 | `state` `stopped` | `cancelled`, `canceled`, `aborted` | `kanbo_run_finish` |

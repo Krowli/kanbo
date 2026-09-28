@@ -621,6 +621,7 @@ describe('the board\'s tools over a real board', () => {
     expect((await call('kanbo_card_get', { cardId: card.id })).isError).toBeFalsy()
     expect((await call('kanbo_card_get', { key: card.id })).isError).toBeFalsy()
     expect((await call('kanbo_status_line', { id: card.id, content: 'Reading the card' })).isError).toBeFalsy()
+    expect(readJson(await call('kanbo_card_move', { id: card.id, to: 'in_progress' }))).toMatchObject({ columnSlug: 'in_progress' })
     expect((await boardOps().listComments(card.id)).map(comment => comment.content)).toEqual(expect.arrayContaining(['Via text', 'Via id']))
     expect(readJson(await call('kanbo_card_get', { card: card.id, include: [] }))).toMatchObject({ statusLine: 'Reading the card' })
 
