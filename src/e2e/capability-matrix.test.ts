@@ -394,6 +394,28 @@ const CASES: MatrixCase[] = [
     },
   },
   {
+    name: 'a card a person returns in the terminal comes first for the agent: card_list returned, ready, prime and the terminal\'s list',
+    covers: ['card list', 'return', 'kanbo_card_list', 'kanbo_ready', 'kanbo_prime'],
+    run: async (b) => {
+      await b.cli(['card', 'create', '--title', 'Check me', '--column', 'in_review'])
+      await b.tool('kanbo_card_comment', { id: 'MAT-001', text: 'Done, please look' })
+      await b.tool('kanbo_wait_approval', { card: 'MAT-001', content: 'please look' })
+      // What is waiting says what it asks, in the one list call.
+      expect((await b.tool('kanbo_card_list', { waitingForPerson: true })).cards).toEqual([
+        expect.objectContaining({ id: 'MAT-001', lastComment: expect.objectContaining({ text: 'Done, please look' }) }),
+      ])
+
+      await b.cli(['return', 'MAT-001', '--comment', 'Needs a test'])
+      const returned = { id: 'MAT-001', returned: true, lastComment: expect.objectContaining({ author: 'user', text: 'Needs a test' }) }
+      expect((await b.tool('kanbo_card_list', { returned: true })).cards).toEqual([expect.objectContaining(returned)])
+      expect((await b.tool('kanbo_ready')).returned).toEqual([expect.objectContaining(returned)])
+      expect(await b.tool<string>('kanbo_prime')).toMatch(/^Returned to you[^\n]*\n\n- MAT-001 Check me \(`in_progress`\) — person: "Needs a test"/)
+      expect(await b.cliJson(['card', 'list', '--returned', '--json', 'id,returned'])).toEqual([{ id: 'MAT-001', returned: true }])
+      expect(await b.cli(['ready'], { agent: true })).toContain('Returned to you')
+      expect((await b.tool('kanbo_card_get', { card: 'MAT-001', include: [] })).statusLine).toBe('returned by a person: Needs a test')
+    },
+  },
+  {
     name: 'ready and prime read the same board from the terminal, over MCP and over HTTP',
     covers: ['ready', 'prime', 'kanbo_ready', 'kanbo_prime'],
     run: async (b) => {

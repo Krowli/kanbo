@@ -2,12 +2,13 @@ import { z } from 'zod'
 
 import { BoardError } from '../domain/errors'
 import { normalizeStatusName } from '../domain/status-name'
-import type { KanboCardPage, KanboCardQuery, KanboCardResult, KanboColumnResult, KanboToolTransport } from './transport'
+import { previewComment } from '../ops/approval'
+import type { IssueComment } from '../sqlite/schema'
+import type { KanboCardFacts, KanboCardPage, KanboCardQuery, KanboCardResult, KanboColumnResult, KanboReadyPage, KanboToolTransport } from './transport'
 import {
   DEFAULT_KANBO_CARD_INCLUDES,
   DEFAULT_KANBO_COMMENT_LIMIT,
   matchesKanboCardQuery,
-  pageOf,
   projectKanboCard,
   projectKanboCardComment,
   projectKanboColumn,
@@ -207,16 +208,54 @@ export function createHttpTransport(input: KanboHttpTransportInput): KanboToolTr
       parent = named.id
       rows = board
     }
-    const picked = rows.filter(row => matchesKanboCardQuery(row, { ...cardQuery, parent }, statusIds))
-    return pageOf(picked.map(row => projectKanboCard(row, columns)), cardQuery)
+    const matched = rows.filter(row => matchesKanboCardQuery(row, { ...cardQuery, parent, returned: undefined }, statusIds))
+    // Whether a card was returned is in its comments, which the list route
+    // does not carry: read for every candidate when the query asks, else only
+    // for the page's cards.
+    const picked = cardQuery.returned === undefined
+      ? matched
+      : (await withAttention(matched)).filter(row => matchesKanboCardQuery(row, cardQuery, null))
+    const offset = cardQuery.offset ?? 0
+    const shown = picked.slice(offset, cardQuery.limit === undefined ? undefined : offset + cardQuery.limit)
+    const cards = (await withAttention(shown)).map(row => projectKanboCard(row, columns))
+    return { cards, total: picked.length, offset }
+  }
+
+  /**
+   * The cards with what a list says beside the ones a person has to look at or
+   * sent back — their comments read one card at a time, since the route lists
+   * none, and only for cards that are waiting, or neither waiting nor running.
+   */
+  async function withAttention<Row extends z.infer<typeof IssueSchema> & { attention?: KanboCardFacts['attention'] }>(
+    rows: Row[],
+  ): Promise<Row[]> {
+    return await Promise.all(rows.map(async (row) => {
+      if (row.attention || (row.waitingFor !== 'human' && row.activeRun !== null)) {
+        return row
+      }
+      const comments = z.array(CardCommentSchema).parse(await request('GET', `/issues/${encodeURIComponent(row.id)}/comments`))
+      const decision = comments.filter(comment => comment.authorKind === 'system.approved' || comment.authorKind === 'system.returned').at(-1)
+      const returned = row.waitingFor !== 'human' && decision?.authorKind === 'system.returned'
+      const latest = comments.filter(comment => comment.authorKind !== 'system.run').at(-1)
+      const lastComment = (row.waitingFor === 'human' || returned) && latest
+        ? previewComment({ ...latest, authorKind: latest.authorKind as IssueComment['authorKind'] })
+        : null
+      return { ...row, attention: { returned, lastComment } }
+    }))
   }
 
   /** The ready cards, a page of them; the server answers the whole queue. */
-  async function readyPage(page: { limit?: number, offset?: number }): Promise<KanboCardPage> {
+  async function readyPage({ returnedLimit, ...page }: { limit?: number, offset?: number, returnedLimit?: number }): Promise<KanboReadyPage> {
     const query = new URLSearchParams({ workspaceId: input.workspaceId() })
     const cards = z.array(IssueSchema).parse(await request('GET', `/issues/ready?${query.toString()}`))
     const columns = await readColumns()
-    return pageOf(cards.map(row => projectKanboCard(row, columns)), page)
+    const offset = page.offset ?? 0
+    const shown = cards.slice(offset, page.limit === undefined ? undefined : offset + page.limit)
+    // A ready card waits for no one, and one a person returned is listed under `returned`.
+    const ready = { cards: shown.map(row => projectKanboCard(row, columns)), total: cards.length, offset }
+    return returnedLimit === undefined
+      ? ready
+      : { ...ready, returned: await cardPage({ returned: true, limit: returnedLimit }) }
   }
 
   return {

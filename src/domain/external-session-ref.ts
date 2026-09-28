@@ -40,3 +40,29 @@ export function parseExternalSessionRef(input: string): ExternalSessionRef {
 export function formatExternalSessionRef(ref: ExternalSessionRef): string {
   return `${ref.provider}:${ref.id}`
 }
+
+/**
+ * The session the agent running this process is in, from what its tool puts in
+ * the environment of every command it runs:
+ *
+ * - Claude Code sets `CLAUDE_CODE_SESSION_ID` in its Bash and PowerShell tools,
+ *   hooks and stdio MCP servers (https://code.claude.com/docs/en/env-vars).
+ * - Codex sets `CODEX_THREAD_ID` — the thread id, which is the session id it
+ *   prints — in every shell command (`populate_env`,
+ *   codex-rs/protocol/src/shell_environment.rs).
+ *
+ * Both seen in a headless run on 2026-09-28 (Claude Code 2.1.283, Codex 0.153.0).
+ *
+ * `null` when neither is set — and when both are: one agent launched inside the
+ * other's shell inherits the outer one's variable too, and nothing in the
+ * environment says which of the two is running this command.
+ */
+export function sessionRefFromEnvironment(env: NodeJS.ProcessEnv = process.env): string | null {
+  const claude = env.CLAUDE_CODE_SESSION_ID?.trim()
+  const codex = env.CODEX_THREAD_ID?.trim()
+  const refs = [
+    ...(claude ? [`claude:${claude}`] : []),
+    ...(codex ? [`codex:${codex}`] : []),
+  ].filter(ref => EXTERNAL_SESSION_REF.test(ref))
+  return refs.length === 1 ? refs[0]! : null
+}

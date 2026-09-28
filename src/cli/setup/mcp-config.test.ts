@@ -109,7 +109,26 @@ describe('taking kanbo back out of a configuration file', () => {
     expect(planCodexMcpServerRemoval(path).next).toBeNull()
     expect(readCodexMcpCommand(path)).toBeUndefined()
     expect(planCodexMcpServer(path).next)
-      .toBe('[mcp_servers.kanbo_other]\ncommand = "x"\n\n[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\n')
+      .toBe('[mcp_servers.kanbo_other]\ncommand = "x"\n\n[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
+  })
+
+  it('counts the approval line it writes as part of its own Codex entry, and any other value of it as the person\'s', () => {
+    const own = file('own.toml', '[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
+    expect(readCodexMcpEntry(own)).toEqual({ command: 'kanbo', args: ['mcp'], otherFields: [] })
+    expect(isOwnMcpEntry(readCodexMcpEntry(own)!)).toBe(true)
+    // Written before 0.3.0, without the line: still kanbo's.
+    const older = file('older.toml', '[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\n')
+    expect(isOwnMcpEntry(readCodexMcpEntry(older)!)).toBe(true)
+    const prompting = file('prompt.toml', '[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "prompt"\n')
+    expect(readCodexMcpEntry(prompting)?.otherFields).toEqual(['default_tools_approval_mode'])
+    expect(isOwnMcpEntry(readCodexMcpEntry(prompting)!)).toBe(false)
+  })
+
+  it('keeps a person\'s approval line when it rewrites a stale entry, and adds kanbo\'s when there is none', () => {
+    const launch = { command: 'kanbo', args: ['mcp'] }
+    const prompting = file('prompt.toml', '[mcp_servers.kanbo]\ncommand = "old"\nargs = ["mcp"]\ndefault_tools_approval_mode = "prompt"\n')
+    expect(planCodexMcpServer(prompting, launch, { replace: true }).next)
+      .toBe('[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "prompt"\n')
   })
 
   it('removes only the kanbo entry from an mcpServers map, keeping the empty map', () => {
@@ -133,7 +152,7 @@ describe('taking kanbo back out of a configuration file', () => {
     const launch = { command: 'C:\\node\\node.exe', args: ['C:\\npm\\node_modules\\kanbo-cli\\dist\\cli.cjs', 'mcp'] }
     const toml = file('config.toml', 'model = "o3"\n\n[mcp_servers.kanbo]\n# mine\ncommand = "kanbo"\nargs = ["mcp"]\n\n[profiles.x]\nmodel = "o4"\n')
     expect(planCodexMcpServer(toml, launch, { replace: true }).next).toBe(
-      'model = "o3"\n\n[mcp_servers.kanbo]\ncommand = \'C:\\node\\node.exe\'\nargs = [\'C:\\npm\\node_modules\\kanbo-cli\\dist\\cli.cjs\', "mcp"]\n# mine\n\n[profiles.x]\nmodel = "o4"\n',
+      'model = "o3"\n\n[mcp_servers.kanbo]\ncommand = \'C:\\node\\node.exe\'\nargs = [\'C:\\npm\\node_modules\\kanbo-cli\\dist\\cli.cjs\', "mcp"]\ndefault_tools_approval_mode = "approve"\n# mine\n\n[profiles.x]\nmodel = "o4"\n',
     )
     const json = file('mcp.json', JSON.stringify({ mcpServers: { kanbo: { command: 'kanbo', args: ['mcp'] } } }))
     expect(JSON.parse(planJsonMcpServer(json, launch, { replace: true }).next!)).toEqual({ mcpServers: { kanbo: { type: 'stdio', ...launch } } })

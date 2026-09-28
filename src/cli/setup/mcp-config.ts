@@ -54,6 +54,16 @@ const TOML_ARGS_PATTERN = /^\s*args\s*=\s*\[(.*)\]\s*$/m
 /** The first key on a `key = …` or `key.sub = …` line; a line that goes on an array (`"mcp",`) has none. */
 const TOML_KEY_PATTERN = /^\s*("[^"]*"|'[^']*'|[\w-]+)\s*[.=]/
 
+/**
+ * The line that lets Codex call the board's tools without asking. `codex exec`
+ * never asks, so without it every `kanbo_*` call is refused ("approval policy
+ * is never"); the key and value are Codex's own (`default_tools_approval_mode`
+ * on an MCP server table, codex-rs/config mcp_types). Part of kanbo's own entry.
+ */
+const CODEX_APPROVAL_LINE = 'default_tools_approval_mode = "approve"'
+const TOML_APPROVAL_PATTERN = /^\s*default_tools_approval_mode\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*')/m
+const TOML_APPROVAL_LINE = /^\s*default_tools_approval_mode\s*=/
+
 /** A line that sets `command` or `args` — the two lines a rewrite replaces. */
 const TOML_COMMAND_LINE = /^\s*command\s*=/
 const TOML_ARGS_LINE = /^\s*args\s*=/
@@ -137,7 +147,7 @@ export interface McpEntry {
   /**
    * Everything else the entry says: its other JSON keys (a `type` other than
    * `stdio` among them), or its other TOML keys and subtables (`env`). kanbo
-   * writes none, so an entry with any is the person's.
+   * writes none but Codex's `default_tools_approval_mode = "approve"`, so an entry with any other is the person's.
    */
   otherFields: string[]
 }
@@ -171,7 +181,7 @@ export function planCodexMcpServer(path: string, launch: McpLaunch = PORTABLE_MC
     const sections = findCodexSections(existing)
     const command = `command = ${tomlString(launch.command)}`
     const args = `args = [${launch.args.map(tomlString).join(', ')}]`
-    const table = `[mcp_servers.${MCP_SERVER_NAME}]\n${command}\n${args}\n`
+    const table = `[mcp_servers.${MCP_SERVER_NAME}]\n${command}\n${args}\n${CODEX_APPROVAL_LINE}\n`
     if (sections.length > 0) {
       const main = sections.find(section => section.main)
       if (!options.replace || !main) {
@@ -180,7 +190,8 @@ export function planCodexMcpServer(path: string, launch: McpLaunch = PORTABLE_MC
       const lines = existing.split('\n')
       const body = lines.slice(main.start + 1, main.end)
         .filter(line => !TOML_COMMAND_LINE.test(line) && !TOML_ARGS_LINE.test(line))
-      lines.splice(main.start + 1, main.end - main.start - 1, command, args, ...body)
+      const approval = body.some(line => TOML_APPROVAL_LINE.test(line)) ? [] : [CODEX_APPROVAL_LINE]
+      lines.splice(main.start + 1, main.end - main.start - 1, command, args, ...approval, ...body)
       return lines.join('\n')
     }
     return existing.trim() ? `${existing.replace(/\s*$/, '')}\n\n${table}` : table
@@ -285,6 +296,9 @@ export function readCodexMcpEntry(path: string): McpEntry | undefined {
   const body = lines.join('\n')
   const command = TOML_COMMAND_PATTERN.exec(body)?.[1]
   const args = TOML_ARGS_PATTERN.exec(body)?.[1]
+  const approval = TOML_APPROVAL_PATTERN.exec(body)?.[1]
+  // kanbo writes the approval line itself; only its own value keeps the entry kanbo's.
+  const ownApproval = approval !== undefined && readTomlString(approval) === 'approve'
   const keys = lines.flatMap((line) => {
     const key = TOML_KEY_PATTERN.exec(line)?.[1]
     return key === undefined ? [] : [readTomlKey(key)]
@@ -293,7 +307,7 @@ export function readCodexMcpEntry(path: string): McpEntry | undefined {
     command: command === undefined ? null : readTomlString(command),
     args: args === undefined ? [] : (args.match(TOML_STRING_PATTERN) ?? []).map(readTomlString),
     otherFields: [
-      ...keys.filter(key => key !== 'command' && key !== 'args'),
+      ...keys.filter(key => key !== 'command' && key !== 'args' && !(key === 'default_tools_approval_mode' && ownApproval)),
       ...sections.filter(section => !section.main).map(section => section.subtable),
     ],
   }

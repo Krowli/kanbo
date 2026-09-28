@@ -1,3 +1,4 @@
+import type { SQL } from 'drizzle-orm'
 import { and, asc, desc, eq, getTableColumns, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 
 import type {
@@ -236,6 +237,7 @@ function cardQueryPredicates(query: BoardCardQuery) {
       : query.waitingForPerson ? eq(issues.waitingFor, 'human') : isNull(issues.waitingFor),
     query.parentIssueId === undefined ? undefined : eq(issues.parentIssueId, query.parentIssueId),
     query.hasActiveRun === undefined ? undefined : query.hasActiveRun ? running : sql`not ${running}`,
+    query.returned === undefined ? undefined : query.returned ? returnedCard(running) : sql`not ${returnedCard(running)}`,
     query.text === undefined
       ? undefined
       : sql`(instr(kanbo_fold(${issues.id}), ${text}) > 0 or instr(kanbo_fold(${issues.title}), ${text}) > 0 or instr(kanbo_fold(coalesce(${issues.description}, '')), ${text}) > 0)`,
@@ -243,6 +245,25 @@ function cardQueryPredicates(query: BoardCardQuery) {
     ...(query.labels ?? []).map(label => sql`exists (select 1 from json_each(${issues.labels}) where value = ${label})`),
     query.priorities === undefined ? undefined : inArray(issues.priority, [...query.priorities]),
   ]
+}
+
+/**
+ * A card a person sent back that nobody picked up again (`BoardCardQuery.returned`):
+ * not waiting, not running, and its last decision a return — no approval or
+ * return written after it, `rowid` breaking a tie inside one second the way
+ * `readApproval`'s comment order does.
+ */
+function returnedCard(running: SQL) {
+  return sql`(${issues.waitingFor} is null and not ${running} and exists (
+    select 1 from ${issueComments} as decision
+    where decision.issue_id = ${issues.id} and decision.author_kind = 'system.returned'
+      and not exists (
+        select 1 from ${issueComments} as later
+        where later.issue_id = decision.issue_id
+          and later.author_kind in ('system.approved', 'system.returned')
+          and (later.created_at > decision.created_at or (later.created_at = decision.created_at and later.rowid > decision.rowid))
+      )
+  ))`
 }
 
 /**
@@ -437,6 +458,29 @@ function createSqliteBoardStoreCore(resolveDatabase: () => SqliteDatabase): Sqli
         .where(eq(issueComments.issueId, issueId))
         .orderBy(asc(issueComments.createdAt), COMMENT_INSERTION_ORDER)
         .all(),
+      listLatestByIssues: (issueIds, authorKinds) => {
+        if (issueIds.length === 0 || authorKinds?.length === 0) {
+          return []
+        }
+        const database = resolveDatabase()
+        const ranked = database
+          .select({
+            id: issueComments.id,
+            commentRank: sql<number>`row_number() over (partition by ${issueComments.issueId} order by ${issueComments.createdAt} desc, ${issueComments}.rowid desc)`.as('comment_rank'),
+          })
+          .from(issueComments)
+          .where(and(
+            inArray(issueComments.issueId, [...issueIds]),
+            authorKinds === undefined ? undefined : inArray(issueComments.authorKind, [...authorKinds]),
+          ))
+          .as('ranked')
+        return database
+          .select(getTableColumns(issueComments))
+          .from(issueComments)
+          .innerJoin(ranked, eq(ranked.id, issueComments.id))
+          .where(eq(ranked.commentRank, 1))
+          .all()
+      },
       findById: commentId => resolveDatabase()
         .select()
         .from(issueComments)
@@ -719,6 +763,7 @@ export function createSqliteBoardStore(options: { database: () => SqliteDatabase
 
     comments: {
       listByIssue: async issueId => core.comments.listByIssue(issueId),
+      listLatestByIssues: async (issueIds, authorKinds) => core.comments.listLatestByIssues(issueIds, authorKinds),
       findById: async commentId => core.comments.findById(commentId),
       findByDedupeKey: async (issueId, dedupeKey) => core.comments.findByDedupeKey(issueId, dedupeKey),
       listByDedupeKeyPrefix: async (issueId, prefix) => core.comments.listByDedupeKeyPrefix(issueId, prefix),

@@ -15,6 +15,7 @@ export const cardUpdateTool = defineKanboTool({
     labels: z.array(z.string()).optional().describe('The labels the card carries, replacing the ones it has.'),
     executionMode: executionModeArgument.optional(),
   },
+  example: { card: 'TST-5', title: 'Add slugify' },
   run: async (transport, { card, ...patch }) => {
     // An update that names no field still writes: the board version goes up and
     // every reader is told the board changed when nothing did.

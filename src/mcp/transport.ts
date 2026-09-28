@@ -4,6 +4,7 @@ import { foldCase } from '../domain/fold-case'
 import type { IssueActorKind } from '../domain/issue-view'
 import { normalizeCommentAuthorKind } from '../domain/issue-view'
 import { normalizeStatusName } from '../domain/status-name'
+import type { CardLastComment } from '../ops/approval'
 import type { Issue, IssueFieldChange, IssueRun } from '../sqlite/schema'
 
 /**
@@ -43,6 +44,10 @@ export interface KanboCardResult {
   /** The run going on right now, `null` when nobody is working on the card. */
   activeRun: KanboActiveRunResult | null
   updatedAt: number
+  /** Present on a list's card a person sent back that nobody has picked up again. */
+  returned?: true
+  /** On a list's card waiting for a person or returned: its latest comment, cut short. */
+  lastComment?: CardLastComment
 }
 
 /** What `kanbo_card_get` may bring along with the card. */
@@ -103,6 +108,8 @@ export interface KanboCardQuery {
   parent?: string
   /** `true`: only cards an agent is working on now; `false`: only cards nobody is. */
   hasActiveRun?: boolean
+  /** `true`: only cards a person sent back that nobody has picked up again; `false`: every other card. */
+  returned?: boolean
   /** Cards whose id, title or description contains this text, ignoring case. */
   text?: string
   /** Cards changed at or after this moment, in unix seconds. */
@@ -121,6 +128,11 @@ export interface KanboCardPage {
   cards: KanboCardResult[]
   total: number
   offset: number
+}
+
+/** The ready cards, with the returned ones when they were asked for. */
+export interface KanboReadyPage extends KanboCardPage {
+  returned?: KanboCardPage
 }
 
 /** The run of a card that is going on right now. */
@@ -249,8 +261,12 @@ interface KanboRunFinishInput {
 export interface KanboToolTransport {
   prime: () => Promise<{ text: string }>
   ready: (input: { limit?: number }) => Promise<KanboCardResult[]>
-  /** One page of the ready cards, and how many are ready in all. */
-  readyPage: (input: { limit?: number, offset?: number }) => Promise<KanboCardPage>
+  /**
+   * One page of the ready cards, and how many are ready in all — and, when
+   * `returnedLimit` is given, up to that many cards a person sent back
+   * (`KanboCardQuery.returned`), which an agent continues before anything new.
+   */
+  readyPage: (input: { limit?: number, offset?: number, returnedLimit?: number }) => Promise<KanboReadyPage>
   columns: () => Promise<KanboColumnResult[]>
   sprints: () => Promise<KanboSprintResult[]>
   /** The card, with what `include` names — `DEFAULT_KANBO_CARD_INCLUDES` when absent. */
@@ -289,6 +305,8 @@ export interface KanboCardFacts {
   updatedAt: number
   attemptCount: number
   activeRun: KanboActiveRunResult | null
+  /** What a list says beside a card a person has to look at, or sent back; absent where nobody asked. */
+  attention?: { returned: boolean, lastComment: CardLastComment | null }
 }
 
 /**
@@ -323,6 +341,8 @@ export function projectKanboCard(card: KanboCardFacts, columns: KanboColumnResul
     attemptCount: card.attemptCount,
     activeRun: projectKanboActiveRun(card.activeRun),
     updatedAt: card.updatedAt,
+    ...(card.attention?.returned ? { returned: true as const } : {}),
+    ...(card.attention?.lastComment ? { lastComment: card.attention.lastComment } : {}),
   }
 }
 
@@ -458,6 +478,7 @@ export function matchesKanboCardQuery(
     && (query.waitingForPerson === undefined || (card.waitingFor === 'human') === query.waitingForPerson)
     && (query.parent === undefined || card.parentIssueId === query.parent)
     && (query.hasActiveRun === undefined || (card.activeRun !== null) === query.hasActiveRun)
+    && (query.returned === undefined || (card.attention?.returned ?? false) === query.returned)
     && (text === undefined || [card.id, card.title, card.description ?? ''].some(value => foldCase(value).includes(text)))
     && (query.updatedSince === undefined || card.updatedAt >= query.updatedSince)
     && (query.labels ?? []).every(label => card.labels.includes(label))

@@ -92,7 +92,7 @@ const COMMAND = {
   subtask: 'kanbo card create --description "..." --parent <id>',
   comment: 'kanbo card comment <id> --content "..."',
   waitApproval: 'kanbo card wait-approval <id>',
-  runStart: 'kanbo run start <id> --agent <name> --session <ref>',
+  runStart: 'kanbo run start <id> --agent <name>',
   capabilities: 'kanbo capabilities',
 }
 
@@ -128,19 +128,25 @@ export const AGENT_GUIDE_TEXT = [
 
 /**
  * The commands, for an agent with no MCP tools: `kanbo prime` prints this under
- * the board's rules, which say when to use each.
+ * the board's rules, which say when to use each. Each is written out with its
+ * arguments, as a call that works — agents that had only the placeholders read
+ * `kanbo capabilities` first, or guessed an option and ran it again
+ * (docs/performance.md).
  */
 export const COMMAND_SHEET = [
-  'Commands:',
+  'Commands (a card is named by its id, e.g. TST-5):',
   '',
-  `- \`${COMMAND.ready}\` — the cards you may take next`,
-  `- \`${COMMAND.move}\` — move a card to another column`,
-  `- \`${COMMAND.statusLine}\` — say what is happening on the card right now`,
-  `- \`${COMMAND.comment}\` — add a finding, result, decision or question`,
-  `- \`${COMMAND.subtask}\` — add a subtask`,
-  `- \`${COMMAND.waitApproval}\` — ask a person, then end your turn`,
-  `- \`${COMMAND.runStart}\` — record a run you started yourself`,
-  `- \`${COMMAND.capabilities}\` — every tool, command and rule`,
+  '- `kanbo ready` — the cards you may take next; cards a person sent back to you come first',
+  '- `kanbo card get TST-5` — one card, with its latest comments',
+  '- `kanbo card list --waiting` (or `--returned`) — cards waiting for a person (or sent back), each with its last comment',
+  '- `kanbo card move TST-5 in_progress` — move a card; the column by its slug above',
+  '- `kanbo card status-line TST-5 --text "Running the tests"` — what is happening on the card right now',
+  '- `kanbo card comment TST-5 --content "Added slugify with a test"` — a finding, result, decision or question',
+  '- `kanbo card create --description "..." --parent TST-5` — a subtask',
+  '- `kanbo card wait-approval TST-5 --text "Ready for review: ..."` — ask a person, then end your turn',
+  '- `kanbo run start TST-5 --agent claude` — record a run you started yourself; it prints the finish command',
+  '- `kanbo run finish <run id> --state finished` — end it: finished, failed or stopped',
+  `- \`${COMMAND.capabilities}\` — everything else, rarely needed`,
 ].join('\n')
 
 /** How to take work and who approves it — said by both blocks after their first sentence. */

@@ -145,7 +145,7 @@ describe.each(BOARD_STORE_FACTORIES)('board cards on $name', (factory) => {
     const returned = await returnCard(store, card.id, { comment: 'tests are missing' }, USER)
 
     expect(returned.card.statusId).toBe(columns.find(column => column.name === 'In Progress')?.id)
-    expect(returned.card.statusLine).toBe('returned by you: tests are missing')
+    expect(returned.card.statusLine).toBe('returned by a person: tests are missing')
     expect(returned.card.waitingFor).toBeNull()
     expect(returned.stoppedRunIds).toEqual([run.id])
     expect((await store.runs.findById(run.id))?.state).toBe('stopped')
@@ -176,7 +176,7 @@ describe.each(BOARD_STORE_FACTORIES)('board cards on $name', (factory) => {
     expect((await store.runs.findById(run.id))?.state).toBe('running')
 
     const returned = await returnCard(store, card.id, { comment: 'tests are missing' }, USER)
-    expect(returned.card.statusLine).toBe('returned by you: tests are missing')
+    expect(returned.card.statusLine).toBe('returned by a person: tests are missing')
   })
 
   it('refuses to return a card that is already in the first column', async () => {

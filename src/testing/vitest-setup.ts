@@ -16,3 +16,11 @@ for (const marker of AGENT_SHELL_MARKERS) {
  * network. The update check's own tests hand it a fake `fetch` and environment.
  */
 process.env.KANBO_NO_UPDATE_CHECK = '1'
+
+/**
+ * Nor as an agent's session: `kanbo run start` without `--session` records the
+ * session these name, and a test that expects none would find the session of
+ * whatever agent ran `npm test`.
+ */
+delete process.env.CLAUDE_CODE_SESSION_ID
+delete process.env.CODEX_THREAD_ID

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { BoardError } from './errors'
-import { formatExternalSessionRef, parseExternalSessionRef } from './external-session-ref'
+import { formatExternalSessionRef, parseExternalSessionRef, sessionRefFromEnvironment } from './external-session-ref'
 
 describe('parseExternalSessionRef', () => {
   it.each([
@@ -36,5 +36,19 @@ describe('parseExternalSessionRef', () => {
       expect((error as BoardError).code).toBe('board_run_session_ref_invalid')
       expect((error as BoardError).details).toEqual({ value: input })
     }
+  })
+})
+
+describe('sessionRefFromEnvironment', () => {
+  it.each([
+    [{ CLAUDE_CODE_SESSION_ID: 'fa78a41d-01a7-48f0-a157-eff77adad091' }, 'claude:fa78a41d-01a7-48f0-a157-eff77adad091'],
+    [{ CODEX_THREAD_ID: '01a0e7c6-e289-72b3-b612-6662243c2c89' }, 'codex:01a0e7c6-e289-72b3-b612-6662243c2c89'],
+    // One agent inside the other's shell: nothing says which one runs this command.
+    [{ CLAUDE_CODE_SESSION_ID: 'a', CODEX_THREAD_ID: 'b' }, null],
+    [{}, null],
+    [{ CLAUDE_CODE_SESSION_ID: '  ' }, null],
+    [{ CLAUDE_CODE_SESSION_ID: 'not a ref' }, null],
+  ])('reads %j as %j', (env, ref) => {
+    expect(sessionRefFromEnvironment(env)).toBe(ref)
   })
 })

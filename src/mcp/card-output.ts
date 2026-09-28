@@ -44,7 +44,7 @@ export interface KanboCardListView {
 /** The `detail` and `fields` arguments the list tools share. */
 export const cardListViewArguments = {
   detail: z.enum(['compact', 'full']).optional()
-    .describe('compact (default): id, title, column slug, status line, waiting, parent, run, updatedAt. full: every field, description included.'),
+    .describe('compact (default): id, title, column slug, status line, waiting, parent, run, updatedAt; returned, and the last comment of a waiting or returned card. full: every field, description included.'),
   fields: z.array(z.enum(KANBO_CARD_FIELDS)).optional()
     .describe('Print the id and only these fields of each card, e.g. ["description"].'),
 }
@@ -64,6 +64,10 @@ export interface KanboCompactCard {
   /** Who is working on the card, and since when; the run's id is in `detail: "full"`. */
   activeRun?: { agentName: string, startedAt: number }
   updatedAt: number
+  /** A person sent it back, and nobody has picked it up again. */
+  returned?: true
+  /** For a card waiting for a person or returned: its latest comment, so "what is waiting" is one call. */
+  lastComment?: KanboCardResult['lastComment']
 }
 
 export function compactKanboCard(card: KanboCardResult): KanboCompactCard {
@@ -79,6 +83,8 @@ export function compactKanboCard(card: KanboCardResult): KanboCompactCard {
       ? { activeRun: { agentName: card.activeRun.agentName, startedAt: card.activeRun.startedAt } }
       : {}),
     updatedAt: card.updatedAt,
+    ...(card.returned ? { returned: card.returned } : {}),
+    ...(card.lastComment ? { lastComment: card.lastComment } : {}),
   }
 }
 
@@ -93,7 +99,7 @@ function viewCard(card: KanboCardResult, view: KanboCardListView): object {
  * The page as the tool's answer: how many cards the question picks, where the
  * next page starts when there is one, and one card per line.
  */
-export function formatKanboCardPage(page: KanboCardPage, view: KanboCardListView): string {
+export function formatKanboCardPage(page: KanboCardPage, view: KanboCardListView, returned?: KanboCardPage): string {
   const shownUntil = page.offset + page.cards.length
   const more = Math.max(0, page.total - shownUntil)
   const head = {
@@ -102,7 +108,12 @@ export function formatKanboCardPage(page: KanboCardPage, view: KanboCardListView
     ...(more > 0 ? { more, nextOffset: shownUntil } : {}),
   }
   const cards = page.cards.map(card => JSON.stringify(viewCard(card, view)))
-  const opening = JSON.stringify(head).slice(0, -1)
+  // Cards a person sent back come first, before anything new is taken.
+  const lead = returned && returned.cards.length > 0
+    ? `"returned":[\n${returned.cards.map(card => JSON.stringify(viewCard(card, view))).join(',\n')}\n],${
+      returned.total > returned.cards.length ? `"returnedTotal":${returned.total},` : ''}`
+    : ''
+  const opening = `{${lead}${JSON.stringify(head).slice(1, -1)}`
   return cards.length === 0
     ? `${opening},"cards":[]}`
     : `${opening},"cards":[\n${cards.join(',\n')}\n]}`

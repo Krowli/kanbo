@@ -6,10 +6,13 @@ import { cardArgument, defineKanboTool } from './tool'
 export const statusLineTool = defineKanboTool({
   name: 'kanbo_status_line',
   title: 'Set the status line',
-  description: 'Say what the card is doing right now. Write one at every step, including before and after anything long-running.',
+  description: 'Say what the card is doing right now: `card` and `text` (one sentence). Write one at every step, including before and after anything long-running.',
   inputSchema: {
     card: cardArgument,
-    text: z.string().min(1).describe('One sentence, present tense, about what is happening on the card right now.'),
+    text: z.string().min(1).describe('One sentence, present tense, about what is happening on the card right now. Also accepted as `content`.'),
   },
+  aliases: { text: ['content'] },
+  needs: { text: 'the status line, one sentence' },
+  example: { card: 'TST-5', text: 'Running the tests' },
   run: async (transport, input) => await transport.statusLine(input),
 })

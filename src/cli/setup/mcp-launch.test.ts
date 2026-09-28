@@ -58,7 +58,7 @@ describe('writing the Windows form', () => {
   it('writes Windows paths into config.toml as literal strings, and reads them back', () => {
     const path = join(directory, 'config.toml')
     const next = planCodexMcpServer(path, windows).next!
-    expect(next).toBe(`[mcp_servers.kanbo]\ncommand = '${NODE}'\nargs = ['${SCRIPT}', "mcp"]\n`)
+    expect(next).toBe(`[mcp_servers.kanbo]\ncommand = '${NODE}'\nargs = ['${SCRIPT}', "mcp"]\ndefault_tools_approval_mode = "approve"\n`)
     writeFileSync(path, next)
     expect(readCodexMcpEntry(path)).toEqual({ command: NODE, args: [SCRIPT, 'mcp'], otherFields: [] })
   })

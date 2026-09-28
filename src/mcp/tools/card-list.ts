@@ -13,7 +13,8 @@ const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
 export const cardListTool = defineKanboTool({
   name: 'kanbo_card_list',
   title: 'List cards',
-  description: 'Find cards in one call; filters combine. Waiting for a person: waitingForPerson: true. '
+  description: 'Find cards in one call; filters combine. Waiting for a person: waitingForPerson: true (each with its last comment). '
+    + 'Sent back to you by a person: returned: true. '
     + 'Being worked on: hasActiveRun: true. Sub-cards: parent. Search: text. Changed since you last looked: updatedSince. '
     + `Answers ${DEFAULT_CARD_LIST_LIMIT} compact cards in board order with total and nextOffset; descriptions: fields: ["description"].`,
   inputSchema: {
@@ -22,6 +23,7 @@ export const cardListTool = defineKanboTool({
     waitingForPerson: z.boolean().optional().describe('true: only cards waiting for a person; false: none of those.'),
     parent: z.string().min(1).optional().describe('Only the sub-cards of this card: its id (WOR-001), key without padding (WOR-1) or number (1).'),
     hasActiveRun: z.boolean().optional().describe('true: only cards an agent is working on now; false: only cards nobody is.'),
+    returned: z.boolean().optional().describe('true: only cards a person sent back that nobody has picked up again (their last decision is a return; not waiting, no run), each with the person\'s comment; false: every other card.'),
     text: z.string().min(1).optional().describe('Only cards whose id, title or description contains this, ignoring case in any script (über finds Über); taken literally, no wildcards.'),
     updatedSince: z.union([z.number().int().nonnegative(), z.string().min(1)]).optional()
       .describe('Only cards changed at or after this moment: unix seconds (not milliseconds), an ISO date-time with Z or an offset such as 2026-09-28T10:00:00Z, or a date such as 2026-09-28 (UTC midnight).'),
@@ -31,6 +33,7 @@ export const cardListTool = defineKanboTool({
     offset: z.number().int().nonnegative().optional().describe('How many picked cards to skip: the nextOffset of the previous answer.'),
     ...cardListViewArguments,
   },
+  example: { waitingForPerson: true },
   run: async (transport, { column, columns, updatedSince, limit, detail, fields, ...filters }) => {
     const named = [...(column ? [column] : []), ...(columns ?? [])]
     const page = await transport.cardPage({

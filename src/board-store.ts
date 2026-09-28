@@ -133,6 +133,13 @@ export interface BoardCardQuery {
   parentIssueId?: string
   /** `true`: only cards with a run going on now; `false`: only cards with none. */
   hasActiveRun?: boolean
+  /**
+   * `true`: only cards a person sent back that nobody has picked up again —
+   * the card's latest decision (`system.approved` or `system.returned`
+   * comment, the one `readApproval` reads) is a return, it is not waiting for a
+   * person, and no run is going on on it. `false`: every other card.
+   */
+  returned?: boolean
   /** Cards whose key, title or description contains this text. */
   text?: string
   /** Cards changed at or after this moment, in unix seconds. */
@@ -166,6 +173,12 @@ export interface BoardMilestoneCardCount {
 export interface IssueCommentStore {
   /** Comments of one issue, oldest first. */
   listByIssue: (issueId: string) => Promise<IssueComment[]>
+  /**
+   * The latest comment of each of these issues — among those of `authorKinds`
+   * when given — in one statement, in no particular order. An issue with none
+   * is absent. "Latest" is the order `listByIssue` lists them in, its last.
+   */
+  listLatestByIssues: (issueIds: readonly string[], authorKinds?: readonly IssueComment['authorKind'][]) => Promise<IssueComment[]>
   findById: (commentId: string) => Promise<IssueComment | null>
   /**
    * The comment on that issue carrying `dedupeKey`, or `null` — one read of the

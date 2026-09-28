@@ -18,7 +18,14 @@ export const runStartTool = defineKanboTool({
     agent: z.string().min(1).describe('What to call whoever is working on the card.'),
     branch: z.string().min(1).optional().describe('The branch the work happens on.'),
     executionMode: executionModeArgument.optional(),
-    session: z.string().min(1).optional().describe('Your own log of this run, if you have one: claude:<session id> from Claude Code, codex:<session id> from Codex (the session id Codex prints).'),
+    session: z.string().min(1).optional().describe('Your own log of this run: claude:<session id> or codex:<session id>. Leave it out — kanbo fills in the session Claude Code or Codex names in its environment, when it can read one. Never invent one.'),
   },
-  run: async (transport, input) => await transport.runStart(input),
+  aliases: { agent: ['agentName'] },
+  needs: { agent: 'what to call you, e.g. claude' },
+  example: { card: 'TST-5', agent: 'claude' },
+  run: async (transport, input) => {
+    const started = await transport.runStart(input)
+    // The next call this run needs, spelled out: agents guessed the finish state before.
+    return { ...started, finishWith: `kanbo_run_finish {"run":"${started.id}","state":"finished"}` }
+  },
 })

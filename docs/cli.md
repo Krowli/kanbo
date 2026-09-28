@@ -312,7 +312,7 @@ Opens no board.
 
 ## `kanbo prime`
 
-Print the columns of this board and the rules a card travels by, then the commands an agent uses (the `kanbo_prime` MCP tool leaves the commands out). Common options only.
+Print the columns of this board and the rules a card travels by, then the commands an agent uses, each written out as a call that works (`kanbo card comment TST-5 --content "…"`, `kanbo run finish <run id> --state finished`), so an agent has no need to read `kanbo capabilities` first. The `kanbo_prime` MCP tool leaves the commands out. When a person sent cards back that nobody has picked up again (see [returned cards](mcp.md#tools)), they are named first, each with the person's comment. Common options only.
 
 ## `kanbo ready`
 
@@ -321,7 +321,7 @@ Print the columns of this board and the rules a card travels by, then the comman
 | `--limit <count>` | How many cards to print (10 when left out). |
 | `--all` | Every ready card. |
 
-Lists To Do cards with no run and nobody's turn but the agent's, in board order. When there are more than it prints, one line on stderr says how many.
+Lists To Do cards with no run and nobody's turn but the agent's, in board order. When there are more than it prints, one line on stderr says how many. Cards a person sent back come first, under "Returned to you", each with the person's comment (up to 5); `--json` prints the ready cards alone — `kanbo card list --returned --json` lists the returned ones.
 
 ## `kanbo board`
 
@@ -371,14 +371,14 @@ All of these but `list` and `describe` are **person only**: in an agent's shell 
 
 | Command | Options |
 | --- | --- |
-| `card list` | Filters, all combined: `--column <columns>` only cards in these columns (comma-separated, or repeat the option); `--waiting` only cards waiting for a person; `--parent <card>` only its sub-cards; `--active` only cards an agent is working on now; `--text <text>` key, title or description contains it, ignoring case in any script (`über` finds `Über`, on every board); `--updated-since <time>` changed since then (unix seconds, `2026-09-28T10:00:00Z` — a zone is required — or `2026-09-28` for UTC midnight; milliseconds and zoneless times exit 2); `--label <labels>` carrying all of them; `--priority <priorities>` any of them. Paging: `--limit <count>` (50 when left out), `--offset <count>`, `--all`. When more cards match than it prints, one line on stderr says how many and where the next page starts. |
+| `card list` | Filters, all combined: `--column <columns>` only cards in these columns (comma-separated, or repeat the option); `--waiting` only cards waiting for a person; `--parent <card>` only its sub-cards; `--active` only cards an agent is working on now; `--returned` only cards a person sent back that nobody has picked up again; `--text <text>` key, title or description contains it, ignoring case in any script (`über` finds `Über`, on every board); `--updated-since <time>` changed since then (unix seconds, `2026-09-28T10:00:00Z` — a zone is required — or `2026-09-28` for UTC midnight; milliseconds and zoneless times exit 2); `--label <labels>` carrying all of them; `--priority <priorities>` any of them. Paging: `--limit <count>` (50 when left out), `--offset <count>`, `--all`. When more cards match than it prints, one line on stderr says how many and where the next page starts. A card waiting for a person or returned has its last comment on the line under it (`returned`, `lastComment` in `--json`). |
 | `card get <card>` | `--include <parts>` what to show with the card — `comments`, `subCards`, `runs`, `history`, `prs`, comma-separated (`comments,subCards` when left out; `none` for the card alone); `--comments <count>` how many of the latest comments (10). |
 | `card create` | `--title <title>` (the card's own key when absent); `--description <text>`; `--column <column>` (the first column when absent); `--parent <card>` the card this one belongs under; `--execution-mode <mode>` `worktree` or `main`. |
 | `card update <card>` | `--title <title>`; `--description <text>`; `--priority <priority>` one of `none`, `low`, `medium`, `high`, `urgent`; `--labels <labels>` comma-separated, replacing the current ones; `--execution-mode <mode>`. |
 | `card move <card> <column>` | — |
-| `card status-line <card>` | `--text <text>` (required): one sentence, present tense. |
-| `card comment <card>` | `--content <text>` (required). |
-| `card wait-approval <card>` | `--text <text>`: the status line to leave, saying what you need. |
+| `card status-line <card>` | `--text <text>` (required): one sentence, present tense. Also taken as `--content`. |
+| `card comment <card>` | `--content <text>` (required). Also taken as `--text`. |
+| `card wait-approval <card>` | `--text <text>`: the status line to leave, saying what you need. Also taken as `--content`. |
 | `card pr add <card> <url>` | `url` as `https://github.com/<owner>/<repo>/pull/<n>` or `<owner>/<repo>#<n>`. |
 | `card pr list <card>` | — |
 | `card pr remove <card> <linkId>` | `linkId` as `card pr list` prints it. Anyone but a person may only remove a link it created. |
@@ -398,10 +398,10 @@ Both are person only.
 
 | Command | Options |
 | --- | --- |
-| `run start <card>` | `--agent <name>` (required) what to call whoever is working; `--branch <branch>`; `--execution-mode <mode>` (defaults to the card's); `--session <ref>` your own log of this run, `claude:<session id>` or `codex:<session id>`. |
+| `run start <card>` | `--agent <name>` (required) what to call whoever is working; `--branch <branch>`; `--execution-mode <mode>` (defaults to the card's); `--session <ref>` your own log of this run, `claude:<session id>` or `codex:<session id>` — when left out, the session Claude Code (`CLAUDE_CODE_SESSION_ID`) or Codex (`CODEX_THREAD_ID`) names in the environment, if exactly one of them does. Prints the run id and the command that finishes it. |
 | `run attach-session <runId> <ref>` | `--replace` put this log in place of the one the run names — a person's own terminal only. |
 | `run clear-session <runId>` | Person only. |
-| `run finish <runId>` | `--state <state>` (required) one of `finished`, `failed`, `stopped`; `--error-text <text>` what went wrong, for a failed run. |
+| `run finish <runId>` | `--state <state>` (required) one of `finished`, `failed`, `stopped` — `completed`, `succeeded`, `success` and `done` are read as `finished`, `error` and `errored` as `failed`, `cancelled`, `canceled` and `aborted` as `stopped`; `--error-text <text>` what went wrong, for a failed run. |
 
 Fields `--json` can name on a run: `id`, `issueId`, `agentName`, `state`, `executionMode`, `branch`, `worktreePath`, `startedAt`, `endedAt`, `attempt`.
 

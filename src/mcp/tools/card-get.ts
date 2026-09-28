@@ -17,5 +17,6 @@ export const cardGetTool = defineKanboTool({
     commentLimit: z.number().int().positive().optional()
       .describe(`How many of the latest comments to include; ${DEFAULT_KANBO_COMMENT_LIMIT} when absent.`),
   },
+  example: { card: 'TST-5' },
   run: async (transport, input) => await transport.cardGet(input),
 })

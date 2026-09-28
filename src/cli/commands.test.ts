@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardStore } from '../board-store'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { normalizeStatusName } from '../domain/status-name'
-import { createCard } from '../ops/cards'
+import { createCard, returnCard, waitApproval } from '../ops/cards'
 import { readChangeSeq } from '../ops/change-seq'
 import { finishRun, startRun } from '../ops/runs'
 import type { BoardActor } from '../ops/types'
@@ -201,6 +201,85 @@ describe('board commands', () => {
     expect(JSON.parse(started)).toEqual({ externalSessionRef: 'claude:abc-123' })
 
     await expect(run(['run', 'start', card.id, '--agent', 'Claude', '--session', 'not-a-ref'])).rejects.toThrow()
+  })
+
+  it('fills in the session Claude Code or Codex names in the environment, and prints the finish command', async () => {
+    const card = await createCardIn('Card', 'To Do')
+    vi.stubEnv('CLAUDE_CODE_SESSION_ID', 'fa78a41d-01a7-48f0-a157-eff77adad091')
+
+    const started = JSON.parse(await run(['run', 'start', card.id, '--agent', 'Claude', '--json', 'id,externalSessionRef'])) as { id: string, externalSessionRef: string }
+    expect(started.externalSessionRef).toBe('claude:fa78a41d-01a7-48f0-a157-eff77adad091')
+    vi.stubEnv('CLAUDE_CODE_SESSION_ID', undefined)
+    vi.stubEnv('CODEX_THREAD_ID', '01a0e7c6-e289-72b3-b612-6662243c2c89')
+    const other = await createCardIn('Other', 'To Do')
+    const text = await run(['run', 'start', other.id, '--agent', 'Codex'])
+    const [, id] = /^Run (\S+) started/.exec(text)!
+    expect(text).toBe(`Run ${id} started on ${other.id}\nWhen you are done: kanbo run finish ${id} --state finished`)
+    expect((await store.runs.findById(id!))?.externalSessionRef).toBe('codex:01a0e7c6-e289-72b3-b612-6662243c2c89')
+  })
+
+  it.each([
+    ['completed', 'finished'],
+    ['succeeded', 'finished'],
+    ['success', 'finished'],
+    ['done', 'finished'],
+    ['error', 'failed'],
+    ['errored', 'failed'],
+    ['cancelled', 'stopped'],
+    ['canceled', 'stopped'],
+    ['aborted', 'stopped'],
+  ])('finishes a run given --state %s as %s', async (written, stored) => {
+    const card = await createCardIn('Card', 'To Do')
+    const started = await startRun(store, card.id, { agentName: 'Claude' }, USER)
+
+    const printed = await run(['run', 'finish', started.id, '--state', written, '--json', 'state'])
+
+    expect(JSON.parse(printed)).toEqual({ state: stored })
+  })
+
+  it('refuses a finish state it cannot read, naming the three', async () => {
+    const card = await createCardIn('Card', 'To Do')
+    const started = await startRun(store, card.id, { agentName: 'Claude' }, USER)
+
+    await expect(run(['run', 'finish', started.id, '--state', 'maybe'])).rejects.toThrow('Unknown run state "maybe". Use one of finished, failed, stopped.')
+  })
+
+  it('takes a comment as --text and a status line as --content, and refuses both saying different things', async () => {
+    const card = await createCardIn('Card', 'To Do')
+
+    await run(['card', 'comment', card.id, '--text', 'Via text'])
+    await run(['card', 'status-line', card.id, '--content', 'Via content'])
+    await run(['card', 'wait-approval', card.id, '--content', 'Please look'])
+
+    expect((await store.comments.listByIssue(card.id)).map(comment => comment.content)).toContain('Via text')
+    expect((await store.issues.findById(card.id))?.statusLine).toBe('Please look')
+    await expect(run(['card', 'comment', card.id, '--content', 'One', '--text', 'Two'])).rejects.toThrow('kanbo card comment got --content and --text with different text; pass only --content.')
+    await expect(run(['card', 'comment', card.id])).rejects.toThrow('kanbo card comment needs --content (the comment text).')
+    await expect(run(['card', 'status-line', card.id])).rejects.toThrow('kanbo card status-line needs --text (one sentence).')
+  })
+
+  it('lists returned cards with the person\'s comment, and kanbo ready puts them first', async () => {
+    const sentBack = await createCardIn('Sent back', 'In Review')
+    await returnCard(store, sentBack.id, { comment: 'Tests are missing' }, USER)
+    const waiting = await createCardIn('Waiting', 'In Review')
+    await waitApproval(store, waiting.id, { statusLine: 'Please review' }, USER)
+    await createCardIn('Ready one', 'To Do')
+
+    const returned = await run(['card', 'list', '--returned'])
+    expect(returned).toBe(`${sentBack.id}  In Progress  Sent back\n${' '.repeat(sentBack.id.length + 2)}returned — person: Tests are missing`)
+    expect(JSON.parse(await run(['card', 'list', '--returned', '--json', 'id,returned,lastComment']))).toEqual([
+      { id: sentBack.id, returned: true, lastComment: { author: 'user', text: 'Tests are missing', createdAt: expect.any(Number) } },
+    ])
+    const ready = await run(['ready'])
+    expect(ready.split('\n')).toEqual([
+      'Returned to you — continue these first, then hand them back to a person:',
+      `${sentBack.id}  In Progress  Sent back`,
+      `${' '.repeat(sentBack.id.length + 2)}returned — person: Tests are missing`,
+      '',
+      'Ready:',
+      expect.stringContaining('Ready one'),
+    ])
+    expect(JSON.parse(await run(['ready', '--json', 'title']))).toEqual([{ title: 'Ready one' }])
   })
 
   it('attaches a session ref to a run, even after it ended, and never replaces one', async () => {

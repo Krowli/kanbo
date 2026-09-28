@@ -12,5 +12,7 @@ export const cardMoveTool = defineKanboTool({
     card: cardArgument,
     column: z.string().min(1).describe('The column to move it to, by its slug or name: in_progress, "In Progress".'),
   },
+  needs: { column: 'the column slug, e.g. in_progress' },
+  example: { card: 'TST-5', column: 'in_progress' },
   run: async (transport, input) => await transport.cardMove(input),
 })

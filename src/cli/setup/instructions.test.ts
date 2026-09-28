@@ -79,11 +79,13 @@ describe('the kanbo instruction block', () => {
     expect(GLOBAL_INSTRUCTION_BLOCK).toContain('In a project with a `.kanbo/` folder')
   })
 
-  it('reads the 0.2.1 block as legacy, and the whole old guide is kept word for word', () => {
+  it('reads the 0.2.1 block as legacy, by its body kept word for word', () => {
     expect(classifyBlock(CLAUDE_MD_0_2_1, INSTRUCTION_BLOCK)).toBe('legacy')
     expect(classifyBlock(CLAUDE_MD_0_2_1.replaceAll('\n', '\r\n'), INSTRUCTION_BLOCK)).toBe('legacy')
     const body = CLAUDE_MD_0_2_1.split('<!-- KANBO_START -->\n')[1]!.split('\n<!-- KANBO_END -->')[0]
-    expect(AGENT_GUIDE_TEXT).toBe(body)
+    expect(LEGACY_BLOCK_BODIES).toContain(body)
+    // The guide itself has moved on since (0.3.0: kanbo fills in the session).
+    expect(AGENT_GUIDE_TEXT).not.toBe(body)
   })
 
   it('reads a bare-marker block whose body no 0.1–0.2 release wrote as edited, and keeps it under --yes', async () => {
@@ -233,7 +235,10 @@ describe('the kanbo instruction block', () => {
     const { out } = await kanbo('prime')
 
     expect(out).toContain('How this board works:')
-    expect(out).toContain('Commands:')
-    expect(out).toContain('`kanbo card move <id> <column>`')
+    expect(out).toContain('Commands (a card is named by its id')
+    expect(out).toContain('`kanbo card move TST-5 in_progress`')
+    // The arguments agents got wrong, written out, so they need no `kanbo capabilities` first.
+    expect(out).toContain('--content "')
+    expect(out).toContain('--state finished')
   })
 })

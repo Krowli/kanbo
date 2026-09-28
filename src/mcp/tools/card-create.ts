@@ -18,5 +18,6 @@ export const cardCreateTool = defineKanboTool({
     parent: cardArgument.optional().describe(SUBTASK_SENTENCE),
     executionMode: executionModeArgument.optional(),
   },
+  example: { description: 'Add slugify(text) with a test', parent: 'TST-1' },
   run: async (transport, input) => await transport.cardCreate(input),
 })

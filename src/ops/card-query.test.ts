@@ -5,9 +5,10 @@ import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import type { TestBoardStore } from '../testing/board-stores'
 import { BOARD_STORE_FACTORIES } from '../testing/board-stores'
 import { queryCards } from './card-query'
-import { createCard, updateCard, waitApproval } from './cards'
+import { readCardAttention } from './approval'
+import { addComment, approve, createCard, returnCard, updateCard, waitApproval } from './cards'
 import { queryReady } from './ready'
-import { startRun } from './runs'
+import { finishRun, startRun } from './runs'
 import { createMilestone, listSprints } from './sprints'
 import type { BoardActor } from './types'
 
@@ -69,6 +70,59 @@ describe.each(BOARD_STORE_FACTORIES)('cards picked by a query on $name', (factor
     expect(await ids({ priorities: ['high', 'urgent'] })).toEqual(['Labelled'])
     expect(await ids({ priorities: [] })).toEqual([])
     expect(await ids({ columns: [] })).toEqual([])
+  })
+
+  it('picks the cards a person sent back that nobody picked up again, and says what the waiting and returned ones last said', async () => {
+    const sentBack = await card('Sent back', 'In Review')
+    await returnCard(store, sentBack.id, { comment: 'Tests are missing' }, USER)
+    await addComment(store, { issueId: sentBack.id, content: 'On it' }, { kind: 'agent', id: 'claude' })
+    const approvedLater = await card('Approved later', 'In Review')
+    await returnCard(store, approvedLater.id, { comment: 'Not yet' }, USER)
+    await approve(store, approvedLater.id, { comment: null }, USER)
+    const handedBack = await card('Handed back', 'In Review')
+    await returnCard(store, handedBack.id, { comment: 'Again' }, USER)
+    await waitApproval(store, handedBack.id, {}, USER)
+    const running = await card('Running again', 'In Review')
+    await returnCard(store, running.id, { comment: 'Redo' }, USER)
+    const run = await startRun(store, running.id, { agentName: 'Claude' }, USER)
+    await card('Never returned', 'To Do')
+
+    expect(await ids({ returned: true })).toEqual(['Sent back'])
+    expect(await ids({ returned: false })).toEqual(['Approved later', 'Handed back', 'Running again', 'Never returned'])
+    await finishRun(store, run.id, { state: 'finished' }, USER)
+    expect(await ids({ returned: true })).toEqual(['Sent back', 'Running again'])
+
+    const page = await queryCards(store, { workspaceId: WORKSPACE.id })
+    const attention = await readCardAttention(store, page.cards, page.cards.map(() => false))
+    expect(Object.fromEntries(page.cards.map((row, index) => [row.title, attention[index]]))).toEqual({
+      'Sent back': { returned: true, lastComment: { author: 'agent', text: 'On it', createdAt: expect.any(Number) } },
+      'Approved later': { returned: false, lastComment: null },
+      'Handed back': { returned: false, lastComment: { author: 'user', text: 'Again', createdAt: expect.any(Number) } },
+      // The run's own bookkeeping ("Run finished") is not what it last said.
+      'Running again': { returned: true, lastComment: { author: 'user', text: 'Redo', createdAt: expect.any(Number) } },
+      'Never returned': { returned: false, lastComment: null },
+    })
+    const long = await card('Long', 'In Review')
+    await addComment(store, { issueId: long.id, content: 'x'.repeat(500) }, USER)
+    await waitApproval(store, long.id, {}, USER)
+    const [said] = await readCardAttention(store, [(await store.issues.findById(long.id))!], [false])
+    expect(said!.lastComment!.text).toHaveLength(200)
+    expect(said!.lastComment!.text.endsWith('…')).toBe(true)
+  })
+
+  it('reads the latest comment of each card, of the kinds asked, in one statement', async () => {
+    const first = await card('First', 'To Do')
+    const second = await card('Second', 'To Do')
+    for (const content of ['one', 'two', 'three']) {
+      await addComment(store, { issueId: first.id, content }, USER)
+    }
+    await addComment(store, { issueId: second.id, content: 'agent said' }, { kind: 'agent', id: 'claude' })
+
+    const latest = await store.comments.listLatestByIssues([first.id, second.id])
+    expect(Object.fromEntries(latest.map(comment => [comment.issueId, comment.content]))).toEqual({ [first.id]: 'three', [second.id]: 'agent said' })
+    expect((await store.comments.listLatestByIssues([first.id, second.id], ['agent'])).map(comment => comment.content)).toEqual(['agent said'])
+    expect(await store.comments.listLatestByIssues([])).toEqual([])
+    expect(await store.comments.listLatestByIssues([first.id], [])).toEqual([])
   })
 
   it('matches text as written: % and _ are no wildcards', async () => {

@@ -1,3 +1,4 @@
+import type { SQL } from 'drizzle-orm'
 import { and, asc, desc, eq, getTableColumns, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
 
 import type {
@@ -186,6 +187,7 @@ function cardQueryPredicates(query: BoardCardQuery) {
       : query.waitingForPerson ? eq(issues.waitingFor, 'human') : isNull(issues.waitingFor),
     query.parentIssueId === undefined ? undefined : eq(issues.parentIssueId, query.parentIssueId),
     query.hasActiveRun === undefined ? undefined : query.hasActiveRun ? running : sql`not ${running}`,
+    query.returned === undefined ? undefined : query.returned ? returnedCard(running) : sql`not ${returnedCard(running)}`,
     query.text === undefined
       ? undefined
       : sql`(${issues.id} ilike ${pattern} escape '\\' or ${issues.title} ilike ${pattern} escape '\\' or coalesce(${issues.description}, '') ilike ${pattern} escape '\\')`,
@@ -193,6 +195,24 @@ function cardQueryPredicates(query: BoardCardQuery) {
     ...(query.labels ?? []).map(label => sql`cast(${issues.labels} as jsonb) @> cast(${JSON.stringify([label])} as jsonb)`),
     query.priorities === undefined ? undefined : inArray(issues.priority, [...query.priorities]),
   ]
+}
+
+/**
+ * A card a person sent back that nobody picked up again (`BoardCardQuery.returned`):
+ * not waiting, not running, and its last decision a return — `seq` breaking a
+ * tie inside one second where SQLite reads `rowid`.
+ */
+function returnedCard(running: SQL) {
+  return sql`(${issues.waitingFor} is null and not ${running} and exists (
+    select 1 from ${issueComments} as decision
+    where decision.issue_id = ${issues.id} and decision.author_kind = 'system.returned'
+      and not exists (
+        select 1 from ${issueComments} as later
+        where later.issue_id = decision.issue_id
+          and later.author_kind in ('system.approved', 'system.returned')
+          and (later.created_at > decision.created_at or (later.created_at = decision.created_at and later.seq > decision.seq))
+      )
+  ))`
 }
 
 /**
@@ -407,6 +427,27 @@ function createStoreOver(database: BoardPostgresDatabase): BoardStore {
         .from(issueComments)
         .where(eq(issueComments.issueId, issueId))
         .orderBy(asc(issueComments.createdAt), asc(issueComments.seq))).map(toIssueComment),
+      listLatestByIssues: async (issueIds, authorKinds) => {
+        if (issueIds.length === 0 || authorKinds?.length === 0) {
+          return []
+        }
+        const ranked = database
+          .select({
+            id: issueComments.id,
+            commentRank: sql<number>`cast(row_number() over (partition by ${issueComments.issueId} order by ${issueComments.createdAt} desc, ${issueComments.seq} desc) as int)`.as('comment_rank'),
+          })
+          .from(issueComments)
+          .where(and(
+            inArray(issueComments.issueId, [...issueIds]),
+            authorKinds === undefined ? undefined : inArray(issueComments.authorKind, [...authorKinds]),
+          ))
+          .as('ranked')
+        return (await database
+          .select(getTableColumns(issueComments))
+          .from(issueComments)
+          .innerJoin(ranked, eq(ranked.id, issueComments.id))
+          .where(eq(ranked.commentRank, 1))).map(toIssueComment)
+      },
       findById: async (commentId) => {
         const [row] = await database.select().from(issueComments).where(eq(issueComments.id, commentId)).limit(1)
         return row ? toIssueComment(row) : null

@@ -54,8 +54,12 @@ export interface UpdateCardInput extends ColumnReference {
   executionMode?: Issue['executionMode']
 }
 
-/** What a return writes as the card's status line, ahead of the person's own reason. */
-export const RETURNED_STATUS_LINE_PREFIX = 'returned by you: '
+/**
+ * What a return writes as the card's status line, ahead of the person's own
+ * reason. Read by the person and by the agent the card goes back to, so it
+ * names neither as "you".
+ */
+export const RETURNED_STATUS_LINE_PREFIX = 'returned by a person: '
 
 /**
  * A card as a write that may have put it in a column hands it back. `unmetRules`
@@ -376,7 +380,7 @@ export async function approve<TStore extends BoardStore>(
  * This is a person's, exactly as `approve` is. They are the two answers to a
  * card that is waiting for a human, and an agent that could give either of them
  * could undo the one state the board promises a person owns — the line it
- * leaves even says "returned by you".
+ * leaves even says "returned by a person".
  */
 export async function returnCard<TStore extends BoardStore>(
   store: TStore,

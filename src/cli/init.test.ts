@@ -240,7 +240,7 @@ describe('kanbo init', () => {
 
     expect(JSON.parse(read('.mcp.json')).mcpServers.other).toEqual({ type: 'stdio', command: 'other' })
     expect(JSON.parse(read('.mcp.json')).mcpServers.kanbo.command).toBe('kanbo-fork')
-    expect(codexAfterFirst).toBe('model = "gpt-5"\n\n[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\n')
+    expect(codexAfterFirst).toBe('model = "gpt-5"\n\n[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
     expect(read('.codex', 'config.toml')).toBe(codexAfterFirst)
   })
 
@@ -381,7 +381,7 @@ describe('kanbo init', () => {
       mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
     })
     expect(read('.codex', 'config.toml'))
-      .toBe('[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\n')
+      .toBe('[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
     for (const file of [read('.mcp.json'), read('.codex', 'config.toml'), read('.cursor', 'mcp.json')]) {
       expect(file).not.toContain('secret')
       expect(file).not.toContain('board.example')

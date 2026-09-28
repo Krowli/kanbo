@@ -45,6 +45,17 @@ Not recognised: **Codex** documents no variable of its own in the commands it ru
 
 **Your own terminal carries a mark** — typically an IDE terminal where the Claude Code extension sets `CLAUDECODE=1` — so person-only commands refuse there: set `KANBO_ACTOR_KIND=person` in that terminal (or its profile). `KANBO_ACTOR_KIND` always wins over the marks. `kanbo doctor` shows which mark it saw (`actor` warn).
 
+## The session a run records
+
+`kanbo run start` without `--session`, and `kanbo_run_start` without `session`, record the session of the agent that runs them, read from the environment:
+
+| Variable | Set by | Recorded as |
+| --- | --- | --- |
+| `CLAUDE_CODE_SESSION_ID` | Claude Code, in its Bash and PowerShell tools, hooks and stdio MCP servers ([env-vars](https://code.claude.com/docs/en/env-vars)) | `claude:<id>` |
+| `CODEX_THREAD_ID` | Codex, in every shell command (its session id; `populate_env` in codex-rs `shell_environment.rs`) | `codex:<id>` |
+
+Only when exactly one is set: an agent started inside the other's shell inherits both, and nothing says which one is running. Both were seen in a headless run on 2026-09-28 (Claude Code 2.1.283, Codex 0.153.0). The id is not what marks a shell as an agent's — `CLAUDECODE` and the others above do that.
+
 ## How a command finds its board
 
 First match wins:

@@ -1,7 +1,8 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { createBoardOps } from '../ops'
@@ -598,6 +599,134 @@ describe('the board\'s tools over a real board', () => {
       expect(readText(refused)).toContain(`updatedSince: `)
       expect(readText(refused)).toContain(reason)
     }
+  })
+
+  it('publishes each tool\'s canonical JSON Schema, while an aliased or missing argument reaches the tool and is answered in a sentence', async () => {
+    const client = await connectClient()
+    const { tools } = await client.listTools()
+    for (const tool of KANBO_TOOLS) {
+      const published = tools.find(candidate => candidate.name === tool.name)!.inputSchema
+      const { $schema: _published, ...rest } = published as Record<string, unknown>
+      const { $schema: _canonical, ...canonical } = z.toJSONSchema(z.object(tool.inputSchema), { io: 'input', target: 'draft-7' }) as Record<string, unknown>
+      expect(rest, tool.name).toEqual(canonical)
+    }
+
+    const call = async (name: string, args: Record<string, unknown>) => await client.callTool({ name, arguments: args }) as CallToolResult
+    const text = (result: CallToolResult) => (result.content[0] as { text: string }).text
+    const card = await createCard('A card to talk about')
+
+    // The names agents reached for, measured: `text` for a comment, `id` for a card, `content` for a status line.
+    expect((await call('kanbo_card_comment', { card: card.id, text: 'Via text' })).isError).toBeFalsy()
+    expect((await call('kanbo_card_comment', { id: card.id, content: 'Via id' })).isError).toBeFalsy()
+    expect((await call('kanbo_card_get', { cardId: card.id })).isError).toBeFalsy()
+    expect((await call('kanbo_card_get', { key: card.id })).isError).toBeFalsy()
+    expect((await call('kanbo_status_line', { id: card.id, content: 'Reading the card' })).isError).toBeFalsy()
+    expect((await boardOps().listComments(card.id)).map(comment => comment.content)).toEqual(expect.arrayContaining(['Via text', 'Via id']))
+    expect(readJson(await call('kanbo_card_get', { card: card.id, include: [] }))).toMatchObject({ statusLine: 'Reading the card' })
+
+    const missing = await call('kanbo_card_get', {})
+    expect(missing.isError).toBe(true)
+    expect(text(missing)).toBe('kanbo_card_get needs `card` (the card id, e.g. TST-5). Example: {"card":"TST-5"}')
+    const noContent = await call('kanbo_card_comment', { card: card.id })
+    expect(text(noContent)).toBe('kanbo_card_comment needs `content` (the comment text). Example: {"card":"TST-5","content":"Added slugify(text) and a test; npm test passes."}')
+    const both = await call('kanbo_card_comment', { card: card.id, content: 'One', text: 'Two' })
+    expect(both.isError).toBe(true)
+    expect(text(both)).toContain('kanbo_card_comment got `content` and `text` with different values; send only `content`.')
+    expect((await call('kanbo_card_comment', { card: card.id, content: 'Same', text: 'Same' })).isError).toBeFalsy()
+    const wrongType = await call('kanbo_card_list', { limit: 'ten' })
+    expect(text(wrongType)).toBe('kanbo_card_list `limit` must be a number. Example: {"waitingForPerson":true}')
+    await client.close()
+  })
+
+  it('reads the finish states agents write for the three it keeps, and names the finish call when a run starts', async () => {
+    const client = await connectClient()
+    const call = async (name: string, args: Record<string, unknown>) => await client.callTool({ name, arguments: args }) as CallToolResult
+    const text = (result: CallToolResult) => (result.content[0] as { text: string }).text
+
+    for (const [written, stored] of [['completed', 'finished'], ['succeeded', 'finished'], ['Done', 'finished'], ['errored', 'failed'], ['cancelled', 'stopped'], ['aborted', 'stopped']] as const) {
+      const card = await createCard(`Run ${written}`)
+      const started = readJson(await call('kanbo_run_start', { id: card.id, agentName: 'Claude' })) as { id: string, finishWith: string }
+      expect(started.finishWith).toBe(`kanbo_run_finish {"run":"${started.id}","state":"finished"}`)
+      const finished = await call('kanbo_run_finish', { runId: started.id, state: written })
+      expect(finished.isError, written).toBeFalsy()
+      expect(readJson(finished)).toMatchObject({ id: started.id, state: stored })
+    }
+    const refused = await call('kanbo_run_finish', { run: 'run-1', state: 'maybe' })
+    expect(text(refused)).toBe('kanbo_run_finish `state` must be one of finished, failed, stopped. Example: {"run":"<the id kanbo_run_start gave back>","state":"finished"}')
+    await client.close()
+  })
+
+  it('fills in the session of the agent whose environment it runs in, when kanbo_run_start names none', async () => {
+    const card = await createCard('A card started from Claude Code')
+    const client = await connectClient()
+    vi.stubEnv('CLAUDE_CODE_SESSION_ID', 'fa78a41d-01a7-48f0-a157-eff77adad091')
+    try {
+      await client.callTool({ name: 'kanbo_run_start', arguments: { card: card.id, agent: 'Claude' } })
+    }
+    finally {
+      vi.unstubAllEnvs()
+    }
+    expect((await boardOps().listRuns(card.id))[0]?.externalSessionRef).toBe('claude:fa78a41d-01a7-48f0-a157-eff77adad091')
+    await client.close()
+  })
+
+  it('lists the cards a person sent back, each with the person\'s comment, first in kanbo_ready and kanbo_prime — the same over HTTP', async () => {
+    const ops = boardOps()
+    const PERSON: BoardActor = { kind: 'user', id: 'ann' }
+    const sentBack = await ops.createCard({ workspace: WORKSPACE, title: 'Sent back', statusName: 'In Review' }, EXTERNAL)
+    await ops.waitApproval(sentBack.id, {}, EXTERNAL)
+    await ops.returnCard(sentBack.id, { comment: 'slugify("!!!") must be empty' }, PERSON)
+    const waiting = await ops.createCard({ workspace: WORKSPACE, title: 'Waiting', statusName: 'In Review' }, EXTERNAL)
+    await ops.addComment({ issueId: waiting.id, content: 'Is the new name right?' }, { kind: 'agent', id: 'claude' })
+    await ops.waitApproval(waiting.id, {}, EXTERNAL)
+    const approved = await ops.createCard({ workspace: WORKSPACE, title: 'Approved after a return', statusName: 'In Review' }, EXTERNAL)
+    await ops.returnCard(approved.id, { comment: 'not yet' }, PERSON)
+    await ops.approve(approved.id, { comment: null }, PERSON)
+    await createCard('Ready')
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+    const overHttp = overHttpFromBoard()
+
+    const returned = JSON.parse(readText(await tools.kanbo_card_list!.run(transport, { returned: true })))
+    expect(returned.cards).toEqual([expect.objectContaining({
+      id: sentBack.id,
+      column: 'in_progress',
+      statusLine: 'returned by a person: slugify("!!!") must be empty',
+      returned: true,
+      lastComment: { author: 'user', text: 'slugify("!!!") must be empty', createdAt: expect.any(Number) },
+    })])
+    // "What is waiting for me" in one call: each waiting card says what it asks.
+    const waitingList = JSON.parse(readText(await tools.kanbo_card_list!.run(transport, { waitingForPerson: true })))
+    expect(waitingList.cards).toEqual([expect.objectContaining({
+      id: waiting.id,
+      waitingFor: 'human',
+      lastComment: { author: 'agent', text: 'Is the new name right?', createdAt: expect.any(Number) },
+    })])
+    for (const input of [{ returned: true }, { returned: false }, { waitingForPerson: true }, {}]) {
+      expect(readText(await tools.kanbo_card_list!.run(overHttp, input)), JSON.stringify(input))
+        .toBe(readText(await tools.kanbo_card_list!.run(transport, input)))
+    }
+
+    const ready = readText(await tools.kanbo_ready!.run(transport, {}))
+    expect(ready.indexOf(sentBack.id)).toBeLessThan(ready.indexOf('"total"'))
+    expect(JSON.parse(ready)).toMatchObject({ returned: [{ id: sentBack.id, returned: true }], total: 1, cards: [{ title: 'Ready' }] })
+    expect(readText(await tools.kanbo_ready!.run(overHttp, {}))).toBe(ready)
+    expect(JSON.parse(readText(await tools.kanbo_ready!.run(transport, { offset: 1 }))).returned).toBeUndefined()
+
+    const prime = readText(await tools.kanbo_prime!.run(transport, {}))
+    expect(prime.split('\n').slice(0, 3)).toEqual([
+      'Returned to you — a person sent these back. Read their comment, do what it asks, then hand the card back to a person:',
+      '',
+      `- ${sentBack.id} Sent back (\`in_progress\`) — person: "slugify(\\"!!!\\") must be empty"`,
+    ])
+
+    // Picked up again, it is no longer "returned"; handed back, neither.
+    const run = await ops.startRun(sentBack.id, { agentName: 'Claude' }, EXTERNAL)
+    expect(JSON.parse(readText(await tools.kanbo_card_list!.run(transport, { returned: true }))).cards).toEqual([])
+    await ops.finishRun(run.id, { state: 'finished' }, EXTERNAL)
+    expect(JSON.parse(readText(await tools.kanbo_card_list!.run(transport, { returned: true }))).cards).toHaveLength(1)
+    await ops.waitApproval(sentBack.id, {}, EXTERNAL)
+    expect(JSON.parse(readText(await tools.kanbo_card_list!.run(transport, { returned: true }))).cards).toEqual([])
+    expect(readText(await tools.kanbo_prime!.run(transport, {}))).toMatch(/^Columns of this board/)
   })
 
   it('finds text ignoring case beyond ASCII, from the board file and over HTTP alike', async () => {

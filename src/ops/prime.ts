@@ -2,7 +2,9 @@ import type { BoardStore } from '../board-store'
 import { ENTRY_RULE_DESCRIPTIONS, readEntryRules } from '../domain/entry-rules'
 import { normalizeStatusName } from '../domain/status-name'
 import type { IssueStatus } from '../sqlite/schema'
+import { cardDisplayTitle } from '../domain/card-display-title'
 import { BOARD_RULES } from './agent-rules'
+import { readCardAttention } from './approval'
 import { listColumns } from './columns'
 
 /**
@@ -16,6 +18,7 @@ export async function buildPrimeText(store: BoardStore, workspaceId: string): Pr
   const columns = await listColumns(store, workspaceId)
   const ruled = columns.some(column => readEntryRules(column).length > 0)
   const lines = [
+    ...await describeReturnedCards(store, workspaceId, columns),
     'Columns of this board, in board order:',
     '',
     ...(columns.length > 0 ? columns.map(describeColumnLine) : ['- (this board has no columns yet)']),
@@ -26,6 +29,36 @@ export async function buildPrimeText(store: BoardStore, workspaceId: string): Pr
     ...BOARD_RULES.map(rule => `- ${rule}`),
   ]
   return lines.join('\n')
+}
+
+/** How many returned cards the prime text lists, at most. */
+const PRIME_RETURNED_LIMIT = 5
+
+/**
+ * The cards a person sent back that nobody picked up again, said first — an
+ * agent told to "continue the returned card" had nothing that named it, and
+ * searched the board list by list (docs/performance.md). Nothing at all when
+ * there are none, so a board without any reads as it always did.
+ */
+async function describeReturnedCards(store: BoardStore, workspaceId: string, columns: IssueStatus[]): Promise<string[]> {
+  const page = await store.issues.listPage({ workspaceId, returned: true, limit: PRIME_RETURNED_LIMIT })
+  if (page.cards.length === 0) {
+    return []
+  }
+  const attention = await readCardAttention(store, page.cards, page.cards.map(() => false))
+  const more = page.total - page.cards.length
+  return [
+    'Returned to you — a person sent these back. Read their comment, do what it asks, then hand the card back to a person:',
+    '',
+    ...page.cards.map((card, index) => {
+      const column = columns.find(candidate => candidate.id === card.statusId)
+      const where = column ? ` (\`${normalizeStatusName(column.name)}\`)` : ''
+      const comment = attention[index]!.lastComment
+      return `- ${card.id} ${cardDisplayTitle(card)}${where}${comment ? ` — ${comment.author === 'user' ? 'person' : comment.author}: ${JSON.stringify(comment.text)}` : ''}`
+    }),
+    ...(more > 0 ? [`- … and ${more} more: list them with the returned filter`] : []),
+    '',
+  ]
 }
 
 /**

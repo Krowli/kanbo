@@ -1,9 +1,10 @@
 import { openBoardSession, requireCard, requireRun } from '../cli/command'
+import { sessionRefFromEnvironment } from '../domain/external-session-ref'
 import { toIssueView } from '../domain/issue-view'
 import type { CardQueryResult } from '../ops/card-query'
 import type { BoardActor } from '../ops/types'
 import type { Issue } from '../sqlite/schema'
-import type { KanboCardPage, KanboCardQuery, KanboCardResult, KanboColumnResult, KanboToolTransport } from './transport'
+import type { KanboCardPage, KanboCardQuery, KanboCardResult, KanboColumnResult, KanboReadyPage, KanboToolTransport } from './transport'
 import {
   DEFAULT_KANBO_CARD_INCLUDES,
   DEFAULT_KANBO_COMMENT_LIMIT,
@@ -86,16 +87,28 @@ export async function createDbTransport(input: KanboDbTransportInput): Promise<K
     return { cards: await projectPage(page), total: page.total, offset: query.offset ?? 0 }
   }
 
-  async function readyPage(input: { limit?: number, offset?: number }): Promise<KanboCardPage> {
+  async function readyPage({ returnedLimit, ...input }: { limit?: number, offset?: number, returnedLimit?: number }): Promise<KanboReadyPage> {
     const page = await ops.queryReady({ workspaceId, ...input })
-    return { cards: await projectPage(page), total: page.total, offset: input.offset ?? 0 }
+    // A ready card waits for no one, and one a person returned is listed under `returned`.
+    const ready = { cards: await projectPage(page, { attend: false }), total: page.total, offset: input.offset ?? 0 }
+    return returnedLimit === undefined
+      ? ready
+      : { ...ready, returned: await cardPage({ returned: true, limit: returnedLimit }) }
   }
 
-  /** A page's cards as a tool prints them: the columns came with the page, the run facts are one more statement. */
-  async function projectPage(page: CardQueryResult): Promise<KanboCardResult[]> {
+  /**
+   * A page's cards as a tool prints them: the columns came with the page, the
+   * run facts are one more statement, and which cards were returned and what
+   * the waiting and returned ones last said at most two more.
+   */
+  async function projectPage(page: CardQueryResult, { attend = true } = {}): Promise<KanboCardResult[]> {
     const columns = page.columns.map(projectKanboColumn)
     const runs = await ops.readBoardProjectionForIssues(page.cards.map(card => card.id))
-    return page.cards.map((card, index) => projectKanboCard({ ...toIssueView(card), ...runs[index]! }, columns))
+    const attention = attend ? await ops.readCardAttention(page.cards, runs.map(run => run.activeRun !== null)) : []
+    return page.cards.map((card, index) => projectKanboCard(
+      { ...toIssueView(card), ...runs[index]!, attention: attention[index] },
+      columns,
+    ))
   }
 
   /** The card a tool named: the key, the key without its padding, or the number. */
@@ -207,7 +220,7 @@ export async function createDbTransport(input: KanboDbTransportInput): Promise<K
         agentName: agent,
         branch,
         executionMode,
-        externalSessionRef,
+        externalSessionRef: externalSessionRef ?? sessionRefFromEnvironment() ?? undefined,
         launchedByKind: 'external',
       }, actor))
     },

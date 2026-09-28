@@ -51,7 +51,7 @@ Instructions go into the project unless you pass `--global`; the MCP server goes
 
 Codex and Cursor share a project's `AGENTS.md`: `kanbo connect cursor --remove` leaves its kanbo section in place unless Codex is removed in the same command (`kanbo connect codex cursor --remove`, or `kanbo connect --remove` for every agent), and says so.
 
-**Windows.** `kanbo` there is npm's `kanbo.cmd`, which clients that start programs without a shell (Codex) cannot run. So on Windows every agent's MCP server goes into your own configuration by default, naming the Node that runs kanbo and kanbo's own script — `node.exe C:\…\kanbo-cli\dist\cli.cjs mcp` — which every client can start. A project file (`--project`) is shared with other machines and keeps the portable `kanbo mcp`; `kanbo connect` says so when it writes one on Windows. When a Node upgrade or a reinstall leaves such a registration pointing at a file that is gone, `kanbo doctor` fails it, and `kanbo doctor --fix` (or `kanbo connect <agent>`) rewrites its `command` and `args`. kanbo owns only the entries in the exact shapes it writes — `kanbo mcp` (with or without `"type": "stdio"`), or a Node by full path running `…/kanbo-cli/dist/cli.cjs mcp` — with no other field. Any other `kanbo` entry — `cmd /c kanbo mcp`, `npx -y kanbo-cli mcp`, one with an `env` or a `[mcp_servers.kanbo.env]` table — is yours and is never overwritten: `connect` reports "your own kanbo entry — left as is", and `doctor` warns only when it cannot start. See [what kanbo changes](cli.md#what-kanbo-changes-and-what-it-leaves-alone).
+**Windows.** `kanbo` there is npm's `kanbo.cmd`, which clients that start programs without a shell (Codex) cannot run. So on Windows every agent's MCP server goes into your own configuration by default, naming the Node that runs kanbo and kanbo's own script — `node.exe C:\…\kanbo-cli\dist\cli.cjs mcp` — which every client can start. A project file (`--project`) is shared with other machines and keeps the portable `kanbo mcp`; `kanbo connect` says so when it writes one on Windows. When a Node upgrade or a reinstall leaves such a registration pointing at a file that is gone, `kanbo doctor` fails it, and `kanbo doctor --fix` (or `kanbo connect <agent>`) rewrites its `command` and `args`. kanbo owns only the entries in the exact shapes it writes — `kanbo mcp` (with or without `"type": "stdio"`), or a Node by full path running `…/kanbo-cli/dist/cli.cjs mcp` — with no other field but Codex's `default_tools_approval_mode = "approve"`. Any other `kanbo` entry — `cmd /c kanbo mcp`, `npx -y kanbo-cli mcp`, one with an `env` or a `[mcp_servers.kanbo.env]` table — is yours and is never overwritten: `connect` reports "your own kanbo entry — left as is", and `doctor` warns only when it cannot start. See [what kanbo changes](cli.md#what-kanbo-changes-and-what-it-leaves-alone).
 
 `kanbo init --instructions … --mcp …` and `kanbo init --global` still work, and plan the same changes.
 
@@ -80,11 +80,14 @@ Run `kanbo connect --check --global` or `kanbo doctor` afterwards to check it. `
 To register by hand instead, the entries `kanbo connect --global` writes are:
 
 ```toml
-# $CODEX_HOME/config.toml (or: codex mcp add kanbo -- kanbo mcp)
+# $CODEX_HOME/config.toml (or: codex mcp add kanbo -- kanbo mcp, then add the last line)
 [mcp_servers.kanbo]
 command = "kanbo"
 args = ["mcp"]
+default_tools_approval_mode = "approve"
 ```
+
+`default_tools_approval_mode = "approve"` lets Codex call the board's tools without asking. `codex exec` never asks, so without it every `kanbo_*` tool call is refused ("approval policy is never"). It is part of the entry kanbo writes and owns; the same key with another value (`"prompt"`) makes the entry yours.
 
 ```json
 // ~/.cursor/mcp.json

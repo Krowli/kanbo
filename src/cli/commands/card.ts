@@ -1,4 +1,5 @@
 import type { Command } from 'commander'
+import { Option } from 'commander'
 
 import { BoardError } from '../../domain/errors'
 import { readUnixSeconds } from '../../domain/time'
@@ -12,7 +13,7 @@ import type { BoardCommandOptions, BoardSession } from '../command'
 import { parseCount, parseExecutionMode, requireCard, runBoardCommand, withBoardOptions } from '../command'
 import { CliError } from '../output'
 import type { CardView } from '../view'
-import { CARD_DETAIL_VIEW_FIELDS, CARD_VIEW_FIELDS, describeCard, describeCards, projectCard } from '../view'
+import { CARD_DETAIL_VIEW_FIELDS, CARD_VIEW_FIELDS, describeCard, describeCards, projectCard, withCardAttention } from '../view'
 
 /**
  * `kanbo card …` — the cards themselves.
@@ -30,6 +31,7 @@ interface ListOptions extends BoardCommandOptions {
   waiting?: boolean
   parent?: string
   active?: boolean
+  returned?: boolean
   text?: string
   updatedSince?: number
   label?: string[]
@@ -63,16 +65,10 @@ interface UpdateOptions extends BoardCommandOptions {
   executionMode?: Issue['executionMode']
 }
 
+/** A command that takes a line of text as `--text`, and `--content` for it too. */
 interface TextOptions extends BoardCommandOptions {
-  text: string
-}
-
-interface ContentOptions extends BoardCommandOptions {
-  content: string
-}
-
-interface WaitApprovalOptions extends BoardCommandOptions {
   text?: string
+  content?: string
 }
 
 export function registerCardCommands(program: Command): void {
@@ -87,6 +83,7 @@ export function registerCardCommands(program: Command): void {
     .option('--waiting', 'only cards waiting for a person')
     .option('--parent <card>', 'only the sub-cards of this card')
     .option('--active', 'only cards an agent is working on now')
+    .option('--returned', 'only cards a person sent back that nobody has picked up again')
     .option('--text <text>', 'only cards whose key, title or description contains this, ignoring case in any script (über finds Über)')
     .option('--updated-since <time>', 'only cards changed since then: unix seconds, 2026-09-28T10:00:00Z (a zone is required) or 2026-09-28 (UTC midnight)', parseMoment)
     .option('--label <labels>', 'only cards carrying every one of these labels (comma-separated, or repeat)', collectList, undefined)
@@ -103,6 +100,7 @@ export function registerCardCommands(program: Command): void {
           waitingForPerson: options.waiting ? true : undefined,
           parentIssueId: parent?.id,
           hasActiveRun: options.active ? true : undefined,
+          returned: options.returned ? true : undefined,
           text: options.text,
           updatedSince: options.updatedSince,
           labels: options.label,
@@ -111,7 +109,8 @@ export function registerCardCommands(program: Command): void {
           limit: options.all ? undefined : options.limit ?? DEFAULT_LIST_LIMIT,
         }).catch(rethrowUnknownColumn(options.column))
         const runs = await session.ops.readBoardProjectionForIssues(page.cards.map(row => row.id))
-        const cards = page.cards.map((row, index) => projectCard(row, page.columns, runs[index]))
+        const attention = await session.ops.readCardAttention(page.cards, runs.map(run => run.activeRun !== null))
+        const cards = withCardAttention(page.cards.map((row, index) => projectCard(row, page.columns, runs[index])), attention)
         noteMoreCards(page.total, options.offset ?? 0, cards.length)
         return { value: cards, text: describeCards(cards), fields: CARD_VIEW_FIELDS }
       })
@@ -202,11 +201,16 @@ export function registerCardCommands(program: Command): void {
     .command('status-line')
     .description('Say in one line what is happening on a card right now')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
-    .requiredOption('--text <text>', 'one sentence, present tense'))
+    .option('--text <text>', 'one sentence, present tense (required)')
+    .addOption(new Option('--content <text>', 'the same as --text').hideHelp()))
     .action(async (reference: string, options: TextOptions) => {
+      const text = readAliasedText('status-line', options, 'text', 'content')
+      if (text === undefined) {
+        throw new CliError(1, 'kanbo card status-line needs --text (one sentence). Example: kanbo card status-line TST-5 --text "Running the tests"')
+      }
       await runBoardCommand(options, 'write', async (session) => {
         const existing = await requireCard(session, reference)
-        return await presentCard(session, await session.ops.setStatusLine(existing.id, options.text, createCliActor()))
+        return await presentCard(session, await session.ops.setStatusLine(existing.id, text, createCliActor()))
       })
     })
 
@@ -214,11 +218,16 @@ export function registerCardCommands(program: Command): void {
     .command('comment')
     .description('Leave a comment on a card: a finding, a decision or a question')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
-    .requiredOption('--content <text>', 'what to say'))
-    .action(async (reference: string, options: ContentOptions) => {
+    .option('--content <text>', 'what to say (required)')
+    .addOption(new Option('--text <text>', 'the same as --content').hideHelp()))
+    .action(async (reference: string, options: TextOptions) => {
+      const content = readAliasedText('comment', options, 'content', 'text')
+      if (content === undefined) {
+        throw new CliError(1, 'kanbo card comment needs --content (the comment text). Example: kanbo card comment TST-5 --content "Added slugify with a test"')
+      }
       await runBoardCommand(options, 'write', async (session) => {
         const existing = await requireCard(session, reference)
-        const comment = await session.ops.addComment({ issueId: existing.id, content: options.content }, createCliActor())
+        const comment = await session.ops.addComment({ issueId: existing.id, content }, createCliActor())
         return {
           value: { id: comment.id, issueId: comment.issueId, content: comment.content, createdAt: comment.createdAt },
           text: `Commented on ${existing.id}`,
@@ -230,16 +239,37 @@ export function registerCardCommands(program: Command): void {
     .command('wait-approval')
     .description('Ask a person to review a card, and stop working on it')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
-    .option('--text <text>', 'the status line to leave, saying what you need'))
-    .action(async (reference: string, options: WaitApprovalOptions) => {
+    .option('--text <text>', 'the status line to leave, saying what you need')
+    .addOption(new Option('--content <text>', 'the same as --text').hideHelp()))
+    .action(async (reference: string, options: TextOptions) => {
+      const text = readAliasedText('wait-approval', options, 'text', 'content')
       await runBoardCommand(options, 'write', async (session) => {
         const existing = await requireCard(session, reference)
-        const waiting = await session.ops.waitApproval(existing.id, { statusLine: options.text }, createCliActor())
+        const waiting = await session.ops.waitApproval(existing.id, { statusLine: text }, createCliActor())
         return await presentCard(session, waiting)
       })
     })
 
   registerPullRequestCommands(card)
+}
+
+/**
+ * The text a command was given under its own option or the other one agents
+ * reach for (`--text` for a comment, `--content` for a status line): the MCP
+ * tools take both names too. Both, saying different things, is refused.
+ */
+function readAliasedText(
+  command: string,
+  options: TextOptions,
+  canonical: 'text' | 'content',
+  alias: 'text' | 'content',
+): string | undefined {
+  const own = options[canonical]
+  const other = options[alias]
+  if (own !== undefined && other !== undefined && own !== other) {
+    throw new CliError(1, `kanbo card ${command} got --${canonical} and --${alias} with different text; pass only --${canonical}.`)
+  }
+  return own ?? other
 }
 
 /** The fields a pull-request link prints, and the ones `--json` may name. */

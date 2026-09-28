@@ -8,5 +8,6 @@ export const cardPullRequestsTool = defineKanboTool({
   inputSchema: {
     card: cardArgument,
   },
+  example: { card: 'TST-5' },
   run: async (transport, input) => await transport.cardPullRequests(input),
 })

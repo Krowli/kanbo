@@ -4,6 +4,7 @@ import type { EntryRule } from '../domain/entry-rules'
 import { readEntryRules } from '../domain/entry-rules'
 import { toIssueView } from '../domain/issue-view'
 import { normalizeStatusName } from '../domain/status-name'
+import type { CardAttention, CardLastComment } from '../ops/approval'
 import type { BoardRunView } from '../ops/runs'
 import type { BoardSprint } from '../ops/sprints'
 import type { Issue, IssueRun, IssueStatus } from '../sqlite/schema'
@@ -41,6 +42,10 @@ export interface CardView {
   /** The run going on right now, `null` when nobody is working on the card. */
   activeRun: CardActiveRunView | null
   updatedAt: number
+  /** In a list: a person sent it back and nobody has picked it up again. */
+  returned?: true
+  /** In a list, for a card waiting for a person or returned: its latest comment, cut short. */
+  lastComment?: CardLastComment
 }
 
 /** Every field `kanbo card list|get --json` may ask for, in listing order. */
@@ -60,6 +65,8 @@ export const CARD_VIEW_FIELDS: readonly (keyof CardView)[] = [
   'attemptCount',
   'activeRun',
   'updatedAt',
+  'returned',
+  'lastComment',
 ]
 
 /** Every field `kanbo card get --json` may ask for: a card's, and the parts `--include` reads with it. */
@@ -179,6 +186,15 @@ export function projectCard(card: Issue, columns: IssueStatus[], runs: BoardRunP
   }
 }
 
+/** List cards with what `readCardAttention` says beside them — `returned` and `lastComment` only where there is something. */
+export function withCardAttention(cards: CardView[], attention: readonly CardAttention[]): CardView[] {
+  return cards.map((card, index) => ({
+    ...card,
+    ...(attention[index]?.returned ? { returned: true as const } : {}),
+    ...(attention[index]?.lastComment ? { lastComment: attention[index].lastComment } : {}),
+  }))
+}
+
 /** The run going on right now, trimmed to what a card line needs — not the agent id, the branch or the session behind it. */
 function projectCardActiveRun(run: BoardActiveRun | null): CardActiveRunView | null {
   return run === null
@@ -230,7 +246,7 @@ export function projectRun(run: BoardRunView): RunView {
 }
 
 /** One card per line: the key, the column it is in, and what it is called (`cardDisplayTitle`). */
-export function describeCards(cards: Pick<CardView, 'id' | 'title' | 'description' | 'column'>[]): string {
+export function describeCards(cards: Pick<CardView, 'id' | 'title' | 'description' | 'column' | 'returned' | 'lastComment'>[]): string {
   if (cards.length === 0) {
     return 'No cards'
   }
@@ -239,8 +255,20 @@ export function describeCards(cards: Pick<CardView, 'id' | 'title' | 'descriptio
   const column = (card: Pick<CardView, 'column'>): string => sanitizeTerminalText(card.column ?? '—')
   const columnWidth = Math.max(...cards.map(card => displayWidth(column(card))))
   return cards
-    .map(card => `${card.id.padEnd(keyWidth)}  ${padToWidth(column(card), columnWidth)}  ${sanitizeTerminalText(cardDisplayTitle(card))}`)
+    .map((card) => {
+      const line = `${card.id.padEnd(keyWidth)}  ${padToWidth(column(card), columnWidth)}  ${sanitizeTerminalText(cardDisplayTitle(card))}`
+      // What the card waits on, or why it came back, under it — so "what is waiting" is one command.
+      const said = card.lastComment
+        ? `\n${' '.repeat(keyWidth + 2)}${card.returned ? 'returned — ' : ''}${describeCommentAuthor(card.lastComment.author)}: ${sanitizeTerminalText(card.lastComment.text)}`
+        : card.returned ? `\n${' '.repeat(keyWidth + 2)}returned` : ''
+      return `${line}${said}`
+    })
     .join('\n')
+}
+
+/** Who wrote a comment, as a list line says it. */
+function describeCommentAuthor(author: CardLastComment['author']): string {
+  return author === 'user' ? 'person' : author
 }
 
 /** The whole card, for a person who asked about exactly one. */

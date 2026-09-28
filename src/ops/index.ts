@@ -1,8 +1,9 @@
 import type { BoardStore } from '../board-store'
 import type { ColumnSpec } from '../domain/column-templates'
+import type { Issue } from '../sqlite/schema'
 import type { IssueActivityResolver } from './activity'
 import { listActivity, listFieldChanges } from './activity'
-import { readApproval } from './approval'
+import { readApproval, readCardAttention } from './approval'
 import type { BulkUpdateCardsInput } from './card-batch'
 import { bulkUpdateCards, reorderCards } from './card-batch'
 import type { AddCommentInput, CreateCardInput, CreateCommentOnceInput, UpdateCardInput } from './cards'
@@ -139,6 +140,7 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
     assertReturnable: async (issueId: string, input: { toStatusName?: string | null }, actor: BoardActor) =>
       await assertReturnable(store, issueId, input, actor),
     readApproval: async (issueId: string) => await readApproval(store, issueId),
+    readCardAttention: async (cards: readonly Issue[], running: readonly boolean[]) => await readCardAttention(store, cards, running),
 
     // The pull requests a card names
     linkPullRequest: async (issueId: string, urlOrRef: string, actor: BoardActor, scope?: Scope) =>

@@ -1,14 +1,14 @@
 import type { Command } from 'commander'
 
+import { sessionRefFromEnvironment } from '../../domain/external-session-ref'
 import type { FinishRunInput } from '../../ops/runs'
+import { readRunFinishState, RUN_FINISH_STATES } from '../../ops/runs'
 import type { Issue, IssueRun } from '../../sqlite/schema'
 import { createCliActor, requireHumanActor } from '../actor'
 import type { BoardCommandOptions, BoardSession } from '../command'
 import { parseExecutionMode, requireCard, requireRun, runBoardCommand, withBoardOptions } from '../command'
 import { CliError } from '../output'
 import { projectRun, RUN_VIEW_FIELDS } from '../view'
-
-const RUN_STATES = ['finished', 'failed', 'stopped'] as const
 
 interface StartOptions extends BoardCommandOptions {
   agent: string
@@ -47,7 +47,7 @@ export function registerRunCommands(program: Command): void {
     .requiredOption('--agent <name>', 'your name, e.g. claude')
     .option('--branch <branch>', 'the branch the work happens on')
     .option('--execution-mode <mode>', 'where the work happens: worktree or main (default: what the card says)', parseExecutionMode)
-    .option('--session <ref>', 'your session, to find it later: claude:<session id> or codex:<session id>'))
+    .option('--session <ref>', 'your session, to find it later: claude:<session id> or codex:<session id> (default: the one Claude Code or Codex names in the environment)'))
     .action(async (reference: string, options: StartOptions) => {
       await runBoardCommand(options, 'write', async (session) => {
         const card = await requireCard(session, reference)
@@ -55,11 +55,13 @@ export function registerRunCommands(program: Command): void {
           agentName: options.agent,
           branch: options.branch,
           executionMode: options.executionMode,
-          externalSessionRef: options.session,
+          externalSessionRef: options.session ?? sessionRefFromEnvironment() ?? undefined,
           launchedByKind: 'external',
         }, createCliActor())
         const view = projectRun({ ...started, attempt: await attemptFor(session, started) })
-        return { value: view, text: `Run ${view.id} started on ${card.id}`, fields: RUN_VIEW_FIELDS }
+        // The next command this run needs, spelled out: agents guessed the finish state before.
+        const text = `Run ${view.id} started on ${card.id}\nWhen you are done: kanbo run finish ${view.id} --state finished`
+        return { value: view, text, fields: RUN_VIEW_FIELDS }
       })
     })
 
@@ -100,7 +102,7 @@ export function registerRunCommands(program: Command): void {
     .command('finish')
     .description('Say how the work ended')
     .argument('<runId>', 'the run, as `kanbo run start` printed it')
-    .requiredOption('--state <state>', `one of ${RUN_STATES.join(', ')}`, parseRunState)
+    .requiredOption('--state <state>', `one of ${RUN_FINISH_STATES.join(', ')} (completed, succeeded, done: finished; error: failed; cancelled, aborted: stopped)`, parseRunState)
     .option('--error-text <text>', 'what went wrong, for a failed run'))
     .action(async (runId: string, options: FinishOptions) => {
       await runBoardCommand(options, 'write', async (session) => {
@@ -125,9 +127,9 @@ async function attemptFor(session: BoardSession, run: IssueRun): Promise<number>
 }
 
 function parseRunState(value: string): FinishRunInput['state'] {
-  const state = RUN_STATES.find(candidate => candidate === value)
+  const state = readRunFinishState(value)
   if (!state) {
-    throw new CliError(1, `Unknown run state "${value}". Use one of ${RUN_STATES.join(', ')}.`)
+    throw new CliError(1, `Unknown run state "${value}". Use one of ${RUN_FINISH_STATES.join(', ')}.`)
   }
   return state
 }

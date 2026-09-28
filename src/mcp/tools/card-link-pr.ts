@@ -12,5 +12,7 @@ export const cardLinkPrTool = defineKanboTool({
     card: cardArgument,
     url: z.string().min(1).describe('The pull request, as https://github.com/<owner>/<repo>/pull/<number> or <owner>/<repo>#<number>.'),
   },
+  needs: { url: 'the pull request' },
+  example: { card: 'TST-5', url: 'https://github.com/owner/repo/pull/12' },
   run: async (transport, input) => await transport.cardLinkPullRequest(input),
 })

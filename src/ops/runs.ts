@@ -68,6 +68,33 @@ export interface FinishRunInput {
   statusLine?: string
 }
 
+/** The three ways a run ends, as the board stores them. */
+export const RUN_FINISH_STATES = ['finished', 'failed', 'stopped'] as const
+
+/**
+ * The other words agents write for those three — `completed` above all — each
+ * read as the state it means. Measured: agents wrote `completed` or `succeeded`
+ * first in most runs they finished themselves (docs/performance.md).
+ */
+export const RUN_FINISH_STATE_SYNONYMS: Readonly<Record<string, FinishRunInput['state']>> = {
+  completed: 'finished',
+  succeeded: 'finished',
+  success: 'finished',
+  done: 'finished',
+  error: 'failed',
+  errored: 'failed',
+  cancelled: 'stopped',
+  canceled: 'stopped',
+  aborted: 'stopped',
+}
+
+/** The finish state a word names — one of the three, or a synonym of one, any case — or `null` for none. */
+export function readRunFinishState(value: string): FinishRunInput['state'] | null {
+  const word = value.trim().toLowerCase()
+  return RUN_FINISH_STATES.find(state => state === word)
+    ?? (Object.hasOwn(RUN_FINISH_STATE_SYNONYMS, word) ? RUN_FINISH_STATE_SYNONYMS[word]! : null)
+}
+
 /** A run with the attempt number it is, counting from the card's first launch. */
 export type BoardRunView = IssueRun & { attempt: number }
 

@@ -84,7 +84,7 @@ export function buildKanboTools(
       register: (server: McpServer) => {
         server.registerTool(
           tool.name,
-          { title: tool.title, description: tool.description, inputSchema: tool.inputSchema },
+          { title: tool.title, description: tool.description, inputSchema: tool.registrationSchema },
           async (input: unknown) => await tool.run(transport, input),
         )
       },

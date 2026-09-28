@@ -310,18 +310,21 @@ const LARGE_ROWS: Counts = {
  * number to write down.
  */
 const QUERY_BUDGETS: Record<Engine, Counts> = {
+  // 0.3.0: two more per list (which cards were returned, and the last comment
+  // of the waiting and returned ones), two more per ready (the returned cards
+  // listed first) and one more per prime (the same, said first).
   sqlite: {
-    'cli card list': 4,
-    'cli card list, filtered': 5,
-    'cli ready': 4,
-    'cli prime': 2,
+    'cli card list': 6,
+    'cli card list, filtered': 7,
+    'cli ready': 6,
+    'cli prime': 3,
     'cli card get': 6,
     'cli board': 4,
     'ops card get + comments': 5,
-    'mcp kanbo_card_list': 3,
-    'mcp kanbo_card_list, filtered': 4,
-    'mcp kanbo_ready': 3,
-    'mcp kanbo_prime': 1,
+    'mcp kanbo_card_list': 5,
+    'mcp kanbo_card_list, filtered': 6,
+    'mcp kanbo_ready': 5,
+    'mcp kanbo_prime': 2,
     'mcp kanbo_card_get': 5,
     'mcp kanbo_card_get, everything': 8,
     'mcp kanbo_sprints': 3,
@@ -330,17 +333,17 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
   },
   // Two more per command: the schema guard an external board is opened behind.
   postgres: {
-    'cli card list': 6,
-    'cli card list, filtered': 7,
-    'cli ready': 6,
-    'cli prime': 4,
+    'cli card list': 8,
+    'cli card list, filtered': 9,
+    'cli ready': 8,
+    'cli prime': 5,
     'cli card get': 8,
     'cli board': 6,
     'ops card get + comments': 5,
-    'mcp kanbo_card_list': 3,
-    'mcp kanbo_card_list, filtered': 4,
-    'mcp kanbo_ready': 3,
-    'mcp kanbo_prime': 1,
+    'mcp kanbo_card_list': 5,
+    'mcp kanbo_card_list, filtered': 6,
+    'mcp kanbo_ready': 5,
+    'mcp kanbo_prime': 2,
     'mcp kanbo_card_get': 5,
     'mcp kanbo_card_get, everything': 8,
     'mcp kanbo_sprints': 3,
