@@ -175,25 +175,39 @@ export function createHttpTransport(input: KanboHttpTransportInput): KanboToolTr
     return column
   }
 
+  async function listCards(filters: Record<string, string>): Promise<z.infer<typeof IssueSchema>[]> {
+    const query = new URLSearchParams({ workspaceId: input.workspaceId(), ...filters })
+    return z.array(IssueSchema).parse(await request('GET', `/issues/?${query.toString()}`))
+  }
+
   /**
    * The cards a query picks. A server of the `/issues` routes filters on one
    * column and on a parent, and no more; the rest of the query is applied here,
    * to the cards it answered with, so the answer is the one the board file gives.
+   *
+   * The server filters on a parent's id only, and an agent may name the parent
+   * the way it names any card — `WOR-001`, `WOR-1`, `1`. The id is asked first;
+   * when no card answers it, the board is read whole to learn which card the
+   * reference names, and a reference that names none is refused as `issue_not_found`.
    */
   async function cardPage(cardQuery: KanboCardQuery): Promise<KanboCardPage> {
     const columns = await readColumns()
     const statusIds = cardQuery.columns === undefined
       ? null
       : new Set(cardQuery.columns.map(column => requireColumn(columns, column).id))
-    const query = new URLSearchParams({ workspaceId: input.workspaceId() })
-    if (statusIds?.size === 1) {
-      query.set('statusId', [...statusIds][0]!)
+    const filters: Record<string, string> = statusIds?.size === 1 ? { statusId: [...statusIds][0]! } : {}
+    let parent = cardQuery.parent
+    let rows = await listCards(parent === undefined ? filters : { ...filters, parentIssueId: parent })
+    if (parent !== undefined && rows.length === 0) {
+      const board = await listCards({})
+      const named = findCardRow(board, parent)
+      if (!named) {
+        throw new BoardError('issue_not_found', { issueId: parent })
+      }
+      parent = named.id
+      rows = board
     }
-    if (cardQuery.parent !== undefined) {
-      query.set('parentIssueId', cardQuery.parent)
-    }
-    const rows = z.array(IssueSchema).parse(await request('GET', `/issues/?${query.toString()}`))
-    const picked = rows.filter(row => matchesKanboCardQuery(row, cardQuery, statusIds))
+    const picked = rows.filter(row => matchesKanboCardQuery(row, { ...cardQuery, parent }, statusIds))
     return pageOf(picked.map(row => projectKanboCard(row, columns)), cardQuery)
   }
 
@@ -306,4 +320,23 @@ export function createHttpTransport(input: KanboHttpTransportInput): KanboToolTr
       }),
     )),
   }
+}
+
+/**
+ * The card a reference names among cards already read, the way the board file
+ * resolves one: its id, its number, or its key without the padding (`WOR-1`).
+ */
+function findCardRow<Row extends { id: string, number: number }>(rows: readonly Row[], reference: string): Row | undefined {
+  const trimmed = reference.trim()
+  const byId = rows.find(row => row.id === trimmed)
+  if (byId) {
+    return byId
+  }
+  const key = /^(?:(.+)-)?(\d+)$/.exec(trimmed)
+  if (!key) {
+    return undefined
+  }
+  const [, prefix, digits] = key
+  return rows.find(row => row.number === Number(digits)
+    && (prefix === undefined || row.id.slice(0, row.id.lastIndexOf('-')).toUpperCase() === prefix.toUpperCase()))
 }

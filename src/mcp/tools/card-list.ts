@@ -20,7 +20,7 @@ export const cardListTool = defineKanboTool({
     column: z.string().min(1).optional().describe('Only cards in this column, by its slug or name.'),
     columns: z.array(z.string().min(1)).optional().describe('Only cards in any of these columns.'),
     waitingForPerson: z.boolean().optional().describe('true: only cards waiting for a person; false: none of those.'),
-    parent: z.string().min(1).optional().describe('Only the sub-cards of this card, by its id.'),
+    parent: z.string().min(1).optional().describe('Only the sub-cards of this card: its id (WOR-001), key without padding (WOR-1) or number (1).'),
     hasActiveRun: z.boolean().optional().describe('true: only cards an agent is working on now; false: only cards nobody is.'),
     text: z.string().min(1).optional().describe('Only cards whose id, title or description contains this, ignoring case.'),
     updatedSince: z.union([z.number().int().nonnegative(), z.string().min(1)]).optional()

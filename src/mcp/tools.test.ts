@@ -575,6 +575,19 @@ describe('the board\'s tools over a real board', () => {
       expect(fromServer, JSON.stringify(input)).toBe(fromBoardFile)
     }
 
+    // A parent is named the way any card is; over HTTP it is resolved before
+    // the server, which filters on the id alone, is asked.
+    const parentNumber = String(parent.number)
+    for (const spelling of [parent.id, `${parent.id.split('-')[0]!.toLowerCase()}-${parentNumber}`, parentNumber]) {
+      const fromBoardFile = readText(await tools.kanbo_card_list!.run(transport, { parent: spelling }))
+      expect(JSON.parse(fromBoardFile).cards.map((card: { id: string }) => card.id), spelling).toEqual([running.id])
+      expect(readText(await tools.kanbo_card_list!.run(overHttp, { parent: spelling })), spelling).toBe(fromBoardFile)
+    }
+    const unknownParent = await tools.kanbo_card_list!.run(overHttp, { parent: 'WOR-404' })
+    expect(unknownParent.isError).toBe(true)
+    expect(readText(unknownParent)).toBe('issue_not_found {"issueId":"WOR-404"}')
+    expect((await tools.kanbo_card_list!.run(transport, { parent: 'WOR-404' })).isError).toBe(true)
+
     for (const [updatedSince, reason] of [
       ['last tuesday-ish', 'neither unix seconds nor an ISO date'],
       [Date.now(), 'looks like milliseconds — pass seconds or an ISO date'],
