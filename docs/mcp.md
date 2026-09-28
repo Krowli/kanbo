@@ -36,11 +36,11 @@ All tools take the card as `card`, spelled as the board prints it (`MAN-012`), a
 | Tool | Does | Inputs | CLI equivalent |
 | --- | --- | --- | --- |
 | `kanbo_prime` | Read what this board is: its columns, what each one means, and the rules a card travels by. Run this first. | — | `kanbo prime` |
-| `kanbo_ready` | List the cards that are spelled out, that nobody is working on and that are waiting for no one, in board order. | `limit` (integer, optional) | `kanbo ready` |
+| `kanbo_ready` | The cards to take next: in To Do, nobody working on them, waiting for no one, in board order — take the first. Compact cards, 10 by default, with `total`. | `limit` (integer, default 10), `offset`, `detail`, `fields` — all optional | `kanbo ready` |
 | `kanbo_columns` | List the columns in board order, each with its slug, what it means, and its `entryRules`. | — | `kanbo columns list` |
-| `kanbo_sprints` | List milestones as sprints by start date — dates in unix seconds, open and done card counts — with `current: true` on the one running now. Read-only. | — | `kanbo sprint list` |
-| `kanbo_card_get` | Read one card in full, including its parent (`parentIssueId`) and subtasks (`subCards`). | `card` (required) | `kanbo card get <id>` |
-| `kanbo_card_list` | List the cards in board order. | `column` (optional), `limit` (integer, optional) | `kanbo card list` |
+| `kanbo_sprints` | List milestones as sprints by start date — dates in unix seconds, open and done card counts (counted by the database, not by reading the cards) — with `current: true` on the one running now. Read-only. | — | `kanbo sprint list` |
+| `kanbo_card_get` | Read one card in full — including its parent (`parentIssueId`) — with its last 10 comments (`comments`, `commentCount`) and its subtasks (`subCards`), in one call. | `card` (required); `include` (array of `comments`, `subCards`, `runs`, `history`, `prs`; `["comments","subCards"]` when absent, `[]` for the card alone); `commentLimit` (integer, default 10) | `kanbo card get <id> [--include <parts>] [--comments <count>]` |
+| `kanbo_card_list` | Find cards in one call, in board order; filters combine. Compact cards, 50 by default, with `total` and `nextOffset`. | all optional: `column`, `columns` (array), `waitingForPerson`, `parent`, `hasActiveRun`, `text`, `updatedSince` (unix seconds or ISO date), `labels` (array, all of them), `priority` (array), `limit` (default 50), `offset`, `detail` (`compact` \| `full`), `fields` (array) | `kanbo card list [--column <c>] [--waiting] [--parent <id>] [--active] [--text <t>] [--updated-since <time>] [--label <l>] [--priority <p>] [--offset <n>]` |
 | `kanbo_card_create` | Put a new card on the board; pass `parent` to create a subtask. | `title`, `description`, `column`, `parent`, `executionMode` (`worktree` \| `main`) — all optional | `kanbo card create --description <text> [--title <title>] [--parent <id>]` |
 | `kanbo_card_update` | Change a card's title, description, priority, labels or execution mode. | `card` (required); `title`, `description`, `priority` (`none` \| `low` \| `medium` \| `high` \| `urgent`), `labels` (array of strings, replaces), `executionMode` | `kanbo card update <id> [--title <title>] [--description <text>]` |
 | `kanbo_card_move` | Move a card to another column. A column with `entryRules` refuses a card that does not meet them, listing what is missing. | `card`, `column` (both required) | `kanbo card move <id> <column>` |
@@ -53,6 +53,35 @@ All tools take the card as `card`, spelled as the board prints it (`MAN-012`), a
 | `kanbo_run_finish` | Record how a run you started ended. | `run` (required, the id `kanbo_run_start` gave back), `state` (required: `finished` \| `failed` \| `stopped`), `errorText` | `kanbo run finish <runId> --state <state>` |
 
 The exact JSON Schema of each tool's input is in `kanbo capabilities --json` (`tools[].inputSchema`).
+
+### One question, one call
+
+Every question below is one call. [Agent efficiency](agent-efficiency.md) lists how many each took before.
+
+| Question | Call |
+| --- | --- |
+| What do I take next? | `kanbo_ready` |
+| What is waiting for a person? | `kanbo_card_list` with `waitingForPerson: true` |
+| What is being worked on right now? | `kanbo_card_list` with `hasActiveRun: true` |
+| What is in progress or in review? | `kanbo_card_list` with `columns: ["in_progress", "in_review"]` |
+| What are the subtasks of MAN-012? | `kanbo_card_list` with `parent: "MAN-012"` (or `kanbo_card_get`: `subCards`) |
+| Which cards mention "parser"? | `kanbo_card_list` with `text: "parser"` |
+| What changed since I last looked? | `kanbo_card_list` with `updatedSince` (the time you last looked) |
+| A card with its comments and subtasks | `kanbo_card_get` |
+| …and its runs, history and pull requests | `kanbo_card_get` with `include: ["comments","subCards","runs","history","prs"]` |
+
+### What a list answers with
+
+`kanbo_card_list` and `kanbo_ready` answer with one JSON object — `total` (how many cards the question picks), `offset` when it is not 0, `more` and `nextOffset` when there is another page — and `cards`, one card per line:
+
+```json
+{"total":1000,"more":950,"nextOffset":50,"cards":[
+{"id":"MAN-012","title":"Fix the parser","column":"in_progress","statusLine":"writing the test","attempt":1,"activeRun":{"agentName":"Claude","startedAt":1790000000},"updatedAt":1790000100},
+{"id":"MAN-013","title":"Review the docs","column":"in_review","waitingFor":"human","updatedAt":1790000200}
+]}
+```
+
+A compact card is `id`, `title` (the description's first line when the card has no title of its own), `column` (the slug `kanbo_card_move` takes), `statusLine`, `waitingFor`, `parentId`, `attempt` (runs so far), `activeRun` (`agentName`, `startedAt`) and `updatedAt`; a field that is empty is left out. `detail: "full"` prints every field of each card, description, labels and the run's id included — the shape `kanbo_card_get` prints; `fields: ["description", "labels"]` prints `id` and only those.
 
 ## What is deliberately missing
 

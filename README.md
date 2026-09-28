@@ -79,6 +79,7 @@ Every entry point — the CLI, the MCP server, the HTTP server — calls the sam
 - [Storage](docs/storage.md) — board files, shared Postgres/Supabase, roles, schema, migrations
 - [Configuration](docs/configuration.md) — `KANBO_*` environment variables and `.kanbo/binding.json`
 - [Performance](docs/performance.md) — latency on boards of 100 to 10,000 cards, statements per read, MCP answer sizes, how to run the bench
+- [Agent efficiency](docs/agent-efficiency.md) — the questions an agent asks, one call each: filters, pages, compact cards
 - [FAQ](docs/faq.md) · [Troubleshooting](docs/troubleshooting.md)
 - [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Changelog](CHANGELOG.md)
 

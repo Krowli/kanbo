@@ -190,6 +190,7 @@ async function benchBoard(engine, size) {
     const kanbo = async (...words) => await quietly(async () =>
       await createKanboProgram().exitOverride().parseAsync([...words, ...board.target], { from: 'user' }))
     record('cli (in-process)', 'card list', await time(counter, iterations, async () => await kanbo('card', 'list')))
+    record('cli (in-process)', 'card list --column in_progress', await time(counter, iterations, async () => await kanbo('card', 'list', '--column', 'in_progress')))
     record('cli (in-process)', 'ready', await time(counter, iterations, async () => await kanbo('ready')))
     record('cli (in-process)', 'prime', await time(counter, iterations, async () => await kanbo('prime')))
     record('cli (in-process)', 'card get', await time(counter, iterations, async index => await kanbo('card', 'get', String(cardNumber(index)))))
@@ -209,20 +210,25 @@ async function benchBoard(engine, size) {
         }
         return result.content.map(part => part.text ?? '').join('')
       }
+      // [row label, tool, arguments]: the defaults an agent calls with, and the filtered and full reads.
       const readTools = [
-        ['kanbo_prime', () => ({})],
-        ['kanbo_ready', () => ({})],
-        ['kanbo_columns', () => ({})],
-        ['kanbo_card_list', () => ({})],
-        ['kanbo_card_get', index => ({ card: String(cardNumber(index)) })],
-        ['kanbo_card_pull_requests', index => ({ card: String(cardNumber(index)) })],
-        ['kanbo_sprints', () => ({})],
+        ['kanbo_prime', 'kanbo_prime', () => ({})],
+        ['kanbo_ready', 'kanbo_ready', () => ({})],
+        ['kanbo_columns', 'kanbo_columns', () => ({})],
+        ['kanbo_card_list', 'kanbo_card_list', () => ({})],
+        ['kanbo_card_list { waitingForPerson }', 'kanbo_card_list', () => ({ waitingForPerson: true })],
+        ['kanbo_card_list { column: in_progress }', 'kanbo_card_list', () => ({ column: 'in_progress' })],
+        ['kanbo_card_list { detail: full }', 'kanbo_card_list', () => ({ detail: 'full' })],
+        ['kanbo_card_get', 'kanbo_card_get', index => ({ card: String(cardNumber(index)) })],
+        ['kanbo_card_get { include: all }', 'kanbo_card_get', index => ({ card: String(cardNumber(index)), include: ['comments', 'subCards', 'runs', 'history', 'prs'] })],
+        ['kanbo_card_pull_requests', 'kanbo_card_pull_requests', index => ({ card: String(cardNumber(index)) })],
+        ['kanbo_sprints', 'kanbo_sprints', () => ({})],
       ]
-      for (const [name, input] of readTools) {
-        record('mcp', name, await time(counter, iterations, async index => await tool(name, input(index))))
+      for (const [label, name, input] of readTools) {
+        record('mcp', label, await time(counter, iterations, async index => await tool(name, input(index))))
         if (payloadSizes.includes(size)) {
           const text = await tool(name, input(1))
-          payloads.push({ engine, size, tool: name, chars: text.length, tokens: Math.round(text.length / 4) })
+          payloads.push({ engine, size, tool: label, chars: text.length, tokens: Math.round(text.length / 4) })
         }
       }
       record('mcp', 'kanbo_card_create', await time(counter, iterations, async index => await tool('kanbo_card_create', { title: `Agent card ${index}` })))

@@ -54,8 +54,8 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo columns remove <column>` | Remove a column, moving its cards to `--move-cards-to <column>`. To Do stays. **Person only.** |
 | `kanbo columns template <template>` | Put `standard`, `simple` or `review-qa` on an empty board, or with `--add-missing` add the template's columns the board lacks. **Person only.** |
 | `kanbo columns add-standard` | Add any of the standard columns this board is missing — `columns template standard --add-missing`. **Person only.** |
-| `kanbo card list` | Cards in board order. |
-| `kanbo card get <card>` | One card, by key or number. |
+| `kanbo card list` | Cards in board order, 50 at a time; filters combine. |
+| `kanbo card get <card>` | One card, by key or number, with its last comments and its sub-cards. |
 | `kanbo card create` | Put a new card on the board. |
 | `kanbo card update <card>` | Change a card's fields. |
 | `kanbo card move <card> <column>` | Move a card to another column. |
@@ -318,9 +318,10 @@ Print the columns of this board and the rules a card travels by, then the comman
 
 | Option | Meaning |
 | --- | --- |
-| `--limit <count>` | How many cards to print. |
+| `--limit <count>` | How many cards to print (10 when left out). |
+| `--all` | Every ready card. |
 
-Lists To Do cards with no run and nobody's turn but the agent's, in board order.
+Lists To Do cards with no run and nobody's turn but the agent's, in board order. When there are more than it prints, one line on stderr says how many.
 
 ## `kanbo board`
 
@@ -370,8 +371,8 @@ All of these but `list` and `describe` are **person only**: in an agent's shell 
 
 | Command | Options |
 | --- | --- |
-| `card list` | `--column <column>` only cards in this column; `--limit <count>` how many. |
-| `card get <card>` | — |
+| `card list` | Filters, all combined: `--column <columns>` only cards in these columns (comma-separated, or repeat the option); `--waiting` only cards waiting for a person; `--parent <card>` only its sub-cards; `--active` only cards an agent is working on now; `--text <text>` key, title or description contains it, ignoring case; `--updated-since <time>` changed since then (unix seconds or a date such as `2026-09-28T10:00:00Z`); `--label <labels>` carrying all of them; `--priority <priorities>` any of them. Paging: `--limit <count>` (50 when left out), `--offset <count>`, `--all`. When more cards match than it prints, one line on stderr says how many and where the next page starts. |
+| `card get <card>` | `--include <parts>` what to show with the card — `comments`, `subCards`, `runs`, `history`, `prs`, comma-separated (`comments,subCards` when left out; `none` for the card alone); `--comments <count>` how many of the latest comments (10). |
 | `card create` | `--title <title>` (the card's own key when absent); `--description <text>`; `--column <column>` (the first column when absent); `--parent <card>` the card this one belongs under; `--execution-mode <mode>` `worktree` or `main`. |
 | `card update <card>` | `--title <title>`; `--description <text>`; `--priority <priority>` one of `none`, `low`, `medium`, `high`, `urgent`; `--labels <labels>` comma-separated, replacing the current ones; `--execution-mode <mode>`. |
 | `card move <card> <column>` | — |
@@ -382,7 +383,7 @@ All of these but `list` and `describe` are **person only**: in an agent's shell 
 | `card pr list <card>` | — |
 | `card pr remove <card> <linkId>` | `linkId` as `card pr list` prints it. Anyone but a person may only remove a link it created. |
 
-Fields `--json` can name on a card: `id`, `number`, `title`, `description`, `column`, `columnSlug`, `statusLine`, `waitingFor`, `priority`, `labels`, `executionMode`, `parentIssueId`, `attemptCount`, `activeRun` (`{ id, agentName, state, startedAt }` or `null`), `updatedAt`.
+Fields `--json` can name on a card: `id`, `number`, `title`, `description`, `column`, `columnSlug`, `statusLine`, `waitingFor`, `priority`, `labels`, `executionMode`, `parentIssueId`, `attemptCount`, `activeRun` (`{ id, agentName, state, startedAt }` or `null`), `updatedAt`. `card get` adds what `--include` read: `subCards` (`{ id, title, columnSlug }`), `comments` (`{ id, author, content, createdAt }`, `author` one of `user`, `agent`, `provider-target`, `system`) and `commentCount`, `runs`, `history` (`{ field, from, to, actor, createdAt }`), `pullRequests`.
 
 In a person's shell, `card create`, `card update` and `card move` into a column whose entry rules the card does not meet go through and print one `kanbo: warning: …` line per unmet rule; in an agent's shell they are refused with exit `1`.
 
