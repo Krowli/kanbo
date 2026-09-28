@@ -4,7 +4,7 @@ import { resolve } from 'node:path'
 import { maskDatabaseUrl } from '../domain/database-url'
 import type { BoardFileOwner } from '../sqlite/open-database'
 import { readBoardFileContents } from '../sqlite/open-database'
-import { isAgentShell } from './actor'
+import { describePersonOverride, isAgentShell } from './actor'
 import { findBinding } from './binding'
 import { CliError, EXIT_NOT_RESOLVED } from './output'
 
@@ -36,7 +36,11 @@ import { CliError, EXIT_NOT_RESOLVED } from './output'
 export const DATABASE_NOT_FOUND_MESSAGE
   = 'This folder has no kanbo board yet. Run kanbo to set one up (or kanbo init --yes for the defaults).'
 
-/** The same, in an agent's shell: setting a board up is a person's call. Every agent-facing "no board" says exactly this. */
+/**
+ * The same, in an agent's shell: setting a board up is a person's call. Every
+ * agent-facing "no board" says exactly this; in a shell (not the MCP server) a
+ * second line tells a person in an editor terminal how to run kanbo anyway.
+ */
 export const DATABASE_NOT_FOUND_AGENT_MESSAGE = 'This folder has no kanbo board yet. Ask a person to run kanbo here.'
 
 /**
@@ -45,7 +49,7 @@ export const DATABASE_NOT_FOUND_AGENT_MESSAGE = 'This folder has no kanbo board 
  * `kanbo`) asks by type rather than by the words of the message.
  */
 export class BoardNotFoundError extends CliError {
-  constructor(message = isAgentShell() ? DATABASE_NOT_FOUND_AGENT_MESSAGE : DATABASE_NOT_FOUND_MESSAGE) {
+  constructor(message = isAgentShell() ? `${DATABASE_NOT_FOUND_AGENT_MESSAGE}\n${describePersonOverride('kanbo')}` : DATABASE_NOT_FOUND_MESSAGE) {
     super(EXIT_NOT_RESOLVED, message)
     this.name = 'BoardNotFoundError'
   }

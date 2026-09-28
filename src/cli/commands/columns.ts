@@ -4,7 +4,7 @@ import { Option } from 'commander'
 import { COLUMN_TEMPLATE_IDS, COLUMN_TEMPLATES } from '../../domain/column-templates'
 import { ENTRY_RULES } from '../../domain/entry-rules'
 import type { IssueStatus } from '../../sqlite/schema'
-import { requireHumanActor } from '../actor'
+import { requireHumanActor, typedCommand } from '../actor'
 import {
   addColumn,
   applyTemplate,
@@ -103,10 +103,10 @@ export function registerColumnsCommands(program: Command): void {
     .argument('<column>', 'the column, by slug, name or id')
     .option('--require <rules>', `comma-separated: ${ENTRY_RULES.join(', ')}`)
     .option('--clear', 'ask nothing of a card entering the column'))
-    .action(async (column: string, options: ColumnRulesOptions) => {
+    .action(async (column: string, options: ColumnRulesOptions, command: Command) => {
       // Checked before the board is opened, like `approve`: a refusal leaves
       // the board exactly as it found it.
-      const actor = requireHumanActor('columns rules')
+      const actor = requireHumanActor('columns rules', typedCommand(command))
       const rules = readRequestedRules(options)
 
       await runBoardCommand(options, 'write', async (session) => {
@@ -124,8 +124,8 @@ export function registerColumnsCommands(program: Command): void {
     .option('--before <column>', 'put it right before this column')
     .option('--description <text>', 'when a card belongs in it, in one line agents read')
     .addOption(new Option('--category <category>', 'what kind of column it is').choices(COLUMN_CATEGORIES)))
-    .action(async (name: string, options: AddColumnOptions) => {
-      const actor = requireHumanActor('columns add')
+    .action(async (name: string, options: AddColumnOptions, command: Command) => {
+      const actor = requireHumanActor('columns add', typedCommand(command))
       await runBoardCommand(options, 'write', async session => await addColumn(session, { ...options, name }, actor))
     })
 
@@ -134,8 +134,8 @@ export function registerColumnsCommands(program: Command): void {
     .description('Rename a column')
     .argument('<column>', 'the column, by slug, name or id')
     .argument('<name>', 'the new name'))
-    .action(async (column: string, name: string, options: BoardCommandOptions) => {
-      const actor = requireHumanActor('columns rename')
+    .action(async (column: string, name: string, options: BoardCommandOptions, command: Command) => {
+      const actor = requireHumanActor('columns rename', typedCommand(command))
       await runBoardCommand(options, 'write', async session => await renameColumn(session, column, name, actor))
     })
 
@@ -147,8 +147,8 @@ export function registerColumnsCommands(program: Command): void {
     .option('--last', 'to the end of the board')
     .option('--before <column>', 'right before this column')
     .option('--after <column>', 'right after this column'))
-    .action(async (column: string, options: MoveColumnOptions) => {
-      const actor = requireHumanActor('columns move')
+    .action(async (column: string, options: MoveColumnOptions, command: Command) => {
+      const actor = requireHumanActor('columns move', typedCommand(command))
       const position = readColumnPosition(options)
       await runBoardCommand(options, 'write', async session => await moveColumn(session, column, position, actor))
     })
@@ -158,8 +158,8 @@ export function registerColumnsCommands(program: Command): void {
     .description('Remove a column; its cards move to another column')
     .argument('<column>', 'the column, by slug, name or id')
     .option('--move-cards-to <column>', 'where the cards in it go; asked at a terminal when it holds any'))
-    .action(async (column: string, options: RemoveColumnOptions) => {
-      const actor = requireHumanActor('columns remove')
+    .action(async (column: string, options: RemoveColumnOptions, command: Command) => {
+      const actor = requireHumanActor('columns remove', typedCommand(command))
       let moveCardsTo = options.moveCardsTo ?? null
       if (moveCardsTo === null && canPrompt() && !isMachineOutput(options)) {
         const decision = await askWhereCardsGo(column, options)
@@ -177,8 +177,8 @@ export function registerColumnsCommands(program: Command): void {
     .description('Set up columns from a template: standard, simple or review-qa')
     .argument('<template>', COLUMN_TEMPLATE_IDS.join(', '))
     .option('--add-missing', 'on a board that has columns, add the ones of the template it lacks'))
-    .action(async (template: string, options: TemplateOptions) => {
-      const actor = requireHumanActor('columns template')
+    .action(async (template: string, options: TemplateOptions, command: Command) => {
+      const actor = requireHumanActor('columns template', typedCommand(command))
       const id = readTemplateId(template)
       await runBoardCommand(options, 'write', async session => await applyTemplate(session, id, options.addMissing === true, actor))
     })
@@ -186,8 +186,8 @@ export function registerColumnsCommands(program: Command): void {
   withBoardOptions(columns
     .command('add-standard')
     .description('Add the standard columns this board is missing'))
-    .action(async (options: BoardCommandOptions) => {
-      const actor = requireHumanActor('columns add-standard')
+    .action(async (options: BoardCommandOptions, command: Command) => {
+      const actor = requireHumanActor('columns add-standard', typedCommand(command))
       await runBoardCommand(options, 'write', async (session) => {
         const { statuses, added } = await session.ops.applyColumnTemplate(
           session.workspace.id,

@@ -10,7 +10,7 @@ import type { BoardActor } from '../ops/types'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
-import { COLUMN_RULES_IS_HUMAN_MESSAGE } from './actor'
+import { describeColumnRulesRefusal } from './actor'
 import { registerCardCommands } from './commands/card'
 import { registerColumnsCommands } from './commands/columns'
 import { describeFailure } from './failure'
@@ -69,7 +69,11 @@ describe('column entry rules from a terminal', () => {
     const before = await readChangeSeq(store)
     vi.stubEnv(variable, variable === 'KANBO_ACTOR_KIND' ? 'agent' : 'session-1')
 
-    const refusal = expect.objectContaining({ exitCode: 4, message: COLUMN_RULES_IS_HUMAN_MESSAGE })
+    const refusal = expect.objectContaining({
+      exitCode: 4,
+      message: expect.stringMatching(/^Only a person can set what a column asks of a card\. .*\nIf you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo columns rules in_review --clear /),
+    })
+    expect(describeColumnRulesRefusal('KANBO_ACTOR_KIND=agent', 'kanbo columns rules x')).toContain('(KANBO_ACTOR_KIND=agent)')
     await expect(run(['columns', 'rules', 'in_review', '--clear'])).rejects.toThrowError(refusal)
 
     expect(await readChangeSeq(store)).toBe(before)

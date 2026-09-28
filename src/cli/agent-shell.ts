@@ -21,15 +21,18 @@ export const AGENT_KIND_MARKER = 'KANBO_ACTOR_KIND=agent'
  *   https://geminicli.com/docs/tools/shell/
  * - Cursor: `CURSOR_AGENT`, set (value not documented) in the Agent's
  *   terminal. https://cursor.com/docs/agent/tools/terminal
- *
- * Not handled: Codex documents no variable of its own in the commands it runs
- * (https://learn.chatgpt.com/docs/config-file/environment-variables, config-advanced);
- * set `KANBO_ACTOR_KIND=agent` for it.
+ * - Codex: `CODEX_THREAD_ID`, its thread (session) id, in every shell command
+ *   it runs (`populate_env`, codex-rs/protocol/src/shell_environment.rs); seen
+ *   in headless runs of Codex 0.153.0 on 2026-09-28 (the T35 evaluation). Not
+ *   in Codex's user documentation — the source and the runs are what vouch
+ *   for it. A person whose terminal inherits it (Codex started a shell for
+ *   them) says `KANBO_ACTOR_KIND=person`.
  */
 export const AGENT_SHELL_MARKERS: readonly { variable: string, matches: (value: string) => boolean, label: string }[] = [
   { variable: 'CLAUDECODE', matches: value => value === '1', label: 'CLAUDECODE=1' },
   { variable: 'GEMINI_CLI', matches: value => value === '1', label: 'GEMINI_CLI=1' },
   { variable: 'CURSOR_AGENT', matches: value => value !== '', label: 'CURSOR_AGENT' },
+  { variable: 'CODEX_THREAD_ID', matches: value => value !== '', label: 'CODEX_THREAD_ID' },
 ]
 
 /**

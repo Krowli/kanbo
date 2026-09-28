@@ -16,7 +16,7 @@ import { migrateBoardFile } from '../sqlite/migrate'
 import { assertBoardSchema, markBoardFileOwnedByKanbo, openBoardDatabase } from '../sqlite/open-database'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { seedHostWorkspace } from '../testing/board-database'
-import { APPROVAL_IS_HUMAN_MESSAGE } from './actor'
+import { describeApprovalRefusal } from './actor'
 import { writeBinding } from './binding'
 import { registerApproveCommand } from './commands/approve'
 import { registerCardCommands } from './commands/card'
@@ -165,7 +165,7 @@ describe('the command line on a board file of this project\'s own', () => {
     const before = await readChangeSeq(store)
     vi.stubEnv('KANBO_ACTOR_KIND', 'agent')
 
-    const refusal = expect.objectContaining({ exitCode: 4, message: APPROVAL_IS_HUMAN_MESSAGE })
+    const refusal = expect.objectContaining({ exitCode: 4, message: expect.stringContaining(describeApprovalRefusal('KANBO_ACTOR_KIND=agent', `kanbo approve ${card.id}`)) })
     await expect(run(['approve', card.id])).rejects.toThrowError(refusal)
 
     expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')

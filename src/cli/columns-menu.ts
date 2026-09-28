@@ -75,7 +75,7 @@ const NOTHING_TO_MOVE = 'Nothing to move — this board has no columns yet.'
 async function act(ui: Ui, choice: Exclude<MenuChoice, 'done'>, columns: IssueStatus[]): Promise<boolean> {
   switch (choice) {
     case 'add': {
-      const actor = requireHumanActor('columns add')
+      const actor = requireHumanActor('columns add', 'kanbo columns')
       const name = (await ui.text({
         message: 'What is the new column called?',
         validate: value => (value?.trim() ? undefined : 'Give the column a name.'),
@@ -92,7 +92,7 @@ async function act(ui: Ui, choice: Exclude<MenuChoice, 'done'>, columns: IssueSt
       return true
     }
     case 'rename': {
-      const actor = requireHumanActor('columns rename')
+      const actor = requireHumanActor('columns rename', 'kanbo columns')
       if (columns.length === 0) {
         say(ui, NOTHING_TO_RENAME)
         return false
@@ -107,7 +107,7 @@ async function act(ui: Ui, choice: Exclude<MenuChoice, 'done'>, columns: IssueSt
       return true
     }
     case 'move': {
-      const actor = requireHumanActor('columns move')
+      const actor = requireHumanActor('columns move', 'kanbo columns')
       if (columns.length === 0) {
         say(ui, NOTHING_TO_MOVE)
         return false
@@ -119,7 +119,7 @@ async function act(ui: Ui, choice: Exclude<MenuChoice, 'done'>, columns: IssueSt
       return true
     }
     case 'remove': {
-      const actor = requireHumanActor('columns remove')
+      const actor = requireHumanActor('columns remove', 'kanbo columns')
       const removable = columns.filter(column => normalizeStatusName(column.name) !== READY_COLUMN_SLUG)
       if (removable.length === 0) {
         say(ui, NOTHING_TO_REMOVE)
@@ -135,7 +135,7 @@ async function act(ui: Ui, choice: Exclude<MenuChoice, 'done'>, columns: IssueSt
       return true
     }
     case 'template': {
-      const actor = requireHumanActor('columns template')
+      const actor = requireHumanActor('columns template', 'kanbo columns')
       const id = await ui.select<ColumnTemplateId>({
         message: 'Which template? Only the columns this board lacks are added; none is taken away.',
         options: COLUMN_TEMPLATE_IDS.map(template => ({

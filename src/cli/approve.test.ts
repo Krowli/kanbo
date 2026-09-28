@@ -11,7 +11,7 @@ import type { BoardActor } from '../ops/types'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
-import { APPROVAL_IS_HUMAN_MESSAGE, RETURN_IS_HUMAN_MESSAGE, RUN_SESSION_REF_IS_HUMAN_MESSAGE, SPRINT_CLOSE_IS_HUMAN_MESSAGE } from './actor'
+import { describeApprovalRefusal, describeReturnRefusal, describeRunSessionRefRefusal, describeSprintCloseRefusal } from './actor'
 import { registerApproveCommand } from './commands/approve'
 import { registerReturnCommand } from './commands/return'
 import { registerRunCommands } from './commands/run'
@@ -28,6 +28,7 @@ const AGENT_TOOL_MARKS = [
   ['CLAUDECODE', '1', 'CLAUDECODE=1'],
   ['GEMINI_CLI', '1', 'GEMINI_CLI=1'],
   ['CURSOR_AGENT', '1', 'CURSOR_AGENT'],
+  ['CODEX_THREAD_ID', '019a0000-0000-7000-8000-000000000000', 'CODEX_THREAD_ID'],
 ] as const
 
 describe('approving and returning from a terminal', () => {
@@ -62,7 +63,17 @@ describe('approving and returning from a terminal', () => {
     registerReturnCommand(program)
     registerRunCommands(program)
     registerSprintCommands(program)
-    await program.parseAsync([...argv, '--db', board.path, '--workspace', WORKSPACE.id], { from: 'user' })
+    await program.parseAsync(typed(argv), { from: 'user' })
+  }
+
+  /** The words `run` hands the program: what a person typed, and the board it names. */
+  function typed(argv: string[]): string[] {
+    return [...argv, '--db', board.path, '--workspace', WORKSPACE.id]
+  }
+
+  /** The refusal for `argv`, as the command line would print it: the command it names is the one typed. */
+  function refusalOf(describe: (marker: string, command: string) => string, argv: string[], marker = 'KANBO_ACTOR_KIND=agent') {
+    return expect.objectContaining({ exitCode: 4, message: describe(marker, ['kanbo', ...typed(argv)].join(' ')) })
   }
 
   it.each(AGENT_SHELL)('refuses an approval in a shell started for an agent (%s)', async (variable) => {
@@ -70,8 +81,7 @@ describe('approving and returning from a terminal', () => {
     const before = await readChangeSeq(store)
     vi.stubEnv(variable, variable === 'KANBO_ACTOR_KIND' ? 'agent' : 'session-1')
 
-    const refusal = expect.objectContaining({ exitCode: 4, message: APPROVAL_IS_HUMAN_MESSAGE })
-    await expect(run(['approve', card.id])).rejects.toThrowError(refusal)
+    await expect(run(['approve', card.id])).rejects.toThrowError(refusalOf(describeApprovalRefusal, ['approve', card.id]))
 
     expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')
     expect(await store.comments.listByIssue(card.id)).toHaveLength(0)
@@ -82,16 +92,27 @@ describe('approving and returning from a terminal', () => {
     const card = await createWaitingCard()
     vi.stubEnv(variable, value)
 
-    const message = APPROVAL_IS_HUMAN_MESSAGE.replace('KANBO_ACTOR_KIND=agent', label)
+    const message = describeApprovalRefusal(label, ['kanbo', ...typed(['approve', card.id])].join(' '))
     await expect(run(['approve', card.id])).rejects.toThrowError(expect.objectContaining({ exitCode: 4, message }))
-    expect(message).toContain(`(${label})`)
-    expect(message).toContain('Run it in your own terminal, or on the board page (kanbo serve).')
+    const [refused, override] = message.split('\n')
+    expect(refused).toBe(`Only a person can approve a card. This shell belongs to an agent (${label}): ask a person to approve it on the board page (kanbo serve).`)
+    expect(override).toBe(`If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo approve ${card.id} --db ${board.path} --workspace ${WORKSPACE.id}`)
     expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')
   })
 
   it('lets a person approve in their own terminal that carries a mark, with KANBO_ACTOR_KIND=person', async () => {
     const card = await createWaitingCard()
     vi.stubEnv('CLAUDECODE', '1')
+    vi.stubEnv('KANBO_ACTOR_KIND', 'person')
+
+    await run(['approve', card.id])
+
+    expect((await store.issues.findById(card.id))?.waitingFor).toBeNull()
+  })
+
+  it('lets a person approve in their own terminal that Codex marked, with KANBO_ACTOR_KIND=person', async () => {
+    const card = await createWaitingCard()
+    vi.stubEnv('CODEX_THREAD_ID', '019a0000-0000-7000-8000-000000000000')
     vi.stubEnv('KANBO_ACTOR_KIND', 'person')
 
     await run(['approve', card.id])
@@ -112,8 +133,14 @@ describe('approving and returning from a terminal', () => {
     const card = await createWaitingCard()
     vi.stubEnv('KANBO_ACTOR_KIND', 'agent')
 
-    const refusal = expect.objectContaining({ exitCode: 4, message: RETURN_IS_HUMAN_MESSAGE })
+    const refusal = expect.objectContaining({
+      exitCode: 4,
+      message: describeReturnRefusal('KANBO_ACTOR_KIND=agent', ['kanbo', 'return', card.id, '--comment', '\'not yet\'', ...typed([])].join(' ')),
+    })
     await expect(run(['return', card.id, '--comment', 'not yet'])).rejects.toThrowError(refusal)
+    await expect(run(['return', card.id, '--comment', 'it\'s not'])).rejects.toThrowError(expect.objectContaining({
+      message: expect.stringContaining(`KANBO_ACTOR_KIND=person kanbo return ${card.id} --comment 'it'\\''s not' --db`),
+    }))
     expect((await store.issues.findById(card.id))?.waitingFor).toBe('human')
   })
 
@@ -141,8 +168,8 @@ describe('approving and returning from a terminal', () => {
     const before = await readChangeSeq(store)
     vi.stubEnv(variable, variable === 'KANBO_ACTOR_KIND' ? 'agent' : 'session-1')
 
-    const refusal = expect.objectContaining({ exitCode: 4, message: SPRINT_CLOSE_IS_HUMAN_MESSAGE })
-    await expect(run(['sprint', 'close', current.id, '--carry-to', next.id])).rejects.toThrowError(refusal)
+    const argv = ['sprint', 'close', current.id, '--carry-to', next.id]
+    await expect(run(argv)).rejects.toThrowError(refusalOf(describeSprintCloseRefusal, argv))
 
     expect((await store.milestones.findById(current.id))?.status).toBe('open')
     expect((await store.issues.findById(card.id))?.milestoneId).toBe(current.id)
@@ -178,9 +205,10 @@ describe('approving and returning from a terminal', () => {
     const before = await readChangeSeq(store)
     vi.stubEnv(variable, variable === 'KANBO_ACTOR_KIND' ? 'agent' : 'session-1')
 
-    const refusal = expect.objectContaining({ exitCode: 4, message: RUN_SESSION_REF_IS_HUMAN_MESSAGE })
-    await expect(run(['run', 'clear-session', started.id])).rejects.toThrowError(refusal)
-    await expect(run(['run', 'attach-session', started.id, 'claude:right', '--replace'])).rejects.toThrowError(refusal)
+    const clear = ['run', 'clear-session', started.id]
+    const replace = ['run', 'attach-session', started.id, 'claude:right', '--replace']
+    await expect(run(clear)).rejects.toThrowError(refusalOf(describeRunSessionRefRefusal, clear))
+    await expect(run(replace)).rejects.toThrowError(refusalOf(describeRunSessionRefRefusal, replace))
 
     expect((await store.runs.findById(started.id))?.externalSessionRef).toBe('codex:wrong')
     expect(await readChangeSeq(store)).toBe(before)

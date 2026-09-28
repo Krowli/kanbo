@@ -1,7 +1,9 @@
 import { hostname, userInfo } from 'node:os'
 
+import type { Command } from 'commander'
+
 import type { BoardActor } from '../ops/types'
-import { AGENT_KIND_MARKER, readAgentShellMarker } from './agent-shell'
+import { readAgentShellMarker } from './agent-shell'
 import { CliError, EXIT_HUMAN_ONLY } from './output'
 
 /**
@@ -14,53 +16,50 @@ import { CliError, EXIT_HUMAN_ONLY } from './output'
  * the one rule the board has about people would be worth nothing.
  */
 
-/** Where a person does it instead — said after every refusal below. */
-const HUMAN_ONLY_HINT = ' Run it in your own terminal, or on the board page (kanbo serve).'
+/**
+ * What an agent's shell is told when it tries a person's command, as two
+ * lines: the refusal, addressed to the agent, and — for a person whose own
+ * editor terminal carries an agent tool's mark — the same command with
+ * `KANBO_ACTOR_KIND=person` in front, which lets it through.
+ */
+function refusal(what: string, askAPerson: string): (marker: string, command: string) => string {
+  return (marker, command) => [
+    `Only a person can ${what}. This shell belongs to an agent (${marker}): ask a person to ${askAPerson} on the board page (kanbo serve).`,
+    describePersonOverride(command),
+  ].join('\n')
+}
+
+/** The line every refusal and "no board" in an agent's shell ends with: how a person in an editor terminal runs `command` anyway. */
+export function describePersonOverride(command: string): string {
+  return `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person ${command}`
+}
 
 /** What a person is told when an agent's shell tries to answer for them. */
-export const APPROVAL_IS_HUMAN_MESSAGE
-  = 'Approval is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
-    + 'Ask a person to approve it on the board or run "kanbo approve" in their own terminal.'
-    + HUMAN_ONLY_HINT
+export const describeApprovalRefusal = refusal('approve a card', 'approve it')
 
 /** The same, for sending a card back. */
-export const RETURN_IS_HUMAN_MESSAGE
-  = 'Return is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
-    + 'Ask a person to return it on the board or run "kanbo return" in their own terminal.'
-    + HUMAN_ONLY_HINT
+export const describeReturnRefusal = refusal('send a card back', 'return it')
 
 /** The same, for closing a sprint (ruling 5x-4). */
-export const SPRINT_CLOSE_IS_HUMAN_MESSAGE
-  = 'Closing a sprint is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
-    + 'Ask a person to close the sprint on the board or run "kanbo sprint close" in their own terminal.'
-    + HUMAN_ONLY_HINT
+export const describeSprintCloseRefusal = refusal('close a sprint', 'close it')
 
 /**
  * The same, for setting what a column asks of a card (ruling 6-1): an agent that
  * could clear a column's rules could walk any card past them.
  */
-export const COLUMN_RULES_IS_HUMAN_MESSAGE
-  = 'Column entry rules are for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
-    + 'Ask a person to set them on the board or run "kanbo columns rules" in their own terminal.'
-    + HUMAN_ONLY_HINT
+export const describeColumnRulesRefusal = refusal('set what a column asks of a card', 'set it')
 
 /**
  * The same, for changing the board's columns: every agent reads its work from
  * them, and `kanbo ready` from To Do.
  */
-export const COLUMN_CHANGES_ARE_HUMAN_MESSAGE
-  = 'Changing the board\'s columns is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
-    + 'Ask a person to change them on the board or run "kanbo columns" in their own terminal.'
-    + HUMAN_ONLY_HINT
+export const describeColumnChangesRefusal = refusal('change the board\'s columns', 'change them')
 
 /**
  * The same, for taking back the log a run names: an agent that could clear or
  * swap it could point a card's history at any log it liked.
  */
-export const RUN_SESSION_REF_IS_HUMAN_MESSAGE
-  = 'Changing or clearing the log a run names is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). '
-    + 'Ask a person to do it on the board or run "kanbo run clear-session" or "kanbo run attach-session --replace" in their own terminal.'
-    + HUMAN_ONLY_HINT
+export const describeRunSessionRefRefusal = refusal('change or clear the log a run names', 'do it')
 
 /** The commands only a person may run, as typed after `kanbo` — the capabilities manifest reads this rather than naming them again. */
 export const HUMAN_ONLY_ACTIONS = [
@@ -80,19 +79,19 @@ export const HUMAN_ONLY_ACTIONS = [
 /** What only a person may do: the commands above, and one option of a command anyone may run. */
 type HumanOnlyAction = typeof HUMAN_ONLY_ACTIONS[number] | 'run attach-session --replace'
 
-const HUMAN_ONLY_MESSAGES: Record<HumanOnlyAction, string> = {
-  'approve': APPROVAL_IS_HUMAN_MESSAGE,
-  'return': RETURN_IS_HUMAN_MESSAGE,
-  'sprint close': SPRINT_CLOSE_IS_HUMAN_MESSAGE,
-  'columns rules': COLUMN_RULES_IS_HUMAN_MESSAGE,
-  'columns add': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
-  'columns rename': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
-  'columns move': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
-  'columns remove': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
-  'columns template': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
-  'columns add-standard': COLUMN_CHANGES_ARE_HUMAN_MESSAGE,
-  'run clear-session': RUN_SESSION_REF_IS_HUMAN_MESSAGE,
-  'run attach-session --replace': RUN_SESSION_REF_IS_HUMAN_MESSAGE,
+const HUMAN_ONLY_MESSAGES: Record<HumanOnlyAction, (marker: string, command: string) => string> = {
+  'approve': describeApprovalRefusal,
+  'return': describeReturnRefusal,
+  'sprint close': describeSprintCloseRefusal,
+  'columns rules': describeColumnRulesRefusal,
+  'columns add': describeColumnChangesRefusal,
+  'columns rename': describeColumnChangesRefusal,
+  'columns move': describeColumnChangesRefusal,
+  'columns remove': describeColumnChangesRefusal,
+  'columns template': describeColumnChangesRefusal,
+  'columns add-standard': describeColumnChangesRefusal,
+  'run clear-session': describeRunSessionRefRefusal,
+  'run attach-session --replace': describeRunSessionRefRefusal,
 }
 
 /** The actor every board write from this tool is filed under. */
@@ -116,12 +115,13 @@ export function createCliActor(): BoardActor {
  * keeps an honest agent from approving its own work, and does not stop one that
  * sets the variable. Real enforcement needs a shared Postgres board with agents
  * on the agent role, where the database itself refuses.
+ *
+ * `command` is what was typed (`typedCommand`), for the refusal's last line.
  */
-export function requireHumanActor(action: HumanOnlyAction): BoardActor {
+export function requireHumanActor(action: HumanOnlyAction, command: string): BoardActor {
   const marker = readAgentShellMarker()
   if (marker !== null) {
-    // The messages name `KANBO_ACTOR_KIND=agent`; a shell an agent tool marked says which mark it carries.
-    throw new CliError(EXIT_HUMAN_ONLY, HUMAN_ONLY_MESSAGES[action].replace(AGENT_KIND_MARKER, marker))
+    throw new CliError(EXIT_HUMAN_ONLY, HUMAN_ONLY_MESSAGES[action](marker, command))
   }
   return createPersonActor()
 }
@@ -187,4 +187,24 @@ export function safeUsername(): string {
  */
 export function isAgentShell(): boolean {
   return readAgentShellMarker() !== null
+}
+
+/**
+ * The command line that reached `command`, as a person would type it again:
+ * `kanbo` and every word given to the program, quoted for a POSIX shell where
+ * a word needs it.
+ */
+export function typedCommand(command: Command): string {
+  let root = command
+  while (root.parent) {
+    root = root.parent
+  }
+  // Commander keeps the words it was parsed from on the root as `rawArgs`
+  // (every `parse` sets it); its typings leave the property out.
+  const { rawArgs } = root as Command & { rawArgs: string[] }
+  return ['kanbo', ...rawArgs.map(quoteForShell)].join(' ')
+}
+
+function quoteForShell(word: string): string {
+  return /^[\w@%+=:,./-]+$/.test(word) ? word : `'${word.replaceAll('\'', '\'\\\'\'')}'`
 }

@@ -201,7 +201,10 @@ describe('kanbo with no words', () => {
 
       expect(await kanbo()).toBeNull()
 
-      expect(printed[0]!.split('\n')[0]).toBe('This folder has no kanbo board yet. Ask a person to run kanbo here.')
+      expect(printed[0]!.split('\n').slice(0, 2)).toEqual([
+        'This folder has no kanbo board yet. Ask a person to run kanbo here.',
+        'If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo',
+      ])
       expect(printed.join('\n')).toContain('kanbo init --yes --connect claude')
       expect(driver.transcript()).toBe(printed.join('\n').concat('\n'))
       expect(snapshot(projectDir)).toEqual({})

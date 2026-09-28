@@ -9,7 +9,7 @@ import { READY_COLUMN_SLUG } from '../domain/column-templates'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { readIssuePrefix } from '../domain/numbering'
 import type { IssueStatus } from '../sqlite/schema'
-import { isAgentShell, requireHumanActor } from './actor'
+import { describePersonOverride, isAgentShell, requireHumanActor } from './actor'
 import { openBoardSession } from './command'
 import { checkAgent } from './commands/connect'
 import type { RunningServe } from './commands/serve'
@@ -145,7 +145,7 @@ export const NO_BOARD_AGENT_FIRST_LINE = DATABASE_NOT_FOUND_AGENT_MESSAGE
 /** No board and nobody to ask: the commands that set one up. */
 function describeNoBoard(): string {
   const [first, ...rest] = NO_BOARD_HINT
-  return [isAgentShell() ? NO_BOARD_AGENT_FIRST_LINE : first, ...rest].join('\n')
+  return [...(isAgentShell() ? [NO_BOARD_AGENT_FIRST_LINE, describePersonOverride('kanbo')] : [first]), ...rest].join('\n')
 }
 
 /** A board and nobody to ask: the summary, and where to read more. */
@@ -290,8 +290,8 @@ type Decision = 'approve' | 'return' | 'skip' | 'stop'
  * same board operations as `kanbo approve` and `kanbo return`.
  */
 async function review(ui: Ui, cards: CardView[]): Promise<void> {
-  const approver = requireHumanActor('approve')
-  const returner = requireHumanActor('return')
+  const approver = requireHumanActor('approve', 'kanbo')
+  const returner = requireHumanActor('return', 'kanbo')
   const session = await openBoardSession({}, 'write')
   try {
     for (const card of cards) {

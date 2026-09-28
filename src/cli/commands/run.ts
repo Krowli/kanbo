@@ -4,7 +4,7 @@ import { sessionRefFromEnvironment } from '../../domain/external-session-ref'
 import type { FinishRunInput } from '../../ops/runs'
 import { readRunFinishState, RUN_FINISH_STATES } from '../../ops/runs'
 import type { Issue, IssueRun } from '../../sqlite/schema'
-import { createCliActor, requireHumanActor } from '../actor'
+import { createCliActor, requireHumanActor, typedCommand } from '../actor'
 import type { BoardCommandOptions, BoardSession } from '../command'
 import { parseExecutionMode, requireCard, requireRun, runBoardCommand, withBoardOptions } from '../command'
 import { CliError } from '../output'
@@ -71,9 +71,9 @@ export function registerRunCommands(program: Command): void {
     .argument('<runId>', 'the run id kanbo run start printed')
     .argument('<ref>', 'claude:<session id> or codex:<session id>')
     .option('--replace', 'replace the session already given (a person only)'))
-    .action(async (runId: string, ref: string, options: AttachSessionOptions) => {
+    .action(async (runId: string, ref: string, options: AttachSessionOptions, command: Command) => {
       // Checked before the board is opened, the same as `approve`.
-      const actor = options.replace ? requireHumanActor('run attach-session --replace') : null
+      const actor = options.replace ? requireHumanActor('run attach-session --replace', typedCommand(command)) : null
       await runBoardCommand(options, 'write', async (session) => {
         const found = await requireRun(session, runId)
         const attached = actor
@@ -88,8 +88,8 @@ export function registerRunCommands(program: Command): void {
     .command('clear-session')
     .description('Remove the session given for this work (a person only)')
     .argument('<runId>', 'the run, as `kanbo run start` printed it'))
-    .action(async (runId: string, options: BoardCommandOptions) => {
-      const actor = requireHumanActor('run clear-session')
+    .action(async (runId: string, options: BoardCommandOptions, command: Command) => {
+      const actor = requireHumanActor('run clear-session', typedCommand(command))
       await runBoardCommand(options, 'write', async (session) => {
         const found = await requireRun(session, runId)
         const cleared = await session.ops.clearRunSessionRef(found.id, actor)

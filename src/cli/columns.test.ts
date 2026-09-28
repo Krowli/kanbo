@@ -15,7 +15,7 @@ import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import type { PromptDriver } from '../testing/prompt-driver'
 import { createPromptDriver } from '../testing/prompt-driver'
-import { COLUMN_CHANGES_ARE_HUMAN_MESSAGE } from './actor'
+import { describeColumnChangesRefusal } from './actor'
 import { registerCardCommands } from './commands/card'
 import { registerColumnsCommands } from './commands/columns'
 import { describeFailure } from './failure'
@@ -340,7 +340,7 @@ describe('kanbo columns', () => {
 
     const outcome = await kanbo('columns', ...args)
 
-    expect(outcome).toMatchObject({ exitCode: 4, message: COLUMN_CHANGES_ARE_HUMAN_MESSAGE })
+    expect(outcome).toMatchObject({ exitCode: 4, message: expect.stringContaining(describeColumnChangesRefusal('KANBO_ACTOR_KIND=agent', `kanbo columns ${args.join(' ')}`)) })
     expect(await names()).toEqual(STANDARD)
     expect(await readChangeSeq(store)).toBe(before)
   })

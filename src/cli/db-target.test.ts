@@ -92,7 +92,11 @@ describe('the board a command opens', () => {
     vi.stubEnv('CLAUDECODE', '1')
 
     expect(() => resolveDbTarget({ cwd: directory }))
-      .toThrowError(expect.objectContaining({ exitCode: 2, message: 'This folder has no kanbo board yet. Ask a person to run kanbo here.' }))
+      .toThrowError(expect.objectContaining({
+        exitCode: 2,
+        message: 'This folder has no kanbo board yet. Ask a person to run kanbo here.\n'
+          + 'If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo',
+      }))
   })
 
   it('obeys --database-url over the environment, the binding and every board file', () => {

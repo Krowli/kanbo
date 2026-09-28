@@ -32,6 +32,7 @@ describe('canPrompt', () => {
     ['CLAUDECODE', '1'],
     ['GEMINI_CLI', '1'],
     ['CURSOR_AGENT', '1'],
+    ['CODEX_THREAD_ID', '019a0000-0000-7000-8000-000000000000'],
   ])('does not ask when %s=%s', (name, value) => {
     vi.stubEnv(name, value)
     expect(canPrompt(createPromptDriver().ui)).toBe(false)
