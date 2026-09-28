@@ -367,8 +367,8 @@ opens each waiting card with `kanbo_card_get` to see its comments (3–6 calls i
 [MCP response size](#mcp-response-size)); on a small board the follow-up calls
 cost more than the rows saved.
 
-**Where kanbo confused the agents** (transcript excerpts; proposed fixes are listed
-in the T34 report, not made here):
+**Where kanbo confused the agents** on 3e69998 (transcript excerpts; what was
+changed for each is in [after the fixes](#after-the-fixes)):
 
 - `kanbo_card_comment` takes `content`, while `kanbo_status_line` and
   `kanbo_wait_approval` take `text`. Claude Code sent `text` in 6 runs (4 on
@@ -406,3 +406,73 @@ server: `codex exec` never asks, so without it every `kanbo_*` tool is refused
 still made 190 of its 199 kanbo calls through the shell — the instruction block
 and `kanbo prime` name commands.
 
+### After the fixes
+
+What changed for each confusion above (CHANGELOG, "where real agents got
+confused"): tool arguments are also accepted under the names agents reached for
+(`text` for a comment, `id` for a card, `content` for a status line, `to` for a
+column), and a missing or wrong one is answered with one sentence and a call
+that works; `completed`, `succeeded` and the like are read as `finished`, and
+starting a run prints the call that finishes it; a card a person sent back is
+`returned`, listed first by `kanbo_ready` / `kanbo ready` / `kanbo prime` with the
+person's comment, and its status line reads `returned by a person: …`; a waiting
+card in a list carries its last comment (and, on the command line, its status
+line); `kanbo run start` fills in the Claude Code or Codex session from the
+environment; `kanbo prime` writes each command out with its arguments; `kanbo
+connect codex` writes the approval line.
+
+Re-run on 2026-09-28 with Claude Code 2.1.283 `--model sonnet`, variants `full`
+and `instructions`, all five scenarios, 3 runs each: build 379f6b5 (the fixes),
+and for `instructions` / `whats-waiting` 8dc8d12 (the command-line list also
+prints a waiting card's status line — the first re-run showed agents still
+opening each waiting card to read it). Raw results:
+`evals/results/2026-09-28-t35.json` and `evals/results/2026-09-28-t35-waiting.json`.
+Before is 3e69998, the same groups. **Capabilities** counts runs that read
+`kanbo capabilities` (or the `kanbo://capabilities` resource).
+
+| agent | variant | scenario | all rules kept | median kanbo calls | failed kanbo calls (3 runs) | median tokens | runs reading capabilities | median cost ($) |
+| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Claude Code | full | take-next | 3/3 → 3/3 | 9 → 9 | 1 → 1 | 512,205 → 390,088 | 0 → 0 | 0.21 → 0.17 |
+| Claude Code | full | whats-waiting | 1/3 → 3/3 | 4 → 2 | 1 → 0 | 166,935 → 130,955 | 0 → 0 | 0.09 → 0.08 |
+| Claude Code | full | plan-big | 3/3 → 3/3 | 8 → 10 | 1 → 0 | 275,557 → 247,833 | 0 → 0 | 0.15 → 0.15 |
+| Claude Code | full | plan-small | 3/3 → 3/3 | 3 → 5 | 0 → 0 | 171,213 → 197,870 | 0 → 0 | 0.11 → 0.11 |
+| Claude Code | full | returned | 3/3 → 3/3 | 8 → 7 | 0 → 0 | 557,640 → 529,423 | 0 → 0 | 0.23 → 0.23 |
+| Claude Code | instructions | take-next | 3/3 → 3/3 | 10 → 6 | 1 → 0 | 672,337 → 395,181 | 3 → 0 | 0.26 → 0.16 |
+| Claude Code | instructions | whats-waiting | 0/3 → 2/3 | 4 → 2 | 0 → 0 | 211,248 → 124,463 | 2 → 0 | 0.12 → 0.07 |
+| Claude Code | instructions | plan-big | 3/3 → 3/3 | 10 → 7 | 0 → 0 | 388,168 → 292,111 | 2 → 1 | 0.20 → 0.13 |
+| Claude Code | instructions | plan-small | 3/3 → 3/3 | 3 → 2 | 0 → 0 | 212,827 → 157,162 | 3 → 0 | 0.13 → 0.09 |
+| Claude Code | instructions | returned | 3/3 → 3/3 | 9 → 7 | 0 → 0 | 932,541 → 453,004 | 3 → 0 | 0.34 → 0.20 |
+
+Over the 30 runs: all rules kept 25 → 29; kanbo calls 202 → 177; failed kanbo
+calls 4 → 1; runs reading `kanbo capabilities` 13 → 1. Every rule check other
+than "at most two kanbo calls" was kept in every run, before and after. Claude
+Code reported $4.57 for the re-runs (33 runs, the 3 replaced `whats-waiting` runs
+included).
+
+- **Arguments.** No run sent `text` to `kanbo_card_comment` or `id` to a card
+  tool and failed: the one failed call left is `kanbo_card_move {"id":"TST-002","to":"in_progress"}`,
+  answered ``kanbo_card_move needs `column` (the column slug, e.g. in_progress). Example: …``
+  and called right the next time; `to` is accepted since ba4e70f.
+- **Finish states.** 5 `run finish` calls (was 6); none wrote `completed` or
+  `succeeded` (was 2), and none failed.
+- **Sessions.** No agent passed `--session` or `session` (was 3 of 6 runs that
+  started one, with invented ids); the run started over MCP recorded
+  `claude:32432f5a-…`, the session id of that very Claude Code transcript.
+- **Returned card.** `returned` took 7 calls on the median in both variants (was
+  8 and 9), with no list searching: the card is first in `kanbo_ready` / `kanbo
+  prime`.
+- **What is waiting.** With MCP, `kanbo_prime` + one `kanbo_card_list
+  { waitingForPerson: true }` in all 3 runs. From the shell, `kanbo prime` +
+  `kanbo card list --waiting` in 2 of 3; the third also asked `kanbo card list
+  --returned` ("waiting for *me*"), a third call the scenario counts against it.
+
+**Remaining.** `plan-big` and `plan-small` in the `full` variant took more calls
+than before (10 and 5 median): in `plan-big` every run then moved the three new
+sub-cards one by one (`kanbo_card_move` ×3, none before), and in `plan-small`
+two runs wrote a closing status line and a comment. Both are the agent's own
+choices, allowed by the rules; neither is a failed call. One `instructions` run
+still read `kanbo capabilities` before splitting a card.
+
+**Codex was not re-run:** its account hit its usage limit on the first call
+("You've hit your usage limit"), so the 10 planned runs produced nothing and
+were discarded. Its numbers above are 3e69998's.

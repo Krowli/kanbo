@@ -1,0 +1,133 @@
+{
+  "date": "2026-09-28",
+  "kanboVersion": "0.2.1",
+  "commit": "8dc8d12",
+  "agents": {
+    "claude": "2.1.283 (Claude Code)"
+  },
+  "model": {
+    "claude": "sonnet",
+    "codex": "default"
+  },
+  "n": 3,
+  "timeoutSeconds": 360,
+  "transcripts": "/var/folders/zc/v8spt2j93h965spxb53cn3rw0000gn/T/kanbo-eval-UJ0IRO/transcripts",
+  "runs": [
+    {
+      "agent": "claude",
+      "variant": "instructions",
+      "scenario": "whats-waiting",
+      "index": 1,
+      "exitCode": 0,
+      "timedOut": false,
+      "error": null,
+      "seconds": 14,
+      "kanboCalls": 2,
+      "failedKanboCalls": 0,
+      "mcpCalls": 0,
+      "toolSearchCalls": 1,
+      "toolCalls": 3,
+      "tokens": 124157,
+      "outputTokens": 476,
+      "costUsd": 0.07287240000000002,
+      "turns": 4,
+      "permissionDenials": 0,
+      "kanboTrace": [
+        "Bash: kanbo prime",
+        "Bash: kanbo card list --waiting"
+      ],
+      "trace": [
+        "ToolSearch",
+        "Bash: kanbo prime",
+        "Bash: kanbo card list --waiting"
+      ],
+      "answer": "Two cards are waiting on you:\n\n- **TST-005** — *Add wordCount(text)* (In Review): implementation + tests are done, waiting for your review/approval.\n- **TST-006** — *Document capitalize()* (In Review): needs your decision on whether the docs should cover Unicode behavior.",
+      "checks": {
+        "namesBothWaitingCards": true,
+        "changedNothing": true,
+        "atMostTwoKanboCalls": true
+      },
+      "passed": true,
+      "transcript": "/var/folders/zc/v8spt2j93h965spxb53cn3rw0000gn/T/kanbo-eval-UJ0IRO/transcripts/claude-instructions-whats-waiting-1.jsonl",
+      "project": null
+    },
+    {
+      "agent": "claude",
+      "variant": "instructions",
+      "scenario": "whats-waiting",
+      "index": 2,
+      "exitCode": 0,
+      "timedOut": false,
+      "error": null,
+      "seconds": 10,
+      "kanboCalls": 2,
+      "failedKanboCalls": 0,
+      "mcpCalls": 0,
+      "toolSearchCalls": 1,
+      "toolCalls": 3,
+      "tokens": 124463,
+      "outputTokens": 543,
+      "costUsd": 0.07386759999999999,
+      "turns": 4,
+      "permissionDenials": 0,
+      "kanboTrace": [
+        "Bash: kanbo prime",
+        "Bash: kanbo card list --waiting"
+      ],
+      "trace": [
+        "ToolSearch",
+        "Bash: kanbo prime",
+        "Bash: kanbo card list --waiting"
+      ],
+      "answer": "Two cards are waiting on you:\n\n- **TST-005** — *Add wordCount(text)* (In Review): implementation + tests are done, waiting for your review.\n- **TST-006** — *Document capitalize()* (In Review): waiting on a decision from you — should the docs cover Unicode?",
+      "checks": {
+        "namesBothWaitingCards": true,
+        "changedNothing": true,
+        "atMostTwoKanboCalls": true
+      },
+      "passed": true,
+      "transcript": "/var/folders/zc/v8spt2j93h965spxb53cn3rw0000gn/T/kanbo-eval-UJ0IRO/transcripts/claude-instructions-whats-waiting-2.jsonl",
+      "project": null
+    },
+    {
+      "agent": "claude",
+      "variant": "instructions",
+      "scenario": "whats-waiting",
+      "index": 3,
+      "exitCode": 0,
+      "timedOut": false,
+      "error": null,
+      "seconds": 13,
+      "kanboCalls": 3,
+      "failedKanboCalls": 0,
+      "mcpCalls": 0,
+      "toolSearchCalls": 1,
+      "toolCalls": 4,
+      "tokens": 156498,
+      "outputTokens": 709,
+      "costUsd": 0.08270680000000001,
+      "turns": 5,
+      "permissionDenials": 0,
+      "kanboTrace": [
+        "Bash: kanbo prime",
+        "Bash: kanbo card list --waiting",
+        "Bash: kanbo card list --returned"
+      ],
+      "trace": [
+        "ToolSearch",
+        "Bash: kanbo prime",
+        "Bash: kanbo card list --waiting",
+        "Bash: kanbo card list --returned"
+      ],
+      "answer": "Two cards are waiting on you in **In Review**:\n\n- **TST-005** — *Add wordCount(text)*: implementation + tests are done, waiting for your review.\n- **TST-006** — *Document capitalize()*: needs a decision from you — should the docs cover Unicode?\n\nNothing is currently in the \"returned\" state. Let me know if you want details on either card (`kanbo card get TST-005` / `TST-006`).",
+      "checks": {
+        "namesBothWaitingCards": true,
+        "changedNothing": true,
+        "atMostTwoKanboCalls": false
+      },
+      "passed": false,
+      "transcript": "/var/folders/zc/v8spt2j93h965spxb53cn3rw0000gn/T/kanbo-eval-UJ0IRO/transcripts/claude-instructions-whats-waiting-3.jsonl",
+      "project": null
+    }
+  ]
+}
