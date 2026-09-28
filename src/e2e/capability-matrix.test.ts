@@ -113,7 +113,7 @@ const CASES: MatrixCase[] = [
     covers: ['kanbo_card_create', 'card list', 'board'],
     run: async (b) => {
       const created = await b.tool('kanbo_card_create', { title: 'From the agent', description: 'Made over MCP', column: 'to_do' })
-      expect(created).toMatchObject({ id: 'MAT-001', columnSlug: 'to_do', description: 'Made over MCP' })
+      expect(created).toEqual({ id: 'MAT-001', title: 'From the agent', column: 'to_do', updatedAt: expect.any(Number) })
 
       expect(await b.cliJson(['card', 'list', '--json', 'id,title,columnSlug'])).toEqual([
         { id: 'MAT-001', title: 'From the agent', columnSlug: 'to_do' },

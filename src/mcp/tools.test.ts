@@ -12,6 +12,7 @@ import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { Issue, IssueRun } from '../sqlite/schema'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
+import type { KanboCompactCard } from './card-output'
 import type { KanboDbTransport } from './db-transport'
 import { createDbTransport } from './db-transport'
 import { createHttpTransport } from './http-transport'
@@ -80,17 +81,19 @@ function serverCardShape(card: Issue, run: IssueRun) {
 /**
  * A transport that performs nothing and remembers what it was asked for. Every
  * operation answers the same stand-in, which is enough for a tool that only
- * hands its answer on — `kanbo_prime` reads `text` off it, the rest print it.
+ * hands its answer on — `kanbo_prime` reads `text` off it, a tool that wrote a
+ * card prints it as a card, the rest print it.
  */
 function recordingTransport(): { transport: KanboToolTransport, calls: string[] } {
   const calls: string[] = []
   const operations = new Set(Object.values(TOOL_OPERATIONS).map(entry => entry.op))
+  const card = { id: 'WOR-001', title: 'the board', columnSlug: null, attemptCount: 0, activeRun: null, updatedAt: 0 }
   const transport = Object.fromEntries(Array.from(operations, op => [op, async () => {
     calls.push(op)
     // A list tool prints a page of cards; one card called "the board" is enough of one.
     return op.endsWith('Page')
-      ? { cards: [{ id: 'WOR-001', title: 'the board', columnSlug: null, attemptCount: 0, activeRun: null, updatedAt: 0 }], total: 1, offset: 0 }
-      : { text: 'the board' }
+      ? { cards: [card], total: 1, offset: 0 }
+      : { ...card, text: 'the board' }
   }])) as unknown as KanboToolTransport
   return { transport, calls }
 }
@@ -219,11 +222,11 @@ describe('the board\'s tools over a real board', () => {
       arguments: { description: 'The first part', parent: parent.id },
     }) as CallToolResult
     expect(created.isError).toBeFalsy()
-    const child = readJson(created) as KanboCardResult
+    const child = readJson(created) as KanboCompactCard
 
-    expect(child).toMatchObject({ parentIssueId: parent.id, title: child.id })
+    expect(child).toMatchObject({ parentId: parent.id, title: 'The first part' })
     const read = await client.callTool({ name: 'kanbo_card_get', arguments: { card: parent.id } }) as CallToolResult
-    expect(readJson(read)).toMatchObject({ id: parent.id, subCards: [{ id: child.id, title: child.id, columnSlug: child.columnSlug }] })
+    expect(readJson(read)).toMatchObject({ id: parent.id, subCards: [{ id: child.id, title: child.id, columnSlug: child.column }] })
     const readChild = await client.callTool({ name: 'kanbo_card_get', arguments: { card: child.id } }) as CallToolResult
     expect(readJson(readChild)).toMatchObject({ parentIssueId: parent.id, subCards: [] })
     await client.close()
@@ -546,6 +549,51 @@ describe('the board\'s tools over a real board', () => {
       .toMatchObject({ id: 'WOR-001', description: 'A long description', columnSlug: 'to_do', labels: [] })
   })
 
+  it('answers every tool that writes a card with the card compact, on one line, and in full on detail: "full" — the same over HTTP', async () => {
+    const parent = await createCard('Parent')
+    const ops = boardOps()
+    const store = createSqliteBoardStore({ database: () => board.database })
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+    // A server that writes nothing and answers every write with WOR-002 as the board holds it
+    // now: how much of the card comes back is the tool's to decide, not the transport's.
+    const overHttp = createHttpTransport({
+      workspaceId: () => WORKSPACE.id,
+      request: async (_method, path) => path.startsWith('/issues/statuses')
+        ? await ops.listColumns(WORKSPACE.id)
+        : await toCardView(ops, (await store.issues.findById('WOR-002'))!),
+    })
+    const card = { id: 'WOR-002', title: 'Write the parser', parentId: parent.id, updatedAt: expect.any(Number) }
+    const writes: [KanboToolName, Record<string, unknown>, Record<string, unknown>][] = [
+      ['kanbo_card_create', { title: 'Write the parser', description: 'A long description', column: 'to_do', parent: parent.id }, { ...card, column: 'to_do' }],
+      ['kanbo_card_update', { card: 'WOR-002', priority: 'high' }, { ...card, column: 'to_do' }],
+      ['kanbo_card_move', { card: 'WOR-002', column: 'in_progress' }, { ...card, column: 'in_progress' }],
+      ['kanbo_status_line', { card: 'WOR-002', text: 'writing the test' }, { ...card, column: 'in_progress', statusLine: 'writing the test' }],
+      ['kanbo_wait_approval', { card: 'WOR-002', text: 'look at the diff' }, { ...card, column: 'in_progress', statusLine: 'look at the diff', waitingFor: 'human' }],
+    ]
+
+    for (const [name, args, compact] of writes) {
+      const text = readText(await tools[name]!.run(transport, args))
+      expect(text, name).not.toContain('\n')
+      expect(JSON.parse(text), name).toEqual(compact)
+      expect(readText(await tools[name]!.run(overHttp, args)), name).toBe(text)
+    }
+
+    // Every field, as these tools answered before: the card as kanbo_card_get prints it alone.
+    for (const [name, args] of writes.slice(1)) {
+      const full = readText(await tools[name]!.run(transport, { ...args, detail: 'full' }))
+      expect(full, name).toContain('\n  "description": "A long description",\n')
+      expect(JSON.parse(full), name).toMatchObject({ id: 'WOR-002', columnSlug: 'in_progress', priority: 'high', labels: [], parentIssueId: parent.id })
+      expect(full, name).toBe(readText(await tools.kanbo_card_get!.run(transport, { card: 'WOR-002', include: [] })))
+    }
+    const created = readText(await tools.kanbo_card_create!.run(transport, { description: 'Only a description', detail: 'full' }))
+    expect(created).toBe(readText(await tools.kanbo_card_get!.run(transport, { card: 'WOR-003', include: [] })))
+
+    // `detail` says how to answer; it is not a field to change.
+    const nothing = await tools.kanbo_card_update!.run(transport, { card: 'WOR-002', detail: 'full' })
+    expect(nothing.isError).toBe(true)
+    expect(readText(nothing)).toBe('Nothing to update. Pass title, description, priority, labels or executionMode.')
+  })
+
   it('picks the same cards with every filter, from the board file and over HTTP', async () => {
     const ops = boardOps()
     const parent = await createCard('Parent')
@@ -621,7 +669,7 @@ describe('the board\'s tools over a real board', () => {
     expect((await call('kanbo_card_get', { cardId: card.id })).isError).toBeFalsy()
     expect((await call('kanbo_card_get', { key: card.id })).isError).toBeFalsy()
     expect((await call('kanbo_status_line', { id: card.id, content: 'Reading the card' })).isError).toBeFalsy()
-    expect(readJson(await call('kanbo_card_move', { id: card.id, to: 'in_progress' }))).toMatchObject({ columnSlug: 'in_progress' })
+    expect(readJson(await call('kanbo_card_move', { id: card.id, to: 'in_progress' }))).toMatchObject({ column: 'in_progress' })
     expect((await boardOps().listComments(card.id)).map(comment => comment.content)).toEqual(expect.arrayContaining(['Via text', 'Via id']))
     expect(readJson(await call('kanbo_card_get', { card: card.id, include: [] }))).toMatchObject({ statusLine: 'Reading the card' })
 

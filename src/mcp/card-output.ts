@@ -4,8 +4,8 @@ import { cardDisplayTitle } from '../domain/card-display-title'
 import type { KanboCardPage, KanboCardResult } from './transport'
 
 /**
- * How the list tools print cards: small by default, because an agent reads
- * every character of the answer.
+ * How the list tools, and the tools that write a card, print cards: small by
+ * default, because an agent reads every character of the answer.
  *
  * A compact card is what an agent choosing among cards needs — which card,
  * what it is called, where it is, what it is doing, whose turn it is — and
@@ -86,6 +86,24 @@ export function compactKanboCard(card: KanboCardResult): KanboCompactCard {
     ...(card.returned ? { returned: card.returned } : {}),
     ...(card.lastComment ? { lastComment: card.lastComment } : {}),
   }
+}
+
+/** The `detail` argument of the tools that write a card: a list's own word, for the one card a write answers with. */
+export const writtenCardDetailArgument = z.enum(['compact', 'full']).optional()
+  .describe('compact (default): the card as kanbo_card_list prints it. full: every field, description included.')
+
+/** What each tool that writes a card says about its answer, in its description. */
+export const WRITTEN_CARD_ANSWER_SENTENCE = 'Answers the card compact, as kanbo_card_list prints it; detail: "full" for every field.'
+
+/**
+ * The card a write hands back, as the tool answers with it: compact and on one
+ * line, as a list prints it. An agent writes its card at every step — a status
+ * line, a move, an update — and reads each answer again on every later turn,
+ * so a whole card, description included, would cost it again and again.
+ * `detail: "full"` answers every field, as `kanbo_card_get` prints the card alone.
+ */
+export function formatWrittenKanboCard(card: KanboCardResult, detail?: KanboCardListView['detail']): string {
+  return detail === 'full' ? JSON.stringify(card, null, 2) : JSON.stringify(compactKanboCard(card))
 }
 
 function viewCard(card: KanboCardResult, view: KanboCardListView): object {

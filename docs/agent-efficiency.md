@@ -50,14 +50,14 @@ The 16 MCP tools, what an agent calls each one for, and what changed.
 | `kanbo_sprints` | Which sprint is running, how far along? | 1 | Counts by one grouped statement instead of reading every card |
 | `kanbo_card_get` | Everything about this card | 1 | `include` (`comments`, `subCards`, `runs`, `history`, `prs`), `commentLimit`; comments and sub-cards by default; sub-cards read by parent |
 | `kanbo_card_list` | Which cards are waiting / running / in these columns / under this card / mention this / changed since? | 1 | `columns`, `waitingForPerson`, `parent`, `hasActiveRun`, `text`, `updatedSince`, `labels`, `priority`, `offset`, `detail`, `fields`; compact, 50 by default; filtered in the database |
-| `kanbo_card_create` | Put a card (or a subtask) on the board | 1 | — |
-| `kanbo_card_update` | Change title, description, priority, labels | 1 | — |
-| `kanbo_card_move` | Move a card | 1 | — |
+| `kanbo_card_create` | Put a card (or a subtask) on the board | 1 | Answers the card compact; `detail: "full"` for every field |
+| `kanbo_card_update` | Change title, description, priority, labels | 1 | Answers the card compact; `detail: "full"` for every field |
+| `kanbo_card_move` | Move a card | 1 | Answers the card compact; `detail: "full"` for every field |
 | `kanbo_card_comment` | Write a finding or a question | 1 | — |
 | `kanbo_card_link_pr` | Link a pull request | 1 | — |
 | `kanbo_card_pull_requests` | Which pull requests does this card name? | 1 | Also in `kanbo_card_get` `include: ["prs"]` |
-| `kanbo_status_line` | Say what I am doing | 1 | — |
-| `kanbo_wait_approval` | Hand the card to a person | 1 | — |
+| `kanbo_status_line` | Say what I am doing | 1 | Answers the card compact; `detail: "full"` for every field |
+| `kanbo_wait_approval` | Hand the card to a person | 1 | Answers the card compact; `detail: "full"` for every field |
 | `kanbo_run_start` | Record that I started | 1 | — |
 | `kanbo_run_finish` | Record how it ended | 1 | — |
 
@@ -89,6 +89,14 @@ the card has no title of its own), `column` (the slug a move takes),
 description, labels, priority, execution mode and the run's id are what an
 agent reads once it has chosen a card — `kanbo_card_get`, or `detail: "full"`
 or `fields: [...]` on the list.
+
+The tools that write a card — `kanbo_card_create`, `kanbo_card_update`,
+`kanbo_card_move`, `kanbo_status_line`, `kanbo_wait_approval` — answer with it
+the same way, one compact card on one line. They used to answer with the whole
+card, description included, pretty-printed: an orchestrator writing its card 20
+to 40 times a session got 5,000 to 19,000 characters back each time (19,000 for
+a one-sentence status line), and read all of it again on every later turn.
+`detail: "full"` still answers every field.
 
 ## Not done
 

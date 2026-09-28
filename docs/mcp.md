@@ -62,14 +62,14 @@ kanbo_run_finish `state` must be one of finished, failed, stopped. Example: {"ru
 | `kanbo_sprints` | List milestones as sprints by start date — dates in unix seconds, open and done card counts (counted by the database, not by reading the cards) — with `current: true` on the one running now. Read-only. | — | `kanbo sprint list` |
 | `kanbo_card_get` | Read one card in full — including its parent (`parentIssueId`) — with its last 10 comments (`comments`, `commentCount`) and its subtasks (`subCards`), in one call. | `card` (required); `include` (array of `comments`, `subCards`, `runs`, `history`, `prs`; `["comments","subCards"]` when absent, `[]` for the card alone); `commentLimit` (integer, default 10) | `kanbo card get <id> [--include <parts>] [--comments <count>]` |
 | `kanbo_card_list` | Find cards in one call, in board order; filters combine. Compact cards, 50 by default, with `total` and `nextOffset`. | all optional: `column`, `columns` (array), `waitingForPerson`, `parent`, `hasActiveRun`, `returned`, `text`, `updatedSince` (unix seconds, ISO date-time with `Z` or offset, or `YYYY-MM-DD` = UTC midnight; milliseconds refused), `labels` (array, all of them), `priority` (array), `limit` (default 50), `offset`, `detail` (`compact` \| `full`), `fields` (array) | `kanbo card list [--column <c>] [--waiting] [--parent <id>] [--active] [--returned] [--text <t>] [--updated-since <time>] [--label <l>] [--priority <p>] [--offset <n>]` |
-| `kanbo_card_create` | Put a new card on the board; pass `parent` to create a subtask. | `title`, `description`, `column`, `parent`, `executionMode` (`worktree` \| `main`) — all optional | `kanbo card create --description <text> [--title <title>] [--parent <id>]` |
-| `kanbo_card_update` | Change a card's title, description, priority, labels or execution mode. | `card` (required); `title`, `description`, `priority` (`none` \| `low` \| `medium` \| `high` \| `urgent`), `labels` (array of strings, replaces), `executionMode` | `kanbo card update <id> [--title <title>] [--description <text>]` |
-| `kanbo_card_move` | Move a card to another column. A column with `entryRules` refuses a card that does not meet them, listing what is missing. | `card`, `column` (both required) | `kanbo card move <id> <column>` |
+| `kanbo_card_create` | Put a new card on the board; pass `parent` to create a subtask. Answers the card compact. | `title`, `description`, `column`, `parent`, `executionMode` (`worktree` \| `main`), `detail` (`compact` \| `full`) — all optional | `kanbo card create --description <text> [--title <title>] [--parent <id>]` |
+| `kanbo_card_update` | Change a card's title, description, priority, labels or execution mode. Answers the card compact. | `card` (required); `title`, `description`, `priority` (`none` \| `low` \| `medium` \| `high` \| `urgent`), `labels` (array of strings, replaces), `executionMode`, `detail` | `kanbo card update <id> [--title <title>] [--description <text>]` |
+| `kanbo_card_move` | Move a card to another column. A column with `entryRules` refuses a card that does not meet them, listing what is missing. Answers the card compact. | `card`, `column` (both required); `detail` | `kanbo card move <id> <column>` |
 | `kanbo_card_comment` | Write a finding, a decision or an open question on the card. | `card`, `content` (both required; `content` also as `text`) | `kanbo card comment <id> --content <text>` |
 | `kanbo_card_link_pr` | Link a pull request to the card. Linking the same one again changes nothing. | `card`, `url` (both required; `https://github.com/<owner>/<repo>/pull/<n>` or `<owner>/<repo>#<n>`) | `kanbo card pr add <id> <url>` |
 | `kanbo_card_pull_requests` | The pull requests linked to the card, in the order they were linked. | `card` (required) | `kanbo card pr list <id>` |
-| `kanbo_status_line` | Say what the card is doing right now. | `card`, `text` (both required; `text` also as `content`) | `kanbo card status-line <id> --text <text>` |
-| `kanbo_wait_approval` | Mark the card as waiting for a person and end your turn. | `card` (required), `text` (optional status line; also as `content`) | `kanbo card wait-approval <id> [--text <text>]` |
+| `kanbo_status_line` | Say what the card is doing right now. Answers the card compact. | `card`, `text` (both required; `text` also as `content`); `detail` | `kanbo card status-line <id> --text <text>` |
+| `kanbo_wait_approval` | Mark the card as waiting for a person and end your turn. Answers the card compact. | `card` (required), `text` (optional status line; also as `content`), `detail` | `kanbo card wait-approval <id> [--text <text>]` |
 | `kanbo_run_start` | Record that you have started working on a card. Answers the run with `finishWith`, the exact `kanbo_run_finish` call that ends it. | `card`, `agent` (both required); `branch`, `executionMode`, `session` (`claude:<id>` or `codex:<id>`; when absent, the session Claude Code or Codex names in the server's environment — see below) | `kanbo run start <id> --agent <name> [--session <ref>]` |
 | `kanbo_run_finish` | Record how a run you started ended. | `run` (required, the id `kanbo_run_start` gave back), `state` (required: `finished` \| `failed` \| `stopped`; `completed` and the others above are read as one of them), `errorText` | `kanbo run finish <runId> --state <state>` |
 
@@ -116,6 +116,16 @@ Every question below is one call. [Agent efficiency](agent-efficiency.md) lists 
 ```
 
 A compact card is `id`, `title` (the description's first line when the card has no title of its own), `column` (the slug `kanbo_card_move` takes), `statusLine`, `waitingFor`, `parentId`, `attempt` (runs so far), `activeRun` (`agentName`, `startedAt`) and `updatedAt`; a field that is empty is left out. A card waiting for a person, or returned (`returned: true`), also carries `lastComment`: who wrote it (`user` for a person's approval or return; a comment written through `kanbo` from a terminal or `kanbo mcp` reads `system`), its first 200 characters, and when — the run's own bookkeeping comments (`Run started …`) do not count. `detail: "full"` prints every field of each card, description, labels and the run's id included — the shape `kanbo_card_get` prints; `fields: ["description", "labels"]` prints `id` and only those.
+
+### What a write answers with
+
+`kanbo_card_create`, `kanbo_card_update`, `kanbo_card_move`, `kanbo_status_line` and `kanbo_wait_approval` answer with the card they wrote as one compact card, on one line — the card as a list prints it:
+
+```json
+{"id":"MAN-012","title":"Fix the parser","column":"in_progress","statusLine":"running the tests","attempt":1,"activeRun":{"agentName":"Claude","startedAt":1790000000},"updatedAt":1790000400}
+```
+
+An agent writes its card at every step and reads each answer again on every later turn, so the description it already has is not sent back every time. `detail: "full"` answers every field instead, as `kanbo_card_get` prints the card alone (`include: []`) — what these tools answered up to 0.3.0.
 
 ## What is deliberately missing
 

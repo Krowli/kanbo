@@ -4,6 +4,10 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- The MCP tools that write a card — `kanbo_card_create`, `kanbo_card_update`, `kanbo_card_move`, `kanbo_status_line`, `kanbo_wait_approval` — answer with the card compact, on one line, as `kanbo_card_list` prints it (`id`, `title`, `column` slug, `statusLine`, `waitingFor`, `parentId`, `attempt`, `activeRun`, `updatedAt`), instead of every field pretty-printed: an orchestrator writing its card 20–40 times a session got 5–19k characters back each time — 19k for a one-sentence status line — and read them again on every later turn. Each takes `detail: "full"` for the whole card, as before. The CLI prints what it printed. For applications that read these tools' answers: they are compact now; pass `detail: "full"` for the old answer.
+
 ## [0.3.0] — 2026-09-28
 
 kanbo 0.3 is about getting started without reading anything first — `kanbo` alone sets a project up or shows its board — about running the same everywhere (Windows included), and about agents spending fewer calls and tokens on the board. Boards need no migration: a board file or Postgres board 0.2.1 wrote opens as it is.

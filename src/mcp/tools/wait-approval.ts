@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { formatWrittenKanboCard, WRITTEN_CARD_ANSWER_SENTENCE, writtenCardDetailArgument } from '../card-output'
 import { cardArgument, defineKanboTool } from './tool'
 
 /**
@@ -13,12 +14,13 @@ export const waitApprovalTool = defineKanboTool({
   name: 'kanbo_wait_approval',
   title: 'Hand the card to a person',
   description: 'Mark the card as waiting for a person and end your turn: `card`, and `text` for the status line the person reads. '
-    + 'A person approves or returns it; you will be told the answer.',
+    + `A person approves or returns it; you will be told the answer. ${WRITTEN_CARD_ANSWER_SENTENCE}`,
   inputSchema: {
     card: cardArgument,
     text: z.string().min(1).optional().describe('The status line to leave, saying what the person is being asked to look at. Also accepted as `content`.'),
+    detail: writtenCardDetailArgument,
   },
   aliases: { text: ['content'] },
   example: { card: 'TST-5', text: 'Ready for review: slugify added with a test' },
-  run: async (transport, input) => await transport.waitApproval(input),
+  run: async (transport, { detail, ...input }) => formatWrittenKanboCard(await transport.waitApproval(input), detail),
 })
