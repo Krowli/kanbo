@@ -50,7 +50,7 @@ The client cannot start the server. Install kanbo globally, or change `command` 
 The `kanbo` a client would start fails before answering. The detail is its first line on stderr; run `kanbo mcp` in the project yourself to see all of it.
 
 **`actor` warn: `This shell says it belongs to an agent`**
-`KANBO_ACTOR_KIND=agent` is set, or an agent tool's mark (`CLAUDECODE=1`, `GEMINI_CLI=1`, `CURSOR_AGENT`) — the finding names which. If this is your own terminal, remove `KANBO_ACTOR_KIND=agent` from your shell profile, or for a mark set `KANBO_ACTOR_KIND=person` (an IDE terminal with the Claude Code extension sets `CLAUDECODE=1`).
+`KANBO_ACTOR_KIND=agent` is set, or an agent tool's mark (`CLAUDECODE=1`, `CODEX_THREAD_ID`, `GEMINI_CLI=1`, `CURSOR_AGENT`) — the finding names which. If this is your own terminal, remove `KANBO_ACTOR_KIND=agent` from your shell profile, or for a mark set `KANBO_ACTOR_KIND=person` (an IDE terminal with the Claude Code extension sets `CLAUDECODE=1`; a shell Codex started inherits `CODEX_THREAD_ID`).
 
 ## Messages
 
@@ -64,7 +64,7 @@ No column "foo" on this board.
 Set `KANBO_DEBUG=1` to also print the values that caused it (`Details: {…}`).
 
 **`This folder has no kanbo board yet. Run kanbo to set one up (or kanbo init --yes for the defaults).` (exit 2)**
-No flag (`--db`, `--database-url`), environment variable (`KANBO_DB_PATH`, `KANBO_DATABASE_URL`) or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo` in the project root, or `cd` into the project. In an agent's shell the message ends `Ask a person to run kanbo here.` instead. For an MCP client, check that it starts `kanbo mcp` in the project directory.
+No flag (`--db`, `--database-url`), environment variable (`KANBO_DB_PATH`, `KANBO_DATABASE_URL`) or `.kanbo/binding.json` at or above the current directory names a board. Run `kanbo` in the project root, or `cd` into the project. In an agent's shell the message reads `Ask a person to run kanbo here.` instead, with a second line, `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo`. For an MCP client, check that it starts `kanbo mcp` in the project directory.
 
 **`This project's board file is missing: <path>. Create a new empty board here: kanbo init --file (the old cards are gone), or restore the file.` (exit 2)**
 The project is bound to a board file (`.kanbo/binding.json`), or `KANBO_DB_PATH` names one, and the file is not there — deleted, moved, or on a checkout that never had it (the board file is not in git). Put the file back where the message says, or start again with an empty board: `kanbo init --file` creates it at the same path and keeps the project's card key. In a terminal, `kanbo` and `kanbo init` offer the same: *Create a new empty board at <path>* or *Cancel*.
@@ -90,8 +90,8 @@ You upgraded kanbo. Run `kanbo migrate` in the project. Reads keep working until
 **`This Postgres database has no kanbo board yet, or one an older kanbo made …` (exit 3)**
 The Postgres database has no board yet, or an older one. Run `kanbo migrate --database-url <owner url>`, then `kanbo roles apply` with the same URL.
 
-**`Approval is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent).` (exit 4)**
-`KANBO_ACTOR_KIND=agent` is set in this shell. Approve from your own terminal, where it is not set — check your shell profile if it is set there. The same message with `(CLAUDECODE=1)`, `(GEMINI_CLI=1)` or `(CURSOR_AGENT)` means an agent tool marked the shell; in your own terminal, set `KANBO_ACTOR_KIND=person`.
+**`Only a person can approve a card. This shell belongs to an agent (KANBO_ACTOR_KIND=agent): ask a person to approve it on the board page (kanbo serve).` (exit 4)**
+`KANBO_ACTOR_KIND=agent` is set in this shell. Approve from your own terminal, where it is not set — check your shell profile if it is set there. The same message with `(CLAUDECODE=1)`, `(CODEX_THREAD_ID)`, `(GEMINI_CLI=1)` or `(CURSOR_AGENT)` means an agent tool marked the shell; in your own terminal, set `KANBO_ACTOR_KIND=person`, or run the command the refusal's second line prints — `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo <the command as typed>`. Every person-only command (`approve`, `return`, `sprint close`, the column changes, `run clear-session`) refuses the same way.
 
 **`One board at a time: pass --db for a board file or --database-url for a shared Postgres board, not both.` (exit 1)**
 Give only one of the two flags.

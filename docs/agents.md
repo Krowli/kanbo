@@ -14,7 +14,7 @@ You can set these up once for every agent you run, per project, or for one speci
 
 kanbo treats a shell as a person's unless it says otherwise:
 
-- **Claude Code, Gemini CLI and Cursor's agent terminals are recognised on their own** by the marks those tools document (`CLAUDECODE=1`, `GEMINI_CLI=1`, `CURSOR_AGENT`); Codex's are not. `KANBO_ACTOR_KIND=person` overrides a mark in your own terminal. See [configuration](configuration.md#agent-shells-kanbo-recognises).
+- **Claude Code, Codex, Gemini CLI and Cursor's agent terminals are recognised on their own** by a mark each tool leaves (`CLAUDECODE=1`, `CODEX_THREAD_ID`, `GEMINI_CLI=1`, `CURSOR_AGENT`) — Claude Code's, Gemini CLI's and Cursor's are documented by the tool itself; Codex's is not, seen instead in its source and in headless runs. `KANBO_ACTOR_KIND=person` overrides a mark in your own terminal. See [configuration](configuration.md#agent-shells-kanbo-recognises).
 - **`KANBO_ACTOR_KIND=agent`** marks a shell (and every process started from it) as an agent's. Then `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, the column changes (`kanbo columns add|rename|move|remove|template|add-standard`) and `kanbo run clear-session` exit with code `4` without touching the board, column entry rules refuse a card instead of warning, and a Postgres binding's agent connection string is used.
 - **`kanbo mcp` is always an agent.** Its client is an agent by definition, whatever the environment says. It has no tool that approves, returns or closes a sprint.
 - **`KANBO_ACTOR_ID`** sets the name an agent's writes are filed under (default: the OS user name). Give each agent its own, e.g. `KANBO_ACTOR_ID=reviewer`.
@@ -106,7 +106,7 @@ default_tools_approval_mode = "approve"
 | Codex | `[shell_environment_policy]` with `set = { KANBO_ACTOR_KIND = "agent" }` in `~/.codex/config.toml` |
 | Cursor | Rely on the MCP server (always an agent); if Cursor's agent also runs `kanbo` in a terminal, start Cursor from a shell where `KANBO_ACTOR_KIND=agent` is exported |
 
-Claude Code, Gemini CLI and Cursor's Agent already mark their shells ([recognised marks](configuration.md#agent-shells-kanbo-recognises)); setting `KANBO_ACTOR_KIND=agent` for them as well does no harm. Codex needs it.
+Claude Code, Codex, Gemini CLI and Cursor's Agent already mark their shells ([recognised marks](configuration.md#agent-shells-kanbo-recognises)) — Codex's mark is undocumented by Codex itself, so setting `KANBO_ACTOR_KIND=agent` for it explicitly (as the table above does) is the more certain route; for the others it does no harm alongside the mark they already leave.
 
 Do **not** export `KANBO_ACTOR_KIND=agent` in your own shell profile — then you could not approve anything yourself.
 

@@ -80,7 +80,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo mcp` | Run the board's MCP server for an agent, over stdio (the agent starts it itself). |
 | `kanbo serve` | Open the board in your browser: serves it over HTTP, with a board page. |
 
-**Person only** commands refuse with exit `4` in an agent's shell: `KANBO_ACTOR_KIND=agent`, or a mark Claude Code, Gemini CLI or Cursor leaves ([configuration](configuration.md#agent-shells-kanbo-recognises)). `KANBO_ACTOR_KIND=person` overrides the mark — meant for your own terminal that an agent tool marked, but nothing stops an agent from setting it too: this check keeps an honest agent from approving its own work, it does not stop one that tries. Real enforcement needs a shared Postgres board with agents on the agent role ([storage](storage.md#roles)). See [agents](agents.md#agents-and-people).
+**Person only** commands refuse with exit `4` in an agent's shell: `KANBO_ACTOR_KIND=agent`, or a mark Claude Code, Codex, Gemini CLI or Cursor leaves ([configuration](configuration.md#agent-shells-kanbo-recognises)). The refusal is two lines: `Only a person can …. This shell belongs to an agent (<mark>): ask a person to … on the board page (kanbo serve).`, then `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo <the command as typed>` — a way through for a person whose own terminal carries an agent tool's mark, but nothing stops an agent from setting it too: this check keeps an honest agent from approving its own work, it does not stop one that tries. Real enforcement needs a shared Postgres board with agents on the agent role ([storage](storage.md#roles)). See [agents](agents.md#agents-and-people).
 
 ## `kanbo`
 
@@ -105,7 +105,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
   Also connect Claude Code:  kanbo init --yes --connect claude
   ```
 
-  and in an agent's shell the first line is `This folder has no kanbo board yet. Ask a person to run kanbo here.` With a board it prints the header, the column counts, the waiting count and the agents as plain lines, ending `More: kanbo --help`.
+  and in an agent's shell the first two lines are `This folder has no kanbo board yet. Ask a person to run kanbo here.` and `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo`. With a board it prints the header, the column counts, the waiting count and the agents as plain lines, ending `More: kanbo --help`.
 
 Any other word is a command: `kanbo frobnicate` still fails with `unknown command` (exit `1`) and suggests the nearest one (`kanbo conect` → `Did you mean connect?`). `kanbo --help` prints the help.
 

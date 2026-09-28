@@ -33,17 +33,16 @@ No check is made when `CI` is set (to anything but empty, `0` or `false`), with 
 
 ## Agent shells kanbo recognises
 
-Some agent tools leave a documented mark in the environment of every command their agent runs. kanbo reads a shell carrying one as an agent's, exactly as if `KANBO_ACTOR_KIND=agent` were set: `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo columns add|rename|move|remove|template|add-standard`, `kanbo run clear-session` and `kanbo run attach-session --replace` exit `4` with "Run it in your own terminal, or on the board page (kanbo serve).", and nothing asks a question (so `kanbo uninstall --purge` keeps the board file).
+Some agent tools leave a mark in the environment of every command their agent runs. kanbo reads a shell carrying one as an agent's, exactly as if `KANBO_ACTOR_KIND=agent` were set: `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo columns add|rename|move|remove|template|add-standard`, `kanbo run clear-session` and `kanbo run attach-session --replace` exit `4` with `Only a person can …. This shell belongs to an agent (<mark>): ask a person to … on the board page (kanbo serve).`, then a second line, `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo <the command as typed>` — and nothing asks a question (so `kanbo uninstall --purge` keeps the board file).
 
 | Mark | Set by | Source |
 | --- | --- | --- |
 | `CLAUDECODE=1` | Claude Code, in its Bash and PowerShell tools, hooks and stdio MCP servers — **and in the integrated terminal of its IDE extensions** | [code.claude.com/docs/en/env-vars](https://code.claude.com/docs/en/env-vars) |
 | `GEMINI_CLI=1` | Gemini CLI, in `run_shell_command` | [geminicli.com/docs/tools/shell](https://geminicli.com/docs/tools/shell/) |
 | `CURSOR_AGENT` (any value) | Cursor, in the Agent's terminal | [cursor.com/docs/agent/tools/terminal](https://cursor.com/docs/agent/tools/terminal) |
+| `CODEX_THREAD_ID` (any value) | Codex, in every shell command it runs | not in Codex's own documentation — `populate_env`, codex-rs `shell_environment.rs`, and seen in headless runs (Codex 0.153.0, 2026-09-28) |
 
-Not recognised: **Codex** documents no variable of its own in the commands it runs, so mark its shells with `KANBO_ACTOR_KIND=agent` ([agents](agents.md#mark-every-agent-shell-as-an-agents)).
-
-**Your own terminal carries a mark** — typically an IDE terminal where the Claude Code extension sets `CLAUDECODE=1` — so person-only commands refuse there: set `KANBO_ACTOR_KIND=person` in that terminal (or its profile). `KANBO_ACTOR_KIND` always wins over the marks. `kanbo doctor` shows which mark it saw (`actor` warn).
+**Your own terminal carries a mark** — typically an IDE terminal where the Claude Code extension sets `CLAUDECODE=1`, or a shell Codex started that inherits `CODEX_THREAD_ID` — so person-only commands refuse there: set `KANBO_ACTOR_KIND=person` in that terminal (or its profile), or run the command the refusal's second line prints. `KANBO_ACTOR_KIND` always wins over the marks. `kanbo doctor` shows which mark it saw (`actor` warn).
 
 ## The session a run records
 
@@ -54,7 +53,7 @@ Not recognised: **Codex** documents no variable of its own in the commands it ru
 | `CLAUDE_CODE_SESSION_ID` | Claude Code, in its Bash and PowerShell tools, hooks and stdio MCP servers ([env-vars](https://code.claude.com/docs/en/env-vars)) | `claude:<id>` |
 | `CODEX_THREAD_ID` | Codex, in every shell command (its session id; `populate_env` in codex-rs `shell_environment.rs`) | `codex:<id>` |
 
-Only when exactly one is set: an agent started inside the other's shell inherits both, and nothing says which one is running. Both were seen in a headless run on 2026-09-28 (Claude Code 2.1.283, Codex 0.153.0). The id is not what marks a shell as an agent's — `CLAUDECODE` and the others above do that.
+Only when exactly one is set: an agent started inside the other's shell inherits both, and nothing says which one is running. Both were seen in a headless run on 2026-09-28 (Claude Code 2.1.283, Codex 0.153.0). `CODEX_THREAD_ID` is also what marks a Codex shell as an agent's ([above](#agent-shells-kanbo-recognises)); `CLAUDE_CODE_SESSION_ID` records the session but is not itself a mark — `CLAUDECODE` is.
 
 ## How a command finds its board
 

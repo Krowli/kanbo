@@ -304,7 +304,8 @@ status line: Both subtasks done; please review the middleware PR
 waiting for a person
 
 $ kanbo approve API-001
-Approval is for a person. This shell belongs to an agent (KANBO_ACTOR_KIND=agent). Ask a person to approve it on the board or run "kanbo approve" in their own terminal. Run it in your own terminal, or on the board page (kanbo serve).
+Only a person can approve a card. This shell belongs to an agent (KANBO_ACTOR_KIND=agent): ask a person to approve it on the board page (kanbo serve).
+If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo approve API-001
 (exit 4)
 
 $ kanbo card get API-001 --json id,column,statusLine,waitingFor,attemptCount
