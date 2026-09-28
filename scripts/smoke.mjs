@@ -130,6 +130,55 @@ function run(command, commandArgs, { env = kanboEnv(), cwd = project, expectCode
 
 const kanbo = (commandArgs, options) => run('kanbo', commandArgs, options)
 
+/**
+ * How long one `npm install --global` may take. On a Windows runner an install
+ * of the package with its dependencies has taken just under two minutes, the
+ * limit `run` gives a command, and once went over it.
+ */
+const NPM_INSTALL_TIMEOUT_MS = 10 * 60_000
+
+/**
+ * `npm install --global` of `packageSpec` into the prefix, with npm's own
+ * environment. It prints a line every 30 s so a slow install does not read as a
+ * hang, and past `NPM_INSTALL_TIMEOUT_MS` it stops npm's whole process tree and
+ * waits for it to go before failing: a timeout that killed only the shell would
+ * leave npm writing into the prefix and holding its files.
+ */
+async function npmInstall(packageSpec) {
+  const commandArgs = ['install', '--global', '--prefix', prefix, '--no-audit', '--no-fund', packageSpec]
+  const shown = ['npm', ...commandArgs].join(' ')
+  note(`$ ${shown}`)
+  const spec = spawnArgs('npm', commandArgs)
+  const started = Date.now()
+  const child = spawn(spec.file, spec.args, { cwd: root, env: process.env, shell: spec.shell, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+  let output = ''
+  child.stdout.on('data', (chunk) => { output += chunk })
+  child.stderr.on('data', (chunk) => { output += chunk })
+  const closed = new Promise((resolveClose, reject) => {
+    child.on('close', (code, signal) => resolveClose({ code, signal }))
+    child.on('error', error => reject(new SmokeFailure(`${shown} did not run: ${error.message}`)))
+  })
+  const seconds = () => Math.round((Date.now() - started) / 1000)
+  const heartbeat = setInterval(() => note(`… npm still running after ${seconds()} s`), 30_000)
+  try {
+    const { code, signal } = await withTimeout(closed, NPM_INSTALL_TIMEOUT_MS, `${shown} did not finish within ${NPM_INSTALL_TIMEOUT_MS / 60_000} min`)
+    if (code !== 0) {
+      throw new SmokeFailure(`${shown} exited ${code} (signal ${signal}) after ${seconds()} s\n${output.replace(/\r\n/g, '\n')}`)
+    }
+    note(`npm finished in ${seconds()} s`)
+  }
+  catch (error) {
+    if (child.exitCode === null && child.signalCode === null) {
+      stopTree(child)
+      await withTimeout(closed, 30_000, `${shown} was still running 30 s after being stopped`).catch(() => {})
+    }
+    throw error instanceof SmokeFailure ? new SmokeFailure(`${error.message}\n${output.replace(/\r\n/g, '\n')}`) : error
+  }
+  finally {
+    clearInterval(heartbeat)
+  }
+}
+
 // ---------------------------------------------------------------- helpers for the checks
 
 function readText(path) {
@@ -261,7 +310,7 @@ async function main() {
 
   step('install the tarball globally into a temporary prefix')
   // npm itself keeps the real environment (its cache, its registry settings); only kanbo runs get the throwaway home.
-  run('npm', ['install', '--global', '--prefix', prefix, '--no-audit', '--no-fund', tarball], { env: process.env, cwd: root })
+  await npmInstall(tarball)
   check(existsSync(join(packageDir, 'package.json')), `the package is not at ${packageDir}`)
   const sqlite = existsSync(join(packageDir, 'node_modules', 'better-sqlite3')) || existsSync(join(prefix, WINDOWS ? '' : 'lib', 'node_modules', 'better-sqlite3'))
   check(sqlite, 'better-sqlite3 was not installed with the package')
@@ -415,8 +464,8 @@ async function upgradeMain() {
   const tarball = packTarball()
 
   step(`u1. install the published kanbo-cli@${OLD_VERSION}, and better-sqlite3 beside it as ${OLD_VERSION} asked`)
-  run('npm', ['install', '--global', '--prefix', prefix, '--no-audit', '--no-fund', `kanbo-cli@${OLD_VERSION}`], { env: process.env, cwd: root })
-  run('npm', ['install', '--global', '--prefix', prefix, '--no-audit', '--no-fund', 'better-sqlite3@13'], { env: process.env, cwd: root })
+  await npmInstall(`kanbo-cli@${OLD_VERSION}`)
+  await npmInstall('better-sqlite3@13')
   const oldVersion = kanbo(['--version']).stdout.trim()
   check(oldVersion === OLD_VERSION, `kanbo --version printed ${JSON.stringify(oldVersion)}, expected ${OLD_VERSION}`)
   note(oldVersion)
@@ -454,7 +503,7 @@ async function upgradeMain() {
   note(`${cardsBefore.length} cards; ${Object.entries(tablesBefore).map(([name, table]) => `${name} ${table.rows.length}`).join(', ')}`)
 
   step(`u4. install this build (${VERSION}) over the same prefix`)
-  run('npm', ['install', '--global', '--prefix', prefix, '--no-audit', '--no-fund', tarball], { env: process.env, cwd: root })
+  await npmInstall(tarball)
   const newVersion = kanbo(['--version']).stdout.trim()
   check(newVersion === VERSION, `kanbo --version printed ${JSON.stringify(newVersion)}, expected ${VERSION}`)
   // The version may not have moved yet (it is bumped at release); a command 0.2.1 did not have tells the builds apart.
