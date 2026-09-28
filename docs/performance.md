@@ -3,7 +3,8 @@
 How fast kanbo answers on boards of 100, 1,000 and 10,000 cards, how many
 database statements each read costs, and how much text each MCP tool hands an
 agent. Numbers below were taken on 2026-09-28 with `scripts/bench.mjs`, before and after
-[agent efficiency](agent-efficiency.md).
+[agent efficiency](agent-efficiency.md). [Real agents](#real-agents) is what Claude Code
+and Codex actually do with the board, from `evals/agent-eval.mjs`.
 
 ## Method
 
@@ -279,3 +280,114 @@ run short.
 The [Bench workflow](../.github/workflows/bench.yml) runs it at 1,000 cards
 weekly and on demand (Actions → Bench → Run workflow), and attaches the report
 as the `bench` artifact and the job summary. It never runs on a push.
+
+## Real agents
+
+What real coding agents do with a board, measured with
+[`evals/agent-eval.mjs`](../evals/README.md) on 2026-09-28: each run is a fresh
+git project (a tiny JavaScript package and a seeded board), `kanbo connect` for the
+variant, and one sentence of task given to the agent headless. The run is scored
+from the board afterwards and from the agent's transcript. Run by hand before a
+release; it costs money and is never in CI.
+
+- **Agents:** Claude Code 2.1.283 with `--model sonnet`; Codex CLI 0.153.0 with its
+  default model (`codex exec`).
+- **Variants:** `full` — `kanbo connect <agent> --project` (the instruction block
+  and the MCP server); `mcp` — MCP only; `instructions` — the instruction block
+  only, the agent using `kanbo` in its shell. Codex was run on `full` only.
+- **Builds:** 3e69998 (after [agent efficiency](agent-efficiency.md)) and, for the
+  three scenarios where it matters, 4c3e532 (before it).
+- **Runs:** 3 per scenario, variant, agent and build — 69 runs: 45 Claude Code on
+  3e69998, 9 Claude Code on 4c3e532, 15 Codex. Claude Code reported $9.34 in all
+  (31 agent-minutes); Codex 18 agent-minutes, no cost reported.
+- **Kanbo calls** are MCP `kanbo_*` tool calls plus shell commands running `kanbo`,
+  failed ones included (in brackets: how many failed, over the three runs).
+  **Tokens** are everything the agent reported for the run — input, output and
+  cache reads — so they are dominated by the agent's own system prompt and tools.
+  Raw results: `evals/results/2026-09-28.json`.
+
+| build | agent | variant | scenario | all rules kept | median kanbo calls (failed) | median tokens | median output tokens | median time (s) | median cost ($) |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| 3e69998 | Claude Code | full | take-next | 3/3 | 9 (1) | 512,205 | 2,756 | 37 | 0.21 |
+| 3e69998 | Claude Code | full | whats-waiting | 1/3 | 4 (1) | 166,935 | 648 | 10 | 0.09 |
+| 3e69998 | Claude Code | full | plan-big | 3/3 | 8 (1) | 275,557 | 2,115 | 40 | 0.15 |
+| 3e69998 | Claude Code | full | plan-small | 3/3 | 3 (0) | 171,213 | 1,198 | 19 | 0.11 |
+| 3e69998 | Claude Code | full | returned | 3/3 | 8 (0) | 557,640 | 3,754 | 54 | 0.23 |
+| 3e69998 | Claude Code | mcp | take-next | 3/3 | 10 (4) | 438,164 | 2,933 | 33 | 0.19 |
+| 3e69998 | Claude Code | mcp | whats-waiting | 1/3 | 4 (2) | 167,837 | 812 | 11 | 0.10 |
+| 3e69998 | Claude Code | mcp | plan-big | 3/3 | 6 (0) | 170,396 | 1,696 | 22 | 0.11 |
+| 3e69998 | Claude Code | mcp | plan-small | 3/3 | 4 (0) | 166,834 | 1,385 | 24 | 0.10 |
+| 3e69998 | Claude Code | mcp | returned | 3/3 | 8 (1) | 529,566 | 3,939 | 53 | 0.22 |
+| 3e69998 | Claude Code | instructions | take-next | 3/3 | 10 (1) | 672,337 | 2,982 | 47 | 0.26 |
+| 3e69998 | Claude Code | instructions | whats-waiting | 0/3 | 4 (0) | 211,248 | 841 | 21 | 0.12 |
+| 3e69998 | Claude Code | instructions | plan-big | 3/3 | 10 (0) | 388,168 | 3,516 | 43 | 0.20 |
+| 3e69998 | Claude Code | instructions | plan-small | 3/3 | 3 (0) | 212,827 | 1,595 | 25 | 0.13 |
+| 3e69998 | Claude Code | instructions | returned | 3/3 | 9 (0) | 932,541 | 5,295 | 66 | 0.34 |
+| 3e69998 | Codex | full | take-next | 3/3 | 16 (3) | 355,089 | 1,763 | 88 | — |
+| 3e69998 | Codex | full | whats-waiting | 0/3 | 4 (0) | 108,778 | 360 | 22 | — |
+| 3e69998 | Codex | full | plan-big | 3/3 | 17 (3) | 270,410 | 3,715 | 128 | — |
+| 3e69998 | Codex | full | plan-small | 3/3 | 14 (3) | 187,612 | 1,477 | 69 | — |
+| 3e69998 | Codex | full | returned | 3/3 | 16 (3) | 340,354 | 1,592 | 72 | — |
+| 4c3e532 | Claude Code | full | take-next | 3/3 | 9 (0) | 386,252 | 2,421 | 28 | 0.17 |
+| 4c3e532 | Claude Code | full | whats-waiting | 3/3 | 2 (0) | 128,947 | 483 | 14 | 0.08 |
+| 4c3e532 | Claude Code | full | returned | 3/3 | 8 (2) | 645,468 | 5,180 | 54 | 0.27 |
+
+**Rules.** On 3e69998 every rule check was kept in every run, on both agents and
+every variant — 264 of 264 — except one: "at most two kanbo calls" in
+`whats-waiting` (2 of 12 runs). Out of 12 runs per scenario: the agent took the
+To Do card and not the Backlog one, moved it to In Progress, wrote at least two
+status lines, commented the result, left the card in In Review or waiting for a
+person, and never tried `kanbo approve` (12/12 on `take-next`); it split the
+three-part card into sub-cards of it and created no top-level card (12/12), and
+left the typo card whole (12/12); it read the person's comment on the returned
+card, fixed what the comment asked, added the test and handed the card back
+(12/12); it named both cards waiting for the person and changed nothing (12/12).
+
+**Before and after agent efficiency.** On this nine-card board the calls did not
+go down. Before, `kanbo_card_list` answered every card with everything, so
+"what's waiting for me" was `kanbo_prime` + one list (2 calls, 3/3 runs). After,
+the agent filters (`{ waitingForPerson: true }`) and gets compact rows — then
+opens each waiting card with `kanbo_card_get` to see its comments (3–6 calls in
+10 of 12 runs). The compact answer is what keeps a 1,000-card board readable (see
+[MCP response size](#mcp-response-size)); on a small board the follow-up calls
+cost more than the rows saved.
+
+**Where kanbo confused the agents** (transcript excerpts; proposed fixes are listed
+in the T34 report, not made here):
+
+- `kanbo_card_comment` takes `content`, while `kanbo_status_line` and
+  `kanbo_wait_approval` take `text`. Claude Code sent `text` in 6 runs (4 on
+  3e69998, 2 on 4c3e532), got
+  `Invalid arguments … expected string, received undefined at content`, and sent
+  it again:
+  `kanbo_card_comment {"card":"TST-002","text":"Added slugify(text) …"} [failed]`.
+- A card is answered as `{"id":"TST-005", …}` but `kanbo_card_get` wants `card`:
+  `kanbo_card_get {"id":"TST-005"} [failed]`, twice in one run, then
+  `ToolSearch select:mcp__kanbo__kanbo_card_get` and the call again. Claude Code
+  defers MCP tools behind its tool search; an agent that calls a tool before
+  loading its schema guesses the argument names from the answers it has seen.
+- `kanbo run finish --state` is `finished`, `failed` or `stopped`; agents write
+  `completed` or `succeeded` first — 11 of the 12 Codex runs that started a run,
+  and at least 2 of the 8 Claude Code runs that did:
+  `kanbo run finish b116e026-… --state completed` → `Unknown run state "completed"`.
+- "Continue the card that was returned to you" has no direct question. The
+  returned card sits in In Progress, so `kanbo ready` does not show it, and agents
+  search — one run: `kanbo_card_list {"column":"in_review"}`, `{"hasActiveRun":true}`,
+  `{"column":"in_progress"}`, `{"waitingForPerson":false}` before `kanbo_card_get`
+  (4 list calls); two of three Codex runs first opened the To Do card `ready`
+  offered (`kanbo card get TST-003 …`). The status line it finds reads
+  `returned by you: …` — said to the person, read by the agent.
+- Claude Code does not know its own session id. The prime text asks for
+  `claude:<session id>`, and agents invent one: `"session":"claude:sonnet-5-session"`,
+  `claude:current`, `--session "claude:$(echo $CLAUDE_SESSION_ID)"` (a variable
+  name the agent guessed), or put it in a status line (`Started via claude:session, …`).
+- With the shell, agents read `kanbo capabilities` to learn the commands: 13 of
+  15 Claude Code runs with `instructions` only and 12 of 15 Codex runs; none with
+  MCP, whose tool list already says it.
+
+Headless Codex needs `default_tools_approval_mode = "approve"` on the kanbo MCP
+server: `codex exec` never asks, so without it every `kanbo_*` tool is refused
+(`MCP tool call requires approval, but approval policy is never`). With it, Codex
+still made 190 of its 199 kanbo calls through the shell — the instruction block
+and `kanbo prime` name commands.
+
