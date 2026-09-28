@@ -1,5 +1,7 @@
 import type { Command } from 'commander'
 
+import type { UpdateCheck } from '../update-check'
+
 import { registerApproveCommand } from './approve'
 import { registerBoardCommand } from './board'
 import { registerCapabilitiesCommand } from './capabilities'
@@ -33,12 +35,12 @@ import { registerUninstallCommand } from './uninstall'
  * The order is the order `kanbo --help` lists them in, under the heading of
  * the group each belongs to.
  */
-export function registerKanboCommands(program: Command): void {
+export function registerKanboCommands(program: Command, context: KanboProgramContext = {}): void {
   program.commandsGroup('Get started:')
   registerInitCommand(program)
   registerConnectCommand(program)
   registerInstructionsCommand(program)
-  registerDoctorCommand(program)
+  registerDoctorCommand(program, context.update ?? null)
   registerUninstallCommand(program)
 
   program.commandsGroup('Your board:')
@@ -60,4 +62,14 @@ export function registerKanboCommands(program: Command): void {
   program.commandsGroup('Shared Postgres boards:')
   registerMigrateCommand(program)
   registerRolesCommands(program)
+}
+
+/** What a run of `kanbo` hands its commands. */
+export interface KanboProgramContext {
+  /**
+   * The update check this run started (`update-check.ts`), for `kanbo doctor`
+   * to report instead of asking npm a second time; `null` or absent when the
+   * run skips it.
+   */
+  update?: UpdateCheck | null
 }

@@ -11,15 +11,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { writeFakeBin } from '../testing/fake-bin'
 import { createPromptDriver } from '../testing/prompt-driver'
+import type { KanboProgramContext } from './commands'
 import { DOCTOR_FIX_YES_HINT, registerDoctorCommand } from './commands/doctor'
 import { registerInitCommand } from './commands/init'
 import type { DoctorFinding } from './doctor'
 import { collectDoctorFindings } from './doctor'
+import { runKanbo } from './program'
 import { INSTRUCTION_BLOCK, wrapInstructionBlock } from './setup/instructions'
 import { LEGACY_BLOCK_BODIES } from './setup/legacy-blocks'
 import { readJsonMcpEntry } from './setup/mcp-config'
 import { createUi, setUiForTests } from './ui/ui'
-import { startUpdateCheck } from './update-check'
+import { startUpdateCheck, UPDATE_CHECK_GRACE_MS, UPDATE_CHECK_TIMEOUT_MS } from './update-check'
 
 /** This package's own command, run from source: what a healthy install's `kanbo` on PATH would be. */
 const CLI_ENTRY = join(dirname(fileURLToPath(import.meta.url)), 'index.ts')
@@ -415,6 +417,56 @@ describe('kanbo doctor', () => {
       const again = output.split('Checked again:')[1]!
       expect(again).toContain(`ok    instructions   ${claudeMd()}: block is current.`)
       expect(again).toContain(`warn  instructions   ${agentsMd()}: you edited the kanbo block`)
+    })
+
+    /** `kanbo doctor` as the binary runs it: through `runKanbo`, which starts the run's update check. */
+    const doctorProgram = (context: KanboProgramContext): Command => {
+      const program = new Command().exitOverride()
+      registerDoctorCommand(program, context.update ?? null)
+      return program
+    }
+
+    it('asks npm once per run: both rounds of --fix report the same answer, and nothing is asked after', async () => {
+      oldAndEditedBlocks()
+      const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(JSON.stringify({ version: '9.0.0' })))
+
+      await runKanbo(['doctor', '--fix', '--yes'], doctorProgram, {}, { fetch, env: {}, currentVersion: '0.3.0', platform: 'linux' }).catch(() => {})
+
+      expect(fetch).toHaveBeenCalledOnce()
+      const output = printed.join('\n')
+      expect(output.split('Checked again:')[1]).toContain('info  update         kanbo 9.0.0 is available (you have 0.3.0).')
+      expect(printed.filter(line => line.includes('is available'))).toEqual([
+        'info  update         kanbo 9.0.0 is available (you have 0.3.0).',
+        'info  update         kanbo 9.0.0 is available (you have 0.3.0).',
+      ])
+    })
+
+    it('waits for a slow npm no more than ~300 ms after its checks, then stops asking', async () => {
+      oldAndEditedBlocks()
+      let signal: AbortSignal | undefined
+      const fetch = vi.fn<typeof globalThis.fetch>((_url, init) => new Promise<Response>((_resolve, reject) => {
+        const aborted = init!.signal!
+        signal = aborted
+        aborted.addEventListener('abort', () => reject(new Error('aborted')))
+      }))
+      // npm's own timeout never fires; every other wait is recorded and passes at once.
+      const waits: number[] = []
+      const timers = {
+        setTimeout: (callback: () => void, ms: number): unknown => {
+          waits.push(ms)
+          return waits.length === 1 ? null : setTimeout(callback, 0)
+        },
+        clearTimeout: (handle: never): void => clearTimeout(handle ?? undefined),
+      }
+
+      await runKanbo(['doctor', '--fix', '--yes'], doctorProgram, {}, { fetch, env: {}, timers, currentVersion: '0.3.0', platform: 'linux' }).catch(() => {})
+
+      expect(fetch).toHaveBeenCalledOnce()
+      expect(waits[0]).toBe(UPDATE_CHECK_TIMEOUT_MS)
+      expect(waits.length).toBeGreaterThan(1)
+      expect(waits.slice(1).every(ms => ms <= UPDATE_CHECK_GRACE_MS)).toBe(true)
+      expect(signal!.aborted).toBe(true)
+      expect(printed.join('\n')).not.toContain('is available')
     })
 
     it('with nobody to ask and no --yes, prints the plan and how to apply it, and changes nothing', async () => {

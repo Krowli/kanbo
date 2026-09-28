@@ -34,7 +34,7 @@ import { isNpxScript, NOT_INSTALLED_FIX } from './setup/launch-warning'
 import { resolveShimTarget } from './setup/npm-shim'
 import { findAllOnPath, findOnPath } from './setup/paths'
 import type { UpdateCheck } from './update-check'
-import { UPDATE_CHECK_TIMEOUT_MS, UPDATE_COMMAND } from './update-check'
+import { UPDATE_COMMAND } from './update-check'
 
 /**
  * `kanbo doctor` — the checks for the ways kanbo can be set up wrong without
@@ -131,8 +131,9 @@ export async function collectDoctorFindings(input: DoctorInput): Promise<DoctorF
 
   findings.push(checkActor())
 
-  // By now npm has had as long as the checks took; it gets no longer than a command's own check would.
-  const update = await input.update?.settle(UPDATE_CHECK_TIMEOUT_MS)
+  // By now npm has had as long as the checks took; like after any command, it
+  // gets ~300 ms more at most. A second round (`--fix`) gets the same answer at once.
+  const update = await input.update?.settle()
   if (update) {
     findings.splice(1, 0, {
       check: 'update',

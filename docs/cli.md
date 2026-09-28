@@ -253,7 +253,7 @@ Checks, each `ok`, `info`, `warn` or `fail`, with a `fix` on everything that is 
 | Check | What it looks at |
 | --- | --- |
 | `version` | This kanbo's version and where it runs from. |
-| `update` | `info` when npm has a newer kanbo (the [update check](configuration.md#update-check), with its skips — none with `--json`); the fix is `npm install -g kanbo-cli@latest`. Only shown when there is one. |
+| `update` | `info` when npm has a newer kanbo (the run's own [update check](configuration.md#update-check), with its skips — none with `--json`; `--fix` reports the same answer twice rather than asking again); the fix is `npm install -g kanbo-cli@latest`. Only shown when there is one. |
 | `install` | `warn` when this kanbo runs from npx's cache: agents cannot start it. Install it globally (`npm install -g kanbo-cli`). Only shown then. |
 | `path` | The first `kanbo` on `PATH` is this one (`warn` when another one shadows it, or none is on `PATH`). |
 | `binding` | The nearest `.kanbo/` at or above this folder has a readable `binding.json` (`fail` when it does not; `warn` outside any project). |

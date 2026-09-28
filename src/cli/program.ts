@@ -1,13 +1,14 @@
 import { Command } from 'commander'
 
 import { KANBO_PACKAGE_VERSION } from '../package-version'
+import type { KanboProgramContext } from './commands'
 import { registerKanboCommands } from './commands'
 import type { BareKanboContext } from './home'
 import { runBareKanbo } from './home'
 import { canPrompt } from './ui/environment'
 import { getUi } from './ui/ui'
 import type { UpdateCheckDeps, UpdateInstaller } from './update-check'
-import { installUpdate, offerUpdate, skipsUpdateCheck, startUpdateCheck } from './update-check'
+import { canUpdateInPlace, describeUpdateForShell, installUpdate, offerUpdate, skipsUpdateCheck, startUpdateCheck } from './update-check'
 
 /**
  * The `kanbo` program: every command on one `Command`, and what `kanbo` with
@@ -17,18 +18,19 @@ import { installUpdate, offerUpdate, skipsUpdateCheck, startUpdateCheck } from '
  * the home screen builds a fresh program for each command it runs from its
  * menu, and a test runs `kanbo …` in-process through `runKanbo`.
  */
-export function createKanboProgram(): Command {
+export function createKanboProgram(context: KanboProgramContext = {}): Command {
   const program = new Command()
     .name('kanbo')
     .description('kanbo — a kanban board your coding agents work on and you approve. Run `kanbo` to start.')
     .version(KANBO_PACKAGE_VERSION)
-  registerKanboCommands(program)
+  registerKanboCommands(program, context)
   return program
 }
 
-/** What the update check runs on, for a test: npm, the clock, the environment, the installer. */
+/** What the update check runs on, for a test: npm, the clock, the environment, the installer, the OS. */
 export interface UpdateRunOptions extends UpdateCheckDeps {
   install?: UpdateInstaller
+  platform?: NodeJS.Platform
 }
 
 /**
@@ -38,31 +40,53 @@ export interface UpdateRunOptions extends UpdateCheckDeps {
  * error and suggestion, and `--help` its help.
  *
  * Alongside the command, npm is asked whether a newer kanbo is out
- * (`update-check.ts`); the answer is used only once the command has finished,
- * and a command that fails ends without it.
+ * (`update-check.ts`) — once per run: `kanbo doctor`, including every doctor
+ * the home menu runs, reports this same check. The answer is used only once
+ * the command has finished, and a command that fails ends without it. After
+ * `kanbo doctor` nobody is asked (it showed the answer as a finding); after
+ * the home screen the answer is one line, unless kanbo was updated from its menu.
  */
 export async function runKanbo(
   args: string[],
-  program: () => Command = createKanboProgram,
+  program: (context: KanboProgramContext) => Command = createKanboProgram,
   home: Pick<BareKanboContext, 'boardPage'> = {},
   updates: UpdateRunOptions = {},
 ): Promise<void> {
   const check = skipsUpdateCheck(args, updates.env) ? null : startUpdateCheck(updates)
+  const context: KanboProgramContext = { update: check }
+  const platform = updates.platform ?? process.platform
   const ui = getUi()
   const interactive = canPrompt(ui)
-  let shownOnHome = false
+  let fromHome = false
+  let told = false
   try {
     if (args.length === 0) {
-      shownOnHome = await runBareKanbo({
+      fromHome = await runBareKanbo({
         ui,
         interactive,
-        createProgram: () => throwInsteadOfExiting(program()),
-        ...(check ? { update: { peek: check.peek, install: update => installUpdate(update, updates.install) } } : {}),
+        createProgram: () => throwInsteadOfExiting(program(context)),
+        ...(check
+          ? {
+              update: {
+                peek: check.peek,
+                inPlace: canUpdateInPlace(platform),
+                install: () => {
+                  // Tried from the menu: its outcome has been said, so nothing is said again on leaving.
+                  told = true
+                  return installUpdate(updates.install)
+                },
+                tell: (update) => {
+                  told = true
+                  console.error(describeUpdateForShell(update, platform))
+                },
+              },
+            }
+          : {}),
         ...home,
       }) === 'home'
     }
     else {
-      await program().parseAsync(args, { from: 'user' })
+      await program(context).parseAsync(args, { from: 'user' })
     }
   }
   catch (error) {
@@ -70,9 +94,15 @@ export async function runKanbo(
     throw error
   }
   const update = await check?.settle()
-  if (update && !shownOnHome) {
-    await offerUpdate(update, { ui, interactive, install: updates.install })
+  if (!update || told || args[0] === 'doctor') {
+    return
   }
+  if (fromHome) {
+    // The person has left the menu: no question now, one line.
+    console.error(describeUpdateForShell(update, platform))
+    return
+  }
+  await offerUpdate(update, { ui, interactive, install: updates.install, platform })
 }
 
 /**

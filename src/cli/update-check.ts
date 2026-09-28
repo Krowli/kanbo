@@ -12,9 +12,11 @@ import { CancelledError } from './ui/ui'
  * There is no schedule and no cache: each run starts one request for the
  * `latest` version, gives it ~1.5 s, and uses the answer only if it came
  * before the command finished (waiting ~300 ms more at most). A person at a
- * terminal is then asked whether to update; an agent's shell, or any shell
- * with nobody to ask, gets one line on stderr; `kanbo mcp` puts one line into
- * `kanbo_prime`. A network that fails says nothing (`KANBO_DEBUG=1` says why).
+ * terminal is then asked whether to update; an agent's shell, any shell
+ * with nobody to ask, and Windows (where a running kanbo cannot replace
+ * itself) get one line on stderr; `kanbo mcp` puts one line into
+ * `kanbo_prime`; `kanbo doctor` shows it as a finding. A network that fails
+ * says nothing (`KANBO_DEBUG=1` says why).
  *
  * Nobody is asked in CI, with `KANBO_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER`
  * set, for machine output (`--json`, `--format json`), `--version`, `--help`,
@@ -180,9 +182,23 @@ function comparePreRelease(left: string[], right: string[]): number {
   return 0
 }
 
-/** The line an agent's shell, or any shell with nobody to ask, gets on stderr. */
-export function describeUpdateForShell(update: AvailableUpdate): string {
-  return `kanbo ${update.latest} is available (you have ${update.current}) — ${UPDATE_COMMAND}`
+/**
+ * Can this kanbo replace itself with `npm install -g`? Not on Windows: the
+ * running kanbo holds its native SQLite module open, and Windows does not let
+ * npm replace a file that is in use.
+ */
+export function canUpdateInPlace(platform: NodeJS.Platform = process.platform): boolean {
+  return platform !== 'win32'
+}
+
+/**
+ * The one line an agent's shell, a shell with nobody to ask, or anyone on
+ * Windows gets. On Windows it says to close kanbo first (`canUpdateInPlace`).
+ */
+export function describeUpdateForShell(update: AvailableUpdate, platform: NodeJS.Platform = process.platform): string {
+  return canUpdateInPlace(platform)
+    ? `kanbo ${update.latest} is available (you have ${update.current}) — ${UPDATE_COMMAND}`
+    : `kanbo ${update.latest} is available (you have ${update.current}). Close kanbo and run: ${UPDATE_COMMAND}`
 }
 
 /** The question a person at a terminal is asked. */
@@ -195,33 +211,62 @@ export function describeUpdateForAgent(update: AvailableUpdate): string {
   return `Note: kanbo ${update.latest} is available (running ${update.current}). Ask a person to update: ${UPDATE_COMMAND}`
 }
 
-/** Runs `npm install -g kanbo-cli@latest` with the terminal handed to npm. */
+/**
+ * Runs `npm install -g kanbo-cli@latest`: npm's progress goes straight to the
+ * terminal, its errors come back in `stderr` (and are passed on) so a
+ * permissions failure can be recognised.
+ */
 export type UpdateInstaller = () => SpawnSyncReturns<string>
 
-export const installLatestKanbo: UpdateInstaller = () => spawnCommandSync(UPDATE_ARGV[0], UPDATE_ARGV[1], { stdio: 'inherit' })
+export const installLatestKanbo: UpdateInstaller = () => {
+  const result = spawnCommandSync(UPDATE_ARGV[0], UPDATE_ARGV[1], { stdio: ['inherit', 'inherit', 'pipe'] })
+  if (result.stderr) {
+    process.stderr.write(result.stderr)
+  }
+  return result
+}
 
-/** Install the update and say how it went: `Updated to X.`, or what failed and the command to run. */
-export function installUpdate(update: AvailableUpdate, install: UpdateInstaller = installLatestKanbo): boolean {
+/** Where npm explains fixing a global folder kanbo may not write to. */
+export const NPM_PERMISSIONS_URL = 'https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally'
+
+/**
+ * Install the update; `true` when it worked. The caller says so — the words
+ * depend on whether kanbo keeps running. A failure is said here: what failed,
+ * the command to run, and — when npm could not write its global folder — where
+ * npm explains the fix.
+ */
+export function installUpdate(install: UpdateInstaller = installLatestKanbo): boolean {
   const result = install()
   if (!result.error && result.status === 0) {
-    console.log(`Updated to ${update.latest}.`)
     return true
   }
   const why = result.error ? result.error.message : `npm exited with code ${result.status ?? result.signal ?? '?'}`
-  console.error(`kanbo was not updated: ${why}. Run it yourself: ${UPDATE_COMMAND}`)
+  const lines = [`kanbo was not updated: ${why}. Run it yourself: ${UPDATE_COMMAND}`]
+  if (isPermissionFailure(result)) {
+    lines.push(`Your npm global folder needs permissions — see ${NPM_PERMISSIONS_URL}`)
+  }
+  console.error(lines.join('\n'))
   return false
+}
+
+/** npm (or starting it) was refused a file: `EACCES` or `EPERM`. */
+function isPermissionFailure(result: SpawnSyncReturns<string>): boolean {
+  const code = (result.error as NodeJS.ErrnoException | undefined)?.code
+  return code === 'EACCES' || code === 'EPERM' || /\bE(?:ACCES|PERM)\b/.test(result.stderr ?? '')
 }
 
 /**
  * Tell whoever ran the command about a newer kanbo: a person at a terminal is
- * asked (default No) and a yes installs it; anyone else gets one line on stderr.
+ * asked (default No) and a yes installs it; anyone else — and anyone on
+ * Windows, where a running kanbo cannot replace itself — gets one line on stderr.
  */
 export async function offerUpdate(
   update: AvailableUpdate,
-  context: { ui: Ui, interactive: boolean, install?: UpdateInstaller },
+  context: { ui: Ui, interactive: boolean, install?: UpdateInstaller, platform?: NodeJS.Platform },
 ): Promise<void> {
-  if (!context.interactive) {
-    console.error(describeUpdateForShell(update))
+  const platform = context.platform ?? process.platform
+  if (!context.interactive || !canUpdateInPlace(platform)) {
+    console.error(describeUpdateForShell(update, platform))
     return
   }
   let yes: boolean
@@ -234,8 +279,8 @@ export async function offerUpdate(
     }
     throw error
   }
-  if (yes) {
-    installUpdate(update, context.install)
+  if (yes && installUpdate(context.install)) {
+    console.log(`Updated to ${update.latest}.`)
   }
 }
 

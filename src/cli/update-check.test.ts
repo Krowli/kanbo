@@ -74,7 +74,7 @@ describe('the update check on start', () => {
     const fetch = npmSays('9.0.0')
     const install = vi.fn<UpdateInstaller>(succeeded)
 
-    const running = runKanbo(['hello'], program, {}, { fetch, env: {}, currentVersion: '0.3.0', install })
+    const running = runKanbo(['hello'], program, {}, { fetch, env: {}, currentVersion: '0.3.0', platform: 'linux', install })
     await driver.waitFor('kanbo 9.0.0 is available (you have 0.3.0). Update now?')
     expect(printed).toEqual(['hello output'])
     driver.press('up', 'enter')
@@ -90,7 +90,7 @@ describe('the update check on start', () => {
     setUiForTests(driver.ui)
     const install = vi.fn<UpdateInstaller>(succeeded)
 
-    const running = runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install })
+    const running = runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', platform: 'linux', install })
     await driver.waitFor('Update now?')
     driver.press('enter')
     await running
@@ -105,7 +105,7 @@ describe('the update check on start', () => {
     setUiForTests(driver.ui)
     const install = vi.fn<UpdateInstaller>(() => ({ ...succeeded(), status: 243 }))
 
-    const running = runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install })
+    const running = runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', platform: 'linux', install })
     await driver.waitFor('Update now?')
     driver.press('up', 'enter')
     await running
@@ -115,14 +115,14 @@ describe('the update check on start', () => {
 
   it('gives an agent\'s shell, or a shell with nobody to ask, one line on stderr', async () => {
     withoutTerminal()
-    await runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0' })
+    await runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', platform: 'linux' })
     expect(printed).toEqual(['hello output'])
     expect(errors).toEqual(['kanbo 9.0.0 is available (you have 0.3.0) — npm install -g kanbo-cli@latest'])
 
     errors = []
     setUiForTests(createPromptDriver().ui)
     vi.stubEnv('CLAUDECODE', '1')
-    await runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0' })
+    await runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', platform: 'linux' })
     expect(errors).toEqual(['kanbo 9.0.0 is available (you have 0.3.0) — npm install -g kanbo-cli@latest'])
   })
 
@@ -139,7 +139,7 @@ describe('the update check on start', () => {
   ])('never asks npm with %s', async (_label, env: NodeJS.ProcessEnv, args) => {
     withoutTerminal()
     const fetch = npmSays('9.0.0')
-    await runKanbo(args, program, {}, { fetch, env, currentVersion: '0.3.0' }).catch(() => {})
+    await runKanbo(args, program, {}, { fetch, env, currentVersion: '0.3.0', platform: 'linux' }).catch(() => {})
     expect(fetch).not.toHaveBeenCalled()
     expect(errors.join('\n')).not.toContain('is available')
   })
@@ -148,7 +148,7 @@ describe('the update check on start', () => {
     withoutTerminal()
     for (const ci of ['0', 'false', '']) {
       const fetch = npmSays('0.3.0')
-      await runKanbo(['hello'], program, {}, { fetch, env: { CI: ci }, currentVersion: '0.3.0' })
+      await runKanbo(['hello'], program, {}, { fetch, env: { CI: ci }, currentVersion: '0.3.0', platform: 'linux' })
       expect(fetch, `CI=${ci}`).toHaveBeenCalledOnce()
     }
   })
@@ -158,7 +158,7 @@ describe('the update check on start', () => {
     withoutTerminal()
     const fetch = npmHangs()
     let done = false
-    const running = runKanbo(['hello'], program, {}, { fetch, env: {}, currentVersion: '0.3.0' }).then(() => {
+    const running = runKanbo(['hello'], program, {}, { fetch, env: {}, currentVersion: '0.3.0', platform: 'linux' }).then(() => {
       done = true
     })
 
@@ -175,7 +175,7 @@ describe('the update check on start', () => {
   it('says nothing when kanbo is as new as npm\'s latest, or newer', async () => {
     withoutTerminal()
     for (const latest of ['0.3.0', '0.2.9', '0.4.0-beta.1']) {
-      await runKanbo(['hello'], program, {}, { fetch: npmSays(latest), env: {}, currentVersion: '0.3.0' })
+      await runKanbo(['hello'], program, {}, { fetch: npmSays(latest), env: {}, currentVersion: '0.3.0', platform: 'linux' })
     }
     expect(errors).toEqual([])
   })
@@ -185,20 +185,60 @@ describe('the update check on start', () => {
     const offline = vi.fn<typeof fetch>(async () => {
       throw new TypeError('fetch failed')
     })
-    await runKanbo(['hello'], program, {}, { fetch: offline, env: {}, currentVersion: '0.3.0' })
-    await runKanbo(['hello'], program, {}, { fetch: vi.fn<typeof fetch>(async () => new Response('nope', { status: 503 })), env: {}, currentVersion: '0.3.0' })
+    await runKanbo(['hello'], program, {}, { fetch: offline, env: {}, currentVersion: '0.3.0', platform: 'linux' })
+    await runKanbo(['hello'], program, {}, { fetch: vi.fn<typeof fetch>(async () => new Response('nope', { status: 503 })), env: {}, currentVersion: '0.3.0', platform: 'linux' })
     expect(printed).toEqual(['hello output', 'hello output'])
     expect(errors).toEqual([])
 
-    await runKanbo(['hello'], program, {}, { fetch: offline, env: { KANBO_DEBUG: '1' }, currentVersion: '0.3.0' })
+    await runKanbo(['hello'], program, {}, { fetch: offline, env: { KANBO_DEBUG: '1' }, currentVersion: '0.3.0', platform: 'linux' })
     expect(errors).toEqual(['kanbo: update check: fetch failed'])
   })
 
-  it('ends a failing command with its own error, and no offer', async () => {
+  it('ends a failing command with its own error and no offer, and stops asking npm at once — no request or timer left', async () => {
+    vi.useFakeTimers()
     withoutTerminal()
-    const failure = await runKanbo(['fail'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0' }).catch((error: unknown) => error)
+    const fetch = npmHangs()
+
+    const failure = await runKanbo(['fail'], program, {}, { fetch, env: {}, currentVersion: '0.3.0', platform: 'linux' }).catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(Error)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect((fetch.mock.calls[0]![1]!.signal as AbortSignal).aborted).toBe(true)
+    expect(vi.getTimerCount()).toBe(0)
     expect(errors).toEqual([])
+  })
+
+  it('on Windows says how to update after closing kanbo, instead of asking, and installs nothing', async () => {
+    const driver = createPromptDriver()
+    setUiForTests(driver.ui)
+    const install = vi.fn<UpdateInstaller>(succeeded)
+
+    await runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'win32' })
+
+    expect(install).not.toHaveBeenCalled()
+    expect(driver.transcript()).not.toContain('Update now?')
+    expect(printed).toEqual(['hello output'])
+    expect(errors).toEqual(['kanbo 9.0.0 is available (you have 0.3.0). Close kanbo and run: npm install -g kanbo-cli@latest'])
+  })
+
+  it.each([
+    ['npm\'s own EACCES', { status: 243, stderr: 'npm error code EACCES\nnpm error syscall mkdir' }, 'npm exited with code 243'],
+    ['npm\'s own EPERM', { status: 1, stderr: 'npm ERR! code EPERM' }, 'npm exited with code 1'],
+    ['a refused start', { status: null, error: Object.assign(new Error('spawnSync npm EACCES'), { code: 'EACCES' }) }, 'spawnSync npm EACCES'],
+  ])('points at npm\'s permissions guide when the install fails with %s', async (_label, outcome, why) => {
+    const driver = createPromptDriver()
+    setUiForTests(driver.ui)
+    const install = vi.fn<UpdateInstaller>(() => ({ ...succeeded(), ...outcome }))
+
+    const running = runKanbo(['hello'], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'linux' })
+    await driver.waitFor('Update now?')
+    driver.press('up', 'enter')
+    await running
+
+    expect(errors).toEqual([
+      `kanbo was not updated: ${why}. Run it yourself: npm install -g kanbo-cli@latest\n`
+      + 'Your npm global folder needs permissions — see https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally',
+    ])
   })
 })
 

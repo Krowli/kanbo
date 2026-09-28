@@ -16,6 +16,7 @@ import { registerKanboCommands } from './commands'
 import { createKanboProgram, runKanbo } from './program'
 import type { AgentDetection } from './setup/agents'
 import { CancelledError, createUi, setUiForTests } from './ui/ui'
+import type { UpdateInstaller } from './update-check'
 
 /**
  * `kanbo` with no words: the hint when nobody can be asked, the wizard in a
@@ -414,24 +415,95 @@ describe('kanbo with no words', () => {
     expect(start).toHaveBeenCalledTimes(1)
   })
 
-  it('shows a newer kanbo under the summary and installs it from the menu, without asking again after', async () => {
-    await createBoard()
-    const install = vi.fn(() => ({ pid: 1, output: [], stdout: '', stderr: '', status: 0, signal: null }))
-    const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(JSON.stringify({ version: '9.0.0' })))
+  /** npm answering `latest` with this version. */
+  const npmSays = (version: string): ReturnType<typeof vi.fn<typeof globalThis.fetch>> =>
+    vi.fn<typeof globalThis.fetch>(async () => new Response(JSON.stringify({ version })))
+  const installed = (): ReturnType<typeof vi.fn<UpdateInstaller>> => vi.fn<UpdateInstaller>(() => ({ pid: 1, output: [], stdout: '', stderr: '', status: 0, signal: null }))
+  const NOTICE = 'kanbo 9.0.0 is available (you have 0.3.0) — npm install -g kanbo-cli@latest'
+  const WINDOWS_NOTICE = 'kanbo 9.0.0 is available (you have 0.3.0). Close kanbo and run: npm install -g kanbo-cli@latest'
 
-    const running = runKanbo([], program, {}, { fetch, env: {}, currentVersion: '0.3.0', install }).then(() => null, (error: unknown) => error)
+  it('shows a newer kanbo under the summary, installs it from the menu, and leaves the menu', async () => {
+    await createBoard()
+    const install = installed()
+
+    const running = runKanbo([], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'darwin' }).then(() => null, (error: unknown) => error)
     await driver.waitFor('kanbo 9.0.0 is available (you have 0.3.0).')
     await driver.waitFor('Update kanbo to 9.0.0 — npm install -g kanbo-cli@latest')
     driver.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+
+    // No Exit pressed: a successful update ends the menu by itself.
+    expect(await running).toBeNull()
+    expect(install).toHaveBeenCalledOnce()
+    expect(printed).toEqual(['Updated to 9.0.0 — start kanbo again to use it.'])
+    const afterInstall = driver.transcript().split('Updated to 9.0.0')[1]!
+    expect(afterInstall).not.toContain('What next?')
+    expect(afterInstall).not.toContain('Update now?')
+  })
+
+  it('stays in the menu when the update from the menu fails, without offering it again', async () => {
+    await createBoard()
+    const install = vi.fn(() => ({ pid: 1, output: [], stdout: '', stderr: '', status: 1, signal: null }))
+
+    const running = runKanbo([], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'darwin' }).then(() => null, (error: unknown) => error)
+    await driver.waitFor('Update kanbo to 9.0.0')
+    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+    await driver.waitFor('kanbo was not updated')
     await driver.waitFor('What next?')
     exitMenu(driver)
 
     expect(await running).toBeNull()
-    expect(install).toHaveBeenCalledOnce()
-    expect(printed).toContain('Updated to 9.0.0.')
-    const afterInstall = driver.transcript().split('Updated to 9.0.0.')[1]!
-    expect(afterInstall).not.toContain('Update kanbo to')
-    expect(afterInstall).not.toContain('Update now?')
+    expect(printed).toEqual(['kanbo was not updated: npm exited with code 1. Run it yourself: npm install -g kanbo-cli@latest'])
+  })
+
+  it.each([
+    ['Exit', (d: PromptDriver): void => d.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')],
+    ['Ctrl-C', (d: PromptDriver): void => d.press('ctrl-c')],
+  ])('says a newer kanbo in one line, with no question, on leaving the menu with %s', async (_label, leave) => {
+    await createBoard()
+    const install = installed()
+
+    const running = runKanbo([], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'darwin' }).then(() => null, (error: unknown) => error)
+    await driver.waitFor('Update kanbo to 9.0.0')
+    leave(driver)
+
+    expect(await running).toBeNull()
+    expect(printed).toEqual([NOTICE])
+    expect(install).not.toHaveBeenCalled()
+    expect(driver.transcript()).not.toContain('Update now?')
+  })
+
+  it('waits for an answer that comes just after the person leaves the menu', async () => {
+    await createBoard()
+    let answer!: () => void
+    const fetch = vi.fn<typeof globalThis.fetch>(() => new Promise<Response>((resolve) => {
+      answer = () => resolve(new Response(JSON.stringify({ version: '9.0.0' })))
+    }))
+
+    const running = runKanbo([], program, {}, { fetch, env: {}, currentVersion: '0.3.0', platform: 'darwin' }).then(() => null, (error: unknown) => error)
+    await driver.waitFor('What next?')
+    exitMenu(driver)
+    await new Promise(resolve => setTimeout(resolve, 20))
+    answer()
+
+    expect(await running).toBeNull()
+    expect(printed).toEqual([NOTICE])
+  })
+
+  it('on Windows, the menu item says how to update after closing kanbo, and installs nothing', async () => {
+    await createBoard()
+    const install = installed()
+
+    const running = runKanbo([], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'win32' }).then(() => null, (error: unknown) => error)
+    await driver.waitFor('How to update kanbo to 9.0.0 — npm install -g kanbo-cli@latest')
+    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+    await driver.waitFor(WINDOWS_NOTICE)
+    await driver.waitFor('What next?')
+    exitMenu(driver)
+
+    expect(await running).toBeNull()
+    expect(install).not.toHaveBeenCalled()
+    // Said once: not again on leaving.
+    expect(printed).toEqual([WINDOWS_NOTICE])
   })
 
   it('leaves quietly with exit 0 on Ctrl-C at the menu', async () => {

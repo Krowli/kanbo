@@ -59,8 +59,12 @@ export interface BareKanboContext {
 /** The update check as the home screen sees it: what npm said so far, and how to install it. */
 export interface HomeUpdate {
   peek: () => AvailableUpdate | null
-  /** Install it and say how it went; `true` when it worked. */
-  install: (update: AvailableUpdate) => boolean
+  /** Can the menu install it? Not on Windows, where the running kanbo cannot replace itself. */
+  inPlace: boolean
+  /** Install it; `true` when it worked (a failure has been explained). */
+  install: () => boolean
+  /** Say it in one line with the command to run, for when the menu cannot install it. */
+  tell: (update: AvailableUpdate) => void
 }
 
 /** Serving the board page from the menu: start it, then wait for the person to stop it. */
@@ -151,16 +155,16 @@ async function describePlainly(target: BoardTarget): Promise<string> {
 
 async function runHome(context: BareKanboContext, target: BoardTarget): Promise<void> {
   const { ui } = context
-  let updated = false
+  let told = false
   while (true) {
     const board = await readHomeBoard(target)
     // Looked at on every turn: npm's answer may come after the first screen.
-    const update = updated ? null : context.update?.peek() ?? null
+    const update = told ? null : context.update?.peek() ?? null
     say(ui, ['', ...describeBoard(board), ...(update ? [pc.dim(`kanbo ${update.latest} is available (you have ${update.current}).`)] : [])].join('\n'))
 
     let choice: MenuChoice
     try {
-      choice = await ui.select<MenuChoice>({ message: 'What next?', options: menuOptions(board, update) })
+      choice = await ui.select<MenuChoice>({ message: 'What next?', options: menuOptions(board, update, context.update?.inPlace ?? true) })
     }
     catch (error) {
       // Ctrl-C at the menu is how a person leaves; nothing went wrong.
@@ -173,7 +177,16 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
       return
     }
     if (choice === 'update') {
-      updated = context.update!.install(update!)
+      const updates = context.update!
+      if (!updates.inPlace) {
+        updates.tell(update!)
+      }
+      else if (updates.install()) {
+        // This process is still the old kanbo: nothing more should run on it.
+        console.log(`Updated to ${update!.latest} — start kanbo again to use it.`)
+        return
+      }
+      told = true
       continue
     }
 
@@ -191,7 +204,7 @@ async function runHome(context: BareKanboContext, target: BoardTarget): Promise<
   }
 }
 
-function menuOptions(board: HomeBoard, update: AvailableUpdate | null): { value: MenuChoice, label: string }[] {
+function menuOptions(board: HomeBoard, update: AvailableUpdate | null, inPlace: boolean): { value: MenuChoice, label: string }[] {
   const item = (value: MenuChoice, text: string, command: string): { value: MenuChoice, label: string } =>
     ({ value, label: `${text} — kanbo ${command}` })
   return [
@@ -203,7 +216,8 @@ function menuOptions(board: HomeBoard, update: AvailableUpdate | null): { value:
     item('instructions', 'Get the agent instructions', 'instructions'),
     item('columns', 'Change columns', MENU_COMMANDS.columns.join(' ')),
     item('doctor', 'Check the setup', 'doctor'),
-    ...(update ? [{ value: 'update' as const, label: `Update kanbo to ${update.latest} — ${UPDATE_COMMAND}` }] : []),
+    // On Windows the item says how to update after closing kanbo; it cannot replace itself while running.
+    ...(update ? [{ value: 'update' as const, label: `${inPlace ? 'Update kanbo' : 'How to update kanbo'} to ${update.latest} — ${UPDATE_COMMAND}` }] : []),
     { value: 'exit', label: 'Exit' },
   ]
 }

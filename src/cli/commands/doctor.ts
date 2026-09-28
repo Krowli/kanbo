@@ -6,7 +6,7 @@ import { collectDoctorFindings } from '../doctor'
 import { CliError, printResult } from '../output'
 import { canPrompt } from '../ui/environment'
 import { getUi } from '../ui/ui'
-import { isUpdateCheckDisabled, startUpdateCheck } from '../update-check'
+import type { UpdateCheck } from '../update-check'
 
 /**
  * `kanbo doctor` — check this install, this project and the agent tools that
@@ -34,7 +34,12 @@ const MARKS: Record<DoctorFinding['status'], string> = { ok: 'ok  ', info: 'info
 /** What `--fix` says to run when nobody could be asked. */
 export const DOCTOR_FIX_YES_HINT = 'Run kanbo doctor --fix --yes to apply.'
 
-export function registerDoctorCommand(program: Command): void {
+/**
+ * `update` is the check `kanbo` started for this run (`program.ts`): the doctor
+ * reports what it heard rather than asking npm again, and `--fix`'s second
+ * round of checks reuses the same answer.
+ */
+export function registerDoctorCommand(program: Command, update: UpdateCheck | null = null): void {
   program
     .command('doctor')
     .description('Check that kanbo, this project\'s board and your agents\' setup work')
@@ -50,8 +55,8 @@ export function registerDoctorCommand(program: Command): void {
       }
       const check = async (): Promise<DoctorFinding[]> => await collectDoctorFindings({
         ...input,
-        // The same skips as every command's own check: machine output and opted-out environments get none.
-        update: machine || isUpdateCheckDisabled() ? null : startUpdateCheck(),
+        // The run's own check skips machine output and opted-out environments already.
+        update: machine ? null : update,
       })
 
       let findings = await check()
