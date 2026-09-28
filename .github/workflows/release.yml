@@ -48,9 +48,22 @@ jobs:
           name: release-body
           path: RELEASE_BODY.md
 
+  # CI, the whole of it, on exactly the commit the tag names — every OS and
+  # Node, the smoke and upgrade tests — as a reusable workflow rather than a
+  # lookup of an earlier CI run: a run for this commit may still be going, may
+  # have been cancelled by a newer push, or may not exist at all (a tag pushed
+  # on a commit that never went through `main`). Nothing is built for
+  # publishing unless its required jobs pass here; the jobs CI marks "not
+  # required" (continue-on-error) do not hold a release back, as they do not
+  # fail CI either.
+  ci:
+    name: CI on the tagged commit
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+
   build:
     name: build, test and pack
-    needs: verify
+    needs: [verify, ci]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -63,19 +76,24 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
-      # The tarball is what users install. Look inside it before anything is published.
+      # The tarball is what users install, and the very file the npm job
+      # publishes. Look inside it before anything is published.
       - name: Pack and check the tarball
         run: |
           set -euo pipefail
           npm pack
           tarball=$(ls kanbo-cli-*.tgz)
+          test "$tarball" = "kanbo-cli-${{ needs.verify.outputs.version }}.tgz" || { echo "::error::packed $tarball, expected kanbo-cli-${{ needs.verify.outputs.version }}.tgz"; exit 1; }
           tar -tzf "$tarball" > contents.txt
           for f in package/dist/cli.cjs package/dist/lib/index.mjs package/dist/lib/index.d.mts \
-                   package/drizzle-sqlite/meta/_journal.json package/drizzle-postgres/meta/_journal.json; do
+                   package/dist/drizzle-sqlite/meta/_journal.json package/dist/drizzle-postgres/meta/_journal.json \
+                   package/CHANGELOG.md; do
             grep -qx "$f" contents.txt || { echo "::error::$tarball is missing $f"; exit 1; }
           done
+          ! grep -q '\.map$' contents.txt || { echo "::error::$tarball ships source maps"; exit 1; }
           test "$(node -p "require('./package.json').bin.kanbo")" = "dist/cli.cjs"
           wc -l contents.txt
+          ls -l "$tarball"
 
       # Install that very tarball globally into a temporary prefix and drive it
       # through a new project before anything is published.
@@ -95,16 +113,28 @@ jobs:
       contents: read
       id-token: write          # trusted publishing (OIDC) and provenance: no token anywhere
     steps:
-      - uses: actions/checkout@v7
       # Node 24: trusted publishing needs npm >= 11.5.1.
       - uses: actions/setup-node@v7
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
-          cache: npm
-      - run: npm ci
 
-      # Published from the directory with no argument, which builds through `prepack`.
+      # The tarball the build job packed and smoke-tested, byte for byte — not
+      # a rebuild. Publishing a tarball runs no lifecycle script, so nothing
+      # here can change what was tested.
+      - uses: actions/download-artifact@v8
+        with:
+          name: tarball
+          path: .
+
+      - name: Check the tarball's version
+        run: |
+          set -euo pipefail
+          tarball="kanbo-cli-${{ needs.verify.outputs.version }}.tgz"
+          test -f "$tarball" || { echo "::error::no $tarball among the build's artifacts"; ls -l; exit 1; }
+          packed=$(tar -xOzf "$tarball" package/package.json | node -p "JSON.parse(require('fs').readFileSync(0, 'utf8')).version")
+          test "$packed" = "${{ needs.verify.outputs.version }}" || { echo "::error::$tarball says version $packed"; exit 1; }
+
       - name: Publish
         if: ${{ github.event_name == 'push' }}
         run: |
@@ -114,7 +144,7 @@ jobs:
             echo "kanbo-cli@$version is already on the registry; nothing to do"
             exit 0
           fi
-          npm publish --provenance --access public
+          npm publish "./kanbo-cli-$version.tgz" --provenance --access public
           # The registry answers before the version is readable; wait for it.
           for _ in $(seq 1 30); do
             npm view "kanbo-cli@$version" version >/dev/null 2>&1 && exit 0
@@ -124,7 +154,7 @@ jobs:
 
       - name: Dry run
         if: ${{ github.event_name == 'workflow_dispatch' }}
-        run: npm publish --dry-run --access public
+        run: npm publish "./kanbo-cli-${{ needs.verify.outputs.version }}.tgz" --dry-run --access public
 
   github-release:
     name: publish the GitHub release
