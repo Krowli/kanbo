@@ -157,7 +157,7 @@ async function selectCardPage(database: BoardPostgresDatabase, query: BoardCardQ
     .select({ ...getTableColumns(issues), pickedTotal: sql<number>`cast(count(*) over () as int)` })
     .from(issues)
     .where(where)
-    .orderBy(issues.order, desc(issues.createdAt))
+    .orderBy(issues.order, desc(issues.createdAt), issues.id)
     .offset(query.offset ?? 0)
     .$dynamic()
   const rows = await (query.limit === undefined ? page : page.limit(query.limit))
@@ -292,8 +292,9 @@ function createStoreOver(database: BoardPostgresDatabase): BoardStore {
         .from(issues)
         .where(workspaceId ? eq(issues.workspaceId, workspaceId) : undefined)
         // Board position is authoritative; creation time only breaks ties between
-        // issues that have never been dragged (all of which share order 0).
-        .orderBy(issues.order, desc(issues.createdAt)),
+        // issues that have never been dragged (all of which share order 0), and the
+        // id breaks what is left, so a page read never skips or repeats a card.
+        .orderBy(issues.order, desc(issues.createdAt), issues.id),
       listNewestFirst: async () => await database.select().from(issues).orderBy(desc(issues.createdAt)),
       listAll: async () => await database.select().from(issues),
       listByWorkspace: async workspaceId => await database

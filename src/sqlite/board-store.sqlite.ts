@@ -183,7 +183,7 @@ function selectCardPage(database: SqliteDatabase, query: BoardCardQuery): BoardC
     .select({ ...getTableColumns(issues), pickedTotal: sql<number>`count(*) over ()` })
     .from(issues)
     .where(where)
-    .orderBy(issues.order, desc(issues.createdAt))
+    .orderBy(issues.order, desc(issues.createdAt), issues.id)
     // SQLite takes no offset without a limit; this one is no limit at all.
     .limit(query.limit ?? Number.MAX_SAFE_INTEGER)
     .offset(query.offset ?? 0)
@@ -322,8 +322,9 @@ function createSqliteBoardStoreCore(resolveDatabase: () => SqliteDatabase): Sqli
           .from(issues)
           .where(predicates.length > 0 ? and(...predicates) : undefined)
           // Board position is authoritative; creation time only breaks ties between
-          // issues that have never been dragged (all of which share order 0).
-          .orderBy(issues.order, desc(issues.createdAt))
+          // issues that have never been dragged (all of which share order 0), and the
+          // id breaks what is left, so a page read never skips or repeats a card.
+          .orderBy(issues.order, desc(issues.createdAt), issues.id)
           .all()
       },
       listNewestFirst: () => resolveDatabase().select().from(issues).orderBy(desc(issues.createdAt)).all(),

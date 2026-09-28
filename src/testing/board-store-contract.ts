@@ -159,6 +159,28 @@ export function runBoardStoreContract(name: string, makeStore: () => Promise<Boa
         expect((await store.issues.listInBoardOrder(workspaceId)).map(issue => issue.id)).toEqual([c.id, a.id, b.id])
       })
 
+      it('breaks board-order ties by id, so pages of tied cards neither skip nor repeat one', async () => {
+        // Forty cards never dragged and made in the same millisecond tie on
+        // both board-order keys. Written, and numbered, out of id order, so a
+        // read that fell back on how the engine happened to store or index them
+        // would show it.
+        const ids = Array.from({ length: 40 }, (_, index) => `issue-${String(index).padStart(2, '0')}`)
+        const written = ids.map((id, index) => ({ id, spread: ((index + 1) * 17) % 41 })).sort((a, b) => a.spread - b.spread)
+        for (const [index, { id }] of written.entries()) {
+          await store.issues.create({ id, number: index + 1, workspaceId, title: id, order: 0, createdAt: 1_000, updatedAt: 1_000 })
+        }
+
+        const unpaged = (await store.issues.listPage({ workspaceId })).cards.map(card => card.id)
+        expect(unpaged).toEqual(ids)
+        expect((await store.issues.listInBoardOrder(workspaceId)).map(card => card.id)).toEqual(ids)
+
+        const paged: string[] = []
+        for (let offset = 0; offset < ids.length; offset += 3) {
+          paged.push(...(await store.issues.listPage({ workspaceId, offset, limit: 3 })).cards.map(card => card.id))
+        }
+        expect(paged).toEqual(unpaged)
+      })
+
       it('updates issue fields', async () => {
         const issue = await createIssue({ id: 'issue-1', number: 1, title: 'Original title' })
 
