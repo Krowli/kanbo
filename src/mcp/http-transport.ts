@@ -2,10 +2,16 @@ import { z } from 'zod'
 
 import { BoardError } from '../domain/errors'
 import { normalizeStatusName } from '../domain/status-name'
-import type { KanboCardResult, KanboColumnResult, KanboToolTransport } from './transport'
+import type { KanboCardPage, KanboCardQuery, KanboCardResult, KanboColumnResult, KanboToolTransport } from './transport'
 import {
+  DEFAULT_KANBO_CARD_INCLUDES,
+  DEFAULT_KANBO_COMMENT_LIMIT,
+  matchesKanboCardQuery,
+  pageOf,
   projectKanboCard,
+  projectKanboCardComment,
   projectKanboColumn,
+  projectKanboFieldChange,
   projectKanboPullRequest,
   projectKanboRun,
   projectKanboSprint,
@@ -122,6 +128,24 @@ const SprintSchema = z.object({
 
 const PrimeSchema = z.object({ text: z.string() })
 
+const ACTOR_KINDS = ['user', 'agent', 'provider-target', 'system'] as const
+
+/** A comment as the server lists it; who wrote it by the stored kind, `system.*` markers included. */
+const CardCommentSchema = z.object({
+  id: z.string(),
+  authorKind: z.string(),
+  content: z.string(),
+  createdAt: z.number(),
+})
+
+const FieldChangeSchema = z.object({
+  field: z.string(),
+  fromValue: z.string().nullable(),
+  toValue: z.string().nullable(),
+  actorKind: z.enum(ACTOR_KINDS),
+  createdAt: z.number(),
+})
+
 export function createHttpTransport(input: KanboHttpTransportInput): KanboToolTransport {
   const { request } = input
 
@@ -151,20 +175,44 @@ export function createHttpTransport(input: KanboHttpTransportInput): KanboToolTr
     return column
   }
 
+  /**
+   * The cards a query picks. A server of the `/issues` routes filters on one
+   * column and on a parent, and no more; the rest of the query is applied here,
+   * to the cards it answered with, so the answer is the one the board file gives.
+   */
+  async function cardPage(cardQuery: KanboCardQuery): Promise<KanboCardPage> {
+    const columns = await readColumns()
+    const statusIds = cardQuery.columns === undefined
+      ? null
+      : new Set(cardQuery.columns.map(column => requireColumn(columns, column).id))
+    const query = new URLSearchParams({ workspaceId: input.workspaceId() })
+    if (statusIds?.size === 1) {
+      query.set('statusId', [...statusIds][0]!)
+    }
+    if (cardQuery.parent !== undefined) {
+      query.set('parentIssueId', cardQuery.parent)
+    }
+    const rows = z.array(IssueSchema).parse(await request('GET', `/issues/?${query.toString()}`))
+    const picked = rows.filter(row => matchesKanboCardQuery(row, cardQuery, statusIds))
+    return pageOf(picked.map(row => projectKanboCard(row, columns)), cardQuery)
+  }
+
+  /** The ready cards, a page of them; the server answers the whole queue. */
+  async function readyPage(page: { limit?: number, offset?: number }): Promise<KanboCardPage> {
+    const query = new URLSearchParams({ workspaceId: input.workspaceId() })
+    const cards = z.array(IssueSchema).parse(await request('GET', `/issues/ready?${query.toString()}`))
+    const columns = await readColumns()
+    return pageOf(cards.map(row => projectKanboCard(row, columns)), page)
+  }
+
   return {
     prime: async () => PrimeSchema.parse(
       await request('GET', `/issues/prime?workspaceId=${encodeURIComponent(input.workspaceId())}`),
     ),
 
-    ready: async ({ limit }) => {
-      const query = new URLSearchParams({ workspaceId: input.workspaceId() })
-      if (limit !== undefined) {
-        query.set('limit', String(limit))
-      }
-      const cards = z.array(IssueSchema).parse(await request('GET', `/issues/ready?${query.toString()}`))
-      const columns = await readColumns()
-      return cards.map(row => projectKanboCard(row, columns))
-    },
+    ready: async ({ limit }) => (await readyPage({ limit })).cards,
+
+    readyPage,
 
     columns: readColumns,
 
@@ -172,26 +220,32 @@ export function createHttpTransport(input: KanboHttpTransportInput): KanboToolTr
       await request('GET', `/issues/sprints?workspaceId=${encodeURIComponent(input.workspaceId())}`),
     ).map(projectKanboSprint),
 
-    cardGet: async ({ card }) => {
+    cardGet: async ({ card, include = DEFAULT_KANBO_CARD_INCLUDES, commentLimit = DEFAULT_KANBO_COMMENT_LIMIT }) => {
       const found = IssueSchema.parse(await request('GET', `/issues/${encodeURIComponent(card)}`))
-      const columns = await readColumns()
+      const wants = new Set(include)
+      const path = `/issues/${encodeURIComponent(found.id)}`
       const query = new URLSearchParams({ workspaceId: input.workspaceId(), parentIssueId: found.id })
-      const subCards = z.array(IssueSchema).parse(await request('GET', `/issues/?${query.toString()}`))
+      const [columns, subCards, comments, runs, history, pullRequests] = await Promise.all([
+        readColumns(),
+        wants.has('subCards') ? request('GET', `/issues/?${query.toString()}`).then(rows => z.array(IssueSchema).parse(rows)) : null,
+        wants.has('comments') ? request('GET', `${path}/comments`).then(rows => z.array(CardCommentSchema).parse(rows)) : null,
+        wants.has('runs') ? request('GET', `${path}/runs`).then(rows => z.array(RunSchema).parse(rows)) : null,
+        wants.has('history') ? request('GET', `${path}/field-changes`).then(rows => z.array(FieldChangeSchema).parse(rows)) : null,
+        wants.has('prs') ? request('GET', `${path}/pull-requests`).then(rows => z.array(PullRequestSchema).parse(rows)) : null,
+      ])
       return {
         ...projectKanboCard(found, columns),
-        subCards: subCards.map(row => projectKanboSubCard(row, columns)),
+        ...(subCards ? { subCards: subCards.map(row => projectKanboSubCard(row, columns)) } : {}),
+        ...(comments ? { comments: comments.slice(-commentLimit).map(projectKanboCardComment), commentCount: comments.length } : {}),
+        ...(runs ? { runs: runs.map(projectKanboRun) } : {}),
+        ...(history ? { history: history.map(projectKanboFieldChange) } : {}),
+        ...(pullRequests ? { pullRequests: pullRequests.map(projectKanboPullRequest) } : {}),
       }
     },
 
-    cardList: async ({ column, limit }) => {
-      const columns = await readColumns()
-      const query = new URLSearchParams({ workspaceId: input.workspaceId() })
-      if (column) {
-        query.set('statusId', requireColumn(columns, column).id)
-      }
-      const cards = z.array(IssueSchema).parse(await request('GET', `/issues/?${query.toString()}`))
-      return cards.slice(0, limit ?? Number.POSITIVE_INFINITY).map(row => projectKanboCard(row, columns))
-    },
+    cardList: async ({ column, limit }) => (await cardPage({ columns: column ? [column] : undefined, limit })).cards,
+
+    cardPage,
 
     cardCreate: async ({ title, description, column, parent, executionMode }) => await projectOne(
       await request('POST', '/issues/', {

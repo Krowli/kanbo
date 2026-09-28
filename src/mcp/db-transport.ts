@@ -1,12 +1,16 @@
 import { openBoardSession, requireCard, requireRun } from '../cli/command'
 import { toIssueView } from '../domain/issue-view'
-import { requireColumn } from '../ops/columns'
+import type { CardQueryResult } from '../ops/card-query'
 import type { BoardActor } from '../ops/types'
 import type { Issue } from '../sqlite/schema'
-import type { KanboCardResult, KanboColumnResult, KanboToolTransport } from './transport'
+import type { KanboCardPage, KanboCardQuery, KanboCardResult, KanboColumnResult, KanboToolTransport } from './transport'
 import {
+  DEFAULT_KANBO_CARD_INCLUDES,
+  DEFAULT_KANBO_COMMENT_LIMIT,
   projectKanboCard,
+  projectKanboCardComment,
   projectKanboColumn,
+  projectKanboFieldChange,
   projectKanboPullRequest,
   projectKanboRun,
   projectKanboSprint,
@@ -69,12 +73,29 @@ export async function createDbTransport(input: KanboDbTransportInput): Promise<K
     return projectKanboCard({ ...toIssueView(card), ...runs }, columns ?? await readColumns())
   }
 
-  async function projectAll(cards: Issue[]): Promise<KanboCardResult[]> {
-    const columns = await readColumns()
-    // One entry per card, in the order asked — read by position, not searched
-    // for, which on a board of thousands was a scan per card.
-    const runs = await ops.readBoardProjectionForIssues(cards.map(card => card.id))
-    return cards.map((card, index) => projectKanboCard({ ...toIssueView(card), ...runs[index]! }, columns))
+  /** The cards a query picks, filtered and cut into a page by the database, with their run facts. */
+  async function cardPage({ columns: named, parent, priority, ...query }: KanboCardQuery): Promise<KanboCardPage> {
+    const parentCard = parent === undefined ? null : await resolveCard(parent)
+    const page = await ops.queryCards({
+      ...query,
+      workspaceId,
+      columns: named,
+      parentIssueId: parentCard?.id,
+      priorities: priority,
+    })
+    return { cards: await projectPage(page), total: page.total, offset: query.offset ?? 0 }
+  }
+
+  async function readyPage(input: { limit?: number, offset?: number }): Promise<KanboCardPage> {
+    const page = await ops.queryReady({ workspaceId, ...input })
+    return { cards: await projectPage(page), total: page.total, offset: input.offset ?? 0 }
+  }
+
+  /** A page's cards as a tool prints them: the columns came with the page, the run facts are one more statement. */
+  async function projectPage(page: CardQueryResult): Promise<KanboCardResult[]> {
+    const columns = page.columns.map(projectKanboColumn)
+    const runs = await ops.readBoardProjectionForIssues(page.cards.map(card => card.id))
+    return page.cards.map((card, index) => projectKanboCard({ ...toIssueView(card), ...runs[index]! }, columns))
   }
 
   /** The card a tool named: the key, the key without its padding, or the number. */
@@ -87,30 +108,39 @@ export async function createDbTransport(input: KanboDbTransportInput): Promise<K
 
     prime: async () => ({ text: await ops.buildPrimeText(workspaceId) }),
 
-    ready: async ({ limit }) => await projectAll(await ops.listReady({ workspaceId, limit })),
+    ready: async ({ limit }) => (await readyPage({ limit })).cards,
+
+    readyPage,
 
     columns: readColumns,
 
     sprints: async () => (await ops.listSprints(workspaceId)).map(projectKanboSprint),
 
-    cardGet: async ({ card }) => {
+    cardGet: async ({ card, include = DEFAULT_KANBO_CARD_INCLUDES, commentLimit = DEFAULT_KANBO_COMMENT_LIMIT }) => {
       const found = await resolveCard(card)
-      const columns = await readColumns()
-      const subCards = (await store.issues.listInBoardOrder(found.workspaceId))
-        .filter(row => row.parentIssueId === found.id)
+      const wants = new Set(include)
+      const [columns, runs, subCards, comments, runList, history, pullRequests] = await Promise.all([
+        readColumns(),
+        ops.readBoardProjectionForIssue(found.id),
+        wants.has('subCards') ? store.issues.listPage({ workspaceId: found.workspaceId, parentIssueId: found.id }) : null,
+        wants.has('comments') ? store.comments.listByIssue(found.id) : null,
+        wants.has('runs') ? ops.listRuns(found.id) : null,
+        wants.has('history') ? store.fieldChanges.listByIssue(found.id) : null,
+        wants.has('prs') ? store.pullRequests.listByIssue(found.id) : null,
+      ])
       return {
-        ...await project(found, columns),
-        subCards: subCards.map(row => projectKanboSubCard(row, columns)),
+        ...projectKanboCard({ ...toIssueView(found), ...runs }, columns),
+        ...(subCards ? { subCards: subCards.cards.map(row => projectKanboSubCard(row, columns)) } : {}),
+        ...(comments ? { comments: comments.slice(-commentLimit).map(projectKanboCardComment), commentCount: comments.length } : {}),
+        ...(runList ? { runs: runList.map(projectKanboRun) } : {}),
+        ...(history ? { history: history.map(projectKanboFieldChange) } : {}),
+        ...(pullRequests ? { pullRequests: pullRequests.map(projectKanboPullRequest) } : {}),
       }
     },
 
-    cardList: async ({ column, limit }) => {
-      const wanted = column ? await requireColumn(store, workspaceId, column) : null
-      const cards = (await store.issues.listInBoardOrder(workspaceId))
-        .filter(card => !wanted || card.statusId === wanted.id)
-        .slice(0, limit ?? Number.POSITIVE_INFINITY)
-      return await projectAll(cards)
-    },
+    cardList: async ({ column, limit }) => (await cardPage({ columns: column ? [column] : undefined, limit })).cards,
+
+    cardPage,
 
     cardCreate: async ({ title, description, column, parent, executionMode }) => {
       await session.assertWritable()

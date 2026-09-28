@@ -29,10 +29,12 @@ export const NO_BOARD_FOR_AGENT_MESSAGE = DATABASE_NOT_FOUND_AGENT_MESSAGE
 const TRANSPORT_METHODS: Record<keyof KanboToolTransport, true> = {
   prime: true,
   ready: true,
+  readyPage: true,
   columns: true,
   sprints: true,
   cardGet: true,
   cardList: true,
+  cardPage: true,
   cardCreate: true,
   cardUpdate: true,
   cardMove: true,

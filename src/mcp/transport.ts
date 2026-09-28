@@ -1,7 +1,9 @@
 import type { EntryRule } from '../domain/entry-rules'
 import { ENTRY_RULES, readEntryRules } from '../domain/entry-rules'
+import type { IssueActorKind } from '../domain/issue-view'
+import { normalizeCommentAuthorKind } from '../domain/issue-view'
 import { normalizeStatusName } from '../domain/status-name'
-import type { Issue, IssueRun } from '../sqlite/schema'
+import type { Issue, IssueFieldChange, IssueRun } from '../sqlite/schema'
 
 /**
  * What the board's tools ask for, and what comes back.
@@ -42,12 +44,82 @@ export interface KanboCardResult {
   updatedAt: number
 }
 
+/** What `kanbo_card_get` may bring along with the card. */
+export const KANBO_CARD_INCLUDES = ['comments', 'subCards', 'runs', 'history', 'prs'] as const
+export type KanboCardInclude = typeof KANBO_CARD_INCLUDES[number]
+
+/** What a card read brings along when the caller does not say: its latest comments and its sub-cards. */
+export const DEFAULT_KANBO_CARD_INCLUDES: readonly KanboCardInclude[] = ['comments', 'subCards']
+
+/** How many of its latest comments a card read brings along when the caller does not say. */
+export const DEFAULT_KANBO_COMMENT_LIMIT = 10
+
 /**
  * A card read on its own, as `kanbo_card_get` hands it to an agent: the card,
- * and the sub-cards under it in board order. Its parent is `parentIssueId`.
+ * and whatever the read was asked to bring along — the sub-cards under it in
+ * board order, its latest comments, its runs, its field history, the pull
+ * requests it names. Its parent is `parentIssueId`.
  */
 export interface KanboCardDetailResult extends KanboCardResult {
-  subCards: Pick<KanboCardResult, 'id' | 'title' | 'columnSlug'>[]
+  subCards?: Pick<KanboCardResult, 'id' | 'title' | 'columnSlug'>[]
+  /** The latest comments, oldest of them first; `commentCount` says how many the card has in all. */
+  comments?: KanboCardCommentResult[]
+  commentCount?: number
+  /** Every run, first attempt first. */
+  runs?: KanboRunResult[]
+  /** Every tracked field change, oldest first. */
+  history?: KanboFieldChangeResult[]
+  pullRequests?: KanboPullRequestResult[]
+}
+
+/** A comment as a card read lists it: who wrote it — a person, an agent or the board — and what it says. */
+export interface KanboCardCommentResult {
+  id: string
+  author: IssueActorKind
+  content: string
+  createdAt: number
+}
+
+/** One change to a tracked field of a card, and who made it. */
+export interface KanboFieldChangeResult {
+  field: string
+  from: string | null
+  to: string | null
+  actor: IssueActorKind
+  createdAt: number
+}
+
+/**
+ * Which cards `kanbo_card_list` picks, and which page of them. Every filter is
+ * optional and they all apply together.
+ */
+export interface KanboCardQuery {
+  /** Cards in any of these columns, by slug or name. */
+  columns?: string[]
+  /** `true`: only cards waiting for a person; `false`: only cards waiting for no one. */
+  waitingForPerson?: boolean
+  /** Only the sub-cards of this card, by its id. */
+  parent?: string
+  /** `true`: only cards an agent is working on now; `false`: only cards nobody is. */
+  hasActiveRun?: boolean
+  /** Cards whose id, title or description contains this text, ignoring case. */
+  text?: string
+  /** Cards changed at or after this moment, in unix seconds. */
+  updatedSince?: number
+  /** Cards carrying every one of these labels. */
+  labels?: string[]
+  /** Cards of any of these priorities. */
+  priority?: Issue['priority'][]
+  offset?: number
+  /** How many cards to return; every one picked when absent. */
+  limit?: number
+}
+
+/** One page of cards, and how many the question picks in all. */
+export interface KanboCardPage {
+  cards: KanboCardResult[]
+  total: number
+  offset: number
 }
 
 /** The run of a card that is going on right now. */
@@ -176,10 +248,15 @@ interface KanboRunFinishInput {
 export interface KanboToolTransport {
   prime: () => Promise<{ text: string }>
   ready: (input: { limit?: number }) => Promise<KanboCardResult[]>
+  /** One page of the ready cards, and how many are ready in all. */
+  readyPage: (input: { limit?: number, offset?: number }) => Promise<KanboCardPage>
   columns: () => Promise<KanboColumnResult[]>
   sprints: () => Promise<KanboSprintResult[]>
-  cardGet: (input: { card: string }) => Promise<KanboCardDetailResult>
+  /** The card, with what `include` names — `DEFAULT_KANBO_CARD_INCLUDES` when absent. */
+  cardGet: (input: { card: string, include?: readonly KanboCardInclude[], commentLimit?: number }) => Promise<KanboCardDetailResult>
   cardList: (input: { column?: string, limit?: number }) => Promise<KanboCardResult[]>
+  /** One page of the cards a query picks, and how many it picks in all. */
+  cardPage: (input: KanboCardQuery) => Promise<KanboCardPage>
   cardCreate: (input: KanboCardCreateInput) => Promise<KanboCardResult>
   cardUpdate: (input: KanboCardUpdateInput) => Promise<KanboCardResult>
   cardMove: (input: { card: string, column: string }) => Promise<KanboCardResult>
@@ -252,7 +329,7 @@ export function projectKanboCard(card: KanboCardFacts, columns: KanboColumnResul
 export function projectKanboSubCard(
   card: Pick<KanboCardFacts, 'id' | 'title' | 'statusId'>,
   columns: KanboColumnResult[],
-): KanboCardDetailResult['subCards'][number] {
+): NonNullable<KanboCardDetailResult['subCards']>[number] {
   return {
     id: card.id,
     title: card.title,
@@ -362,5 +439,57 @@ export function projectKanboColumn(column: {
     entryRules: typeof stored === 'object' && stored !== null
       ? ENTRY_RULES.filter(rule => stored.includes(rule))
       : readEntryRules({ entryRules: stored ?? null }),
+  }
+}
+
+/**
+ * Does the card answer the query? The filters of `KanboCardQuery`, applied to
+ * a card already read — for a transport whose server filters on less than the
+ * query names. `statusIds` are the query's columns, already resolved.
+ */
+export function matchesKanboCardQuery(
+  card: KanboCardFacts & { description: string | null },
+  query: KanboCardQuery,
+  statusIds: ReadonlySet<string> | null,
+): boolean {
+  const text = query.text?.toLowerCase()
+  return (statusIds === null || (card.statusId !== null && statusIds.has(card.statusId)))
+    && (query.waitingForPerson === undefined || (card.waitingFor === 'human') === query.waitingForPerson)
+    && (query.parent === undefined || card.parentIssueId === query.parent)
+    && (query.hasActiveRun === undefined || (card.activeRun !== null) === query.hasActiveRun)
+    && (text === undefined || [card.id, card.title, card.description ?? ''].some(value => value.toLowerCase().includes(text)))
+    && (query.updatedSince === undefined || card.updatedAt >= query.updatedSince)
+    && (query.labels ?? []).every(label => card.labels.includes(label))
+    && (query.priority === undefined || query.priority.includes(card.priority))
+}
+
+/** A page cut out of cards already picked, in the order they were picked. */
+export function pageOf(cards: KanboCardResult[], input: { offset?: number, limit?: number }): KanboCardPage {
+  const offset = input.offset ?? 0
+  return {
+    cards: cards.slice(offset, input.limit === undefined ? undefined : offset + input.limit),
+    total: cards.length,
+    offset,
+  }
+}
+
+/** A comment as a card read lists it, from the row either transport holds. */
+export function projectKanboCardComment(comment: { id: string, authorKind: string, content: string, createdAt: number }): KanboCardCommentResult {
+  return {
+    id: comment.id,
+    author: normalizeCommentAuthorKind(comment.authorKind),
+    content: comment.content,
+    createdAt: comment.createdAt,
+  }
+}
+
+/** A field change as a card read lists it — who by kind only: the id behind it is the host's. */
+export function projectKanboFieldChange(change: Pick<IssueFieldChange, 'field' | 'fromValue' | 'toValue' | 'actorKind' | 'createdAt'>): KanboFieldChangeResult {
+  return {
+    field: change.field,
+    from: change.fromValue,
+    to: change.toValue,
+    actor: change.actorKind,
+    createdAt: change.createdAt,
   }
 }

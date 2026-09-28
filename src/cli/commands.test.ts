@@ -313,6 +313,69 @@ describe('board commands', () => {
     expect(await readChangeSeq(store)).toBe(before)
   })
 
+  it('picks cards by every filter card list takes, in one command', async () => {
+    const parent = await createCardIn('Parent', 'To Do')
+    const running = await createCard(store, { workspace: WORKSPACE, title: 'Running', statusName: 'In Progress', parentIssueId: parent.id }, USER)
+    await startRun(store, running.id, { agentName: 'Claude' }, USER)
+    await createCardIn('Parser work', 'Backlog')
+    const ids = async (...argv: string[]): Promise<string[]> =>
+      (JSON.parse(await run(['card', 'list', ...argv, '--json', 'id'])) as { id: string }[]).map(card => card.id)
+
+    expect(await ids('--column', 'to_do,in_progress')).toEqual([parent.id, running.id])
+    expect(await ids('--column', 'to_do', '--column', 'backlog')).toEqual([parent.id, 'WOR-003'])
+    expect(await ids('--parent', parent.id)).toEqual([running.id])
+    expect(await ids('--active')).toEqual([running.id])
+    expect(await ids('--text', 'PARSER')).toEqual(['WOR-003'])
+    expect(await ids('--waiting')).toEqual([])
+    expect(await ids('--updated-since', '2000-01-01')).toHaveLength(3)
+    expect(await ids('--updated-since', '4000000000')).toEqual([])
+    expect(await ids('--priority', 'none', '--label', 'ui')).toEqual([])
+    await expect(run(['card', 'list', '--column', 'nowhere'])).rejects.toThrowError('This board has no column "nowhere".')
+    await expect(run(['card', 'list', '--updated-since', 'someday'])).rejects.toThrowError('neither unix seconds nor a date')
+  })
+
+  it('prints 50 cards unless told otherwise, and says on stderr where the rest start', async () => {
+    for (let index = 0; index < 53; index++) {
+      await createCardIn(`Card ${index}`, 'To Do')
+    }
+    const notes: string[] = []
+    vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+      notes.push(String(line))
+    })
+
+    expect(JSON.parse(await run(['card', 'list', '--json', 'id']))).toHaveLength(50)
+    expect(notes).toEqual(['kanbo: 3 more of 53; next page: --offset 50, or --all for every card'])
+    expect(JSON.parse(await run(['card', 'list', '--offset', '50', '--json', 'id']))).toHaveLength(3)
+    expect(JSON.parse(await run(['card', 'list', '--all', '--json', 'id']))).toHaveLength(53)
+    expect(JSON.parse(await run(['ready', '--json', 'id']))).toHaveLength(10)
+    expect(notes.at(-1)).toBe('kanbo: 43 more ready; --limit <count> or --all for more')
+    expect(JSON.parse(await run(['ready', '--all', '--json', 'id']))).toHaveLength(53)
+  })
+
+  it('shows a card with its last comments and its sub-cards, and more on request', async () => {
+    const parent = await createCardIn('Parent', 'To Do')
+    await createCard(store, { workspace: WORKSPACE, title: 'Child', statusName: 'Backlog', parentIssueId: parent.id }, USER)
+    for (let index = 1; index <= 11; index++) {
+      await run(['card', 'comment', parent.id, '--content', `Note ${index}`])
+    }
+
+    const text = await run(['card', 'get', parent.id])
+    expect(text).toContain('Sub-cards:\nWOR-002  backlog  Child')
+    expect(text).toContain('Comments (last 10 of 11):')
+    expect(text).not.toContain('Note 1\n')
+    expect(text).toContain('Note 11')
+
+    await startRun(store, parent.id, { agentName: 'Claude' }, USER)
+
+    const json = JSON.parse(await run(['card', 'get', parent.id, '--include', 'runs,history', '--json', 'id,runs,history,comments']))
+    expect(json.runs).toEqual([expect.objectContaining({ agentName: 'Claude', attempt: 1 })])
+    expect(json.history).toEqual(expect.any(Array))
+    expect(json).not.toHaveProperty('comments')
+    expect(JSON.parse(await run(['card', 'get', parent.id, '--comments', '2', '--json', 'comments,commentCount'])))
+      .toEqual({ comments: [expect.objectContaining({ content: 'Note 11' }), expect.objectContaining({ content: expect.stringContaining('Run started') })], commentCount: 12 })
+    expect(await run(['card', 'get', parent.id, '--include', 'none'])).not.toContain('Comments')
+  })
+
   describe('which workspace the command is about', () => {
     /** The project as a host app recorded it — on macOS a temp path is a symlink into `/private`. */
     let recordedDir: string

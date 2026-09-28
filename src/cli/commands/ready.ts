@@ -6,7 +6,11 @@ import { CARD_VIEW_FIELDS, describeCards, projectCard } from '../view'
 
 interface ReadyOptions extends BoardCommandOptions {
   limit?: number
+  all?: boolean
 }
+
+/** How many cards `kanbo ready` prints when the caller names no limit. */
+const DEFAULT_READY_LIMIT = 10
 
 /**
  * `kanbo ready` — the cards an agent may pick up right now.
@@ -19,13 +23,19 @@ export function registerReadyCommand(program: Command): void {
   withBoardOptions(program
     .command('ready')
     .description('Cards ready to start: in To Do, not taken, not waiting for a person')
-    .option('--limit <count>', 'how many cards to print', parseCount))
+    .option('--limit <count>', `how many cards to print (${DEFAULT_READY_LIMIT} when left out)`, parseCount)
+    .option('--all', 'print every ready card'))
     .action(async (options: ReadyOptions) => {
       await runBoardCommand(options, 'read', async (session) => {
-        const columns = await session.ops.listColumns(session.workspace.id)
-        const rows = await session.ops.listReady({ workspaceId: session.workspace.id, limit: options.limit })
-        const runs = await session.ops.readBoardProjectionForIssues(rows.map(card => card.id))
-        const cards = rows.map((card, index) => projectCard(card, columns, runs[index]))
+        const page = await session.ops.queryReady({
+          workspaceId: session.workspace.id,
+          limit: options.all ? undefined : options.limit ?? DEFAULT_READY_LIMIT,
+        })
+        const runs = await session.ops.readBoardProjectionForIssues(page.cards.map(card => card.id))
+        const cards = page.cards.map((card, index) => projectCard(card, page.columns, runs[index]))
+        if (page.total > cards.length) {
+          console.error(`kanbo: ${page.total - cards.length} more ready; --limit <count> or --all for more`)
+        }
         return { value: cards, text: describeCards(cards), fields: CARD_VIEW_FIELDS }
       })
     })

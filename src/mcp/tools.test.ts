@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { createBoardOps } from '../ops'
 import type { BoardActor } from '../ops/types'
+import { toCardView, toCardViews } from '../serve/views'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { Issue, IssueRun } from '../sqlite/schema'
 import type { TestBoardDatabase } from '../testing/board-database'
@@ -25,11 +26,11 @@ const EXTERNAL: BoardActor = { kind: 'external', id: 'tester' }
 /** The one operation each tool performs, and an input that reaches it. */
 const TOOL_OPERATIONS: Record<KanboToolName, { op: keyof KanboToolTransport, input: Record<string, unknown> }> = {
   kanbo_prime: { op: 'prime', input: {} },
-  kanbo_ready: { op: 'ready', input: {} },
+  kanbo_ready: { op: 'readyPage', input: {} },
   kanbo_columns: { op: 'columns', input: {} },
   kanbo_sprints: { op: 'sprints', input: {} },
   kanbo_card_get: { op: 'cardGet', input: { card: 'WOR-001' } },
-  kanbo_card_list: { op: 'cardList', input: {} },
+  kanbo_card_list: { op: 'cardPage', input: {} },
   kanbo_card_create: { op: 'cardCreate', input: { title: 'A card' } },
   kanbo_card_update: { op: 'cardUpdate', input: { card: 'WOR-001', title: 'Renamed' } },
   kanbo_card_move: { op: 'cardMove', input: { card: 'WOR-001', column: 'in_progress' } },
@@ -85,7 +86,10 @@ function recordingTransport(): { transport: KanboToolTransport, calls: string[] 
   const operations = new Set(Object.values(TOOL_OPERATIONS).map(entry => entry.op))
   const transport = Object.fromEntries(Array.from(operations, op => [op, async () => {
     calls.push(op)
-    return { text: 'the board' }
+    // A list tool prints a page of cards; one card called "the board" is enough of one.
+    return op.endsWith('Page')
+      ? { cards: [{ id: 'WOR-001', title: 'the board', columnSlug: null, attemptCount: 0, activeRun: null, updatedAt: 0 }], total: 1, offset: 0 }
+      : { text: 'the board' }
   }])) as unknown as KanboToolTransport
   return { transport, calls }
 }
@@ -258,8 +262,10 @@ describe('the board\'s tools over a real board', () => {
     const card = (await createSqliteBoardStore({ database: () => board.database }).issues.findById(created.id))!
     const overHttp = createHttpTransport({
       workspaceId: () => WORKSPACE.id,
-      // The statuses, and the sub-cards `kanbo_card_get` lists under the card, are both empty here.
-      request: async (_method, path) => path.includes('/statuses') || path.startsWith('/issues/?') ? [] : serverCardShape(card, run),
+      // The statuses, and the sub-cards and comments `kanbo_card_get` lists with the card, are all empty here.
+      request: async (_method, path) => path.includes('/statuses') || path.startsWith('/issues/?') || path.endsWith('/comments')
+        ? []
+        : serverCardShape(card, run),
     })
 
     const fromBoardFile = await readCardThrough(transport, card.id)
@@ -461,5 +467,169 @@ describe('the board\'s tools over a real board', () => {
 
     expect(asStored.find(row => row.id === column.id)?.entryRules).toEqual(['approved'])
     expect(asList).toEqual(asStored)
+  })
+
+  /**
+   * A server of the `/issues` routes, answering from this board the way
+   * `kanbo serve` does — and filtering on no more than it does: one column and
+   * one parent. Whatever else a query names, the transport has to apply itself.
+   */
+  function overHttpFromBoard() {
+    const ops = boardOps()
+    const store = createSqliteBoardStore({ database: () => board.database })
+    return createHttpTransport({
+      workspaceId: () => WORKSPACE.id,
+      request: async (_method, path) => {
+        const [route, search] = path.split('?') as [string, string | undefined]
+        const query = new URLSearchParams(search)
+        if (route === '/issues/statuses') {
+          return await ops.listColumns(WORKSPACE.id)
+        }
+        if (route === '/issues/ready') {
+          return await toCardViews(ops, await ops.listReady({ workspaceId: WORKSPACE.id }))
+        }
+        if (route === '/issues/') {
+          const rows = (await store.issues.listInBoardOrder(WORKSPACE.id))
+            .filter(row => !query.has('statusId') || row.statusId === query.get('statusId'))
+            .filter(row => !query.has('parentIssueId') || row.parentIssueId === query.get('parentIssueId'))
+          return await toCardViews(ops, rows)
+        }
+        const [, , id, part] = route.split('/')
+        if (part === 'comments') {
+          return await ops.listComments(id!)
+        }
+        if (part === 'runs') {
+          return await ops.listRuns(id!)
+        }
+        if (part === 'field-changes') {
+          return await ops.listFieldChanges(id!)
+        }
+        if (part === 'pull-requests') {
+          return await ops.listPullRequests(id!)
+        }
+        return await toCardView(ops, (await store.issues.findById(id!))!)
+      },
+    })
+  }
+
+  function readText(result: { content: { text: string }[] }): string {
+    return result.content[0]!.text
+  }
+
+  it('answers kanbo_card_list with a page of compact cards, the total, and where the next page starts', async () => {
+    for (let index = 1; index <= 3; index++) {
+      await boardOps().createCard({ workspace: WORKSPACE, title: `Card ${index}`, description: 'A long description', statusName: 'To Do' }, EXTERNAL)
+    }
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+
+    const text = readText(await tools.kanbo_card_list!.run(transport, { limit: 2 }))
+
+    expect(text.split('\n')).toHaveLength(4)
+    expect(JSON.parse(text)).toEqual({
+      total: 3,
+      more: 1,
+      nextOffset: 2,
+      cards: [
+        { id: 'WOR-001', title: 'Card 1', column: 'to_do', updatedAt: expect.any(Number) },
+        { id: 'WOR-002', title: 'Card 2', column: 'to_do', updatedAt: expect.any(Number) },
+      ],
+    })
+    expect(JSON.parse(readText(await tools.kanbo_card_list!.run(transport, { offset: 2 })))).toMatchObject({
+      total: 3,
+      offset: 2,
+      cards: [{ id: 'WOR-003' }],
+    })
+    expect(JSON.parse(readText(await tools.kanbo_card_list!.run(transport, { limit: 1, fields: ['description', 'priority'] }))).cards)
+      .toEqual([{ id: 'WOR-001', description: 'A long description', priority: 'none' }])
+    expect(JSON.parse(readText(await tools.kanbo_card_list!.run(transport, { limit: 1, detail: 'full' }))).cards[0])
+      .toMatchObject({ id: 'WOR-001', description: 'A long description', columnSlug: 'to_do', labels: [] })
+  })
+
+  it('picks the same cards with every filter, from the board file and over HTTP', async () => {
+    const ops = boardOps()
+    const parent = await createCard('Parent')
+    const waiting = await ops.createCard({ workspace: WORKSPACE, title: 'Waiting', statusName: 'In Review' }, EXTERNAL)
+    await ops.waitApproval(waiting.id, {}, EXTERNAL)
+    const running = await ops.createCard({ workspace: WORKSPACE, title: 'Running', statusName: 'In Progress', parentIssueId: parent.id }, EXTERNAL)
+    await ops.startRun(running.id, { agentName: 'Claude' }, EXTERNAL)
+    const labelled = await ops.createCard({ workspace: WORKSPACE, title: 'Labelled', description: 'About the Parser', statusName: 'Backlog' }, EXTERNAL)
+    await ops.updateCard(labelled.id, { labels: ['ui'], priority: 'high' }, EXTERNAL)
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+    const overHttp = overHttpFromBoard()
+
+    const questions: [Record<string, unknown>, string[]][] = [
+      [{ waitingForPerson: true }, [waiting.id]],
+      [{ hasActiveRun: true }, [running.id]],
+      [{ parent: parent.id }, [running.id]],
+      [{ columns: ['in_review', 'backlog'] }, [waiting.id, labelled.id]],
+      [{ column: 'in_progress', columns: ['in_review'] }, [waiting.id, running.id]],
+      [{ text: 'parser' }, [labelled.id]],
+      [{ labels: ['ui'], priority: ['high'] }, [labelled.id]],
+      [{ updatedSince: '2000-01-01T00:00:00Z', waitingForPerson: false, hasActiveRun: false }, [parent.id, labelled.id]],
+      [{ updatedSince: 4_000_000_000 }, []],
+    ]
+    for (const [input, expected] of questions) {
+      const fromBoardFile = readText(await tools.kanbo_card_list!.run(transport, input))
+      const fromServer = readText(await tools.kanbo_card_list!.run(overHttp, input))
+      expect(JSON.parse(fromBoardFile).cards.map((card: { id: string }) => card.id), JSON.stringify(input)).toEqual(expected)
+      expect(fromServer, JSON.stringify(input)).toBe(fromBoardFile)
+    }
+
+    const refused = await tools.kanbo_card_list!.run(transport, { updatedSince: 'last tuesday-ish' })
+    expect(refused.isError).toBe(true)
+    expect(readText(refused)).toContain('updatedSince')
+  })
+
+  it('answers kanbo_ready with ten cards by default, and how many are ready in all', async () => {
+    for (let index = 1; index <= 12; index++) {
+      await createCard(`Ready ${index}`)
+    }
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+
+    const fromBoardFile = readText(await tools.kanbo_ready!.run(transport, {}))
+    const page = JSON.parse(fromBoardFile)
+
+    expect(page).toMatchObject({ total: 12, more: 2, nextOffset: 10 })
+    expect(page.cards).toHaveLength(10)
+    expect(page.cards[0]).toEqual({ id: 'WOR-001', title: 'Ready 1', column: 'to_do', updatedAt: expect.any(Number) })
+    expect(readText(await tools.kanbo_ready!.run(overHttpFromBoard(), {}))).toBe(fromBoardFile)
+    expect(JSON.parse(readText(await tools.kanbo_ready!.run(transport, { offset: 10 }))).cards.map((card: { id: string }) => card.id))
+      .toEqual(['WOR-011', 'WOR-012'])
+  })
+
+  it('reads a card with its latest comments and sub-cards, and on request its runs, history and pull requests, the same from either end', async () => {
+    const ops = boardOps()
+    const parent = await createCard('Parent')
+    await ops.createCard({ workspace: WORKSPACE, title: 'Child', statusName: 'To Do', parentIssueId: parent.id }, EXTERNAL)
+    for (let index = 1; index <= 12; index++) {
+      await ops.addComment({ issueId: parent.id, content: `Comment ${index}` }, EXTERNAL)
+    }
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+    const overHttp = overHttpFromBoard()
+
+    const byDefault = readJson(await tools.kanbo_card_get!.run(transport, { card: parent.id })) as Record<string, any>
+    expect(byDefault.subCards).toEqual([{ id: 'WOR-002', title: 'Child', columnSlug: 'to_do' }])
+    expect(byDefault.commentCount).toBe(12)
+    expect(byDefault.comments.map((comment: { content: string }) => comment.content))
+      .toEqual(Array.from({ length: 10 }, (_, index) => `Comment ${index + 3}`))
+    expect(byDefault.comments[0]).toEqual({ id: expect.any(String), author: 'system', content: 'Comment 3', createdAt: expect.any(Number) })
+    expect(byDefault).not.toHaveProperty('runs')
+    expect(readJson(await tools.kanbo_card_get!.run(overHttp, { card: parent.id }))).toEqual(byDefault)
+
+    await ops.startRun(parent.id, { agentName: 'Claude' }, EXTERNAL)
+    await ops.setStatusLine(parent.id, 'working', EXTERNAL)
+    await ops.linkPullRequest(parent.id, 'octo/repo#7', EXTERNAL)
+
+    const everything = { card: parent.id, include: ['comments', 'subCards', 'runs', 'history', 'prs'], commentLimit: 2 }
+    const full = readJson(await tools.kanbo_card_get!.run(transport, everything)) as Record<string, any>
+    expect(full.comments).toHaveLength(2)
+    expect(full.runs).toEqual([expect.objectContaining({ agentName: 'Claude', state: 'running' })])
+    expect(full.history).toContainEqual(expect.objectContaining({ field: 'statusLine', to: 'working', actor: 'system' }))
+    expect(full.pullRequests).toEqual([expect.objectContaining({ owner: 'octo', repo: 'repo', number: 7 })])
+    expect(readJson(await tools.kanbo_card_get!.run(overHttp, everything))).toEqual(full)
+
+    const alone = readJson(await tools.kanbo_card_get!.run(transport, { card: parent.id, include: [] }))
+    expect(Object.keys(alone as object)).not.toContain('subCards')
+    expect(Object.keys(alone as object)).not.toContain('comments')
   })
 })

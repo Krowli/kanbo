@@ -120,6 +120,28 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
       await program.parseAsync([...args, ...board.target], { from: 'user' })
     }
     await measure('cli card list', async () => await kanbo('card', 'list'))
+    await measure('cli card list, filtered', async () => await kanbo(
+      'card',
+      'list',
+      '--column',
+      'in_progress,in_review',
+      '--waiting',
+      '--active',
+      '--parent',
+      'WOR-001',
+      '--text',
+      'card',
+      '--updated-since',
+      '2020-01-01',
+      '--label',
+      'area',
+      '--priority',
+      'none,high',
+      '--offset',
+      '1',
+      '--limit',
+      '5',
+    ))
     await measure('cli ready', async () => await kanbo('ready'))
     await measure('cli prime', async () => await kanbo('prime'))
     await measure('cli card get', async () => await kanbo('card', 'get', 'WOR-005'))
@@ -154,7 +176,25 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
       await measure('mcp kanbo_card_list', async () => await tool('kanbo_card_list'))
       await measure('mcp kanbo_ready', async () => await tool('kanbo_ready'))
       await measure('mcp kanbo_prime', async () => await tool('kanbo_prime'))
+      await measure('mcp kanbo_card_list, filtered', async () => await tool('kanbo_card_list', {
+        columns: ['in_progress', 'in_review'],
+        waitingForPerson: false,
+        hasActiveRun: true,
+        parent: 'WOR-001',
+        text: 'card',
+        updatedSince: '2020-01-01T00:00:00Z',
+        labels: ['area'],
+        priority: ['none', 'high'],
+        offset: 1,
+        limit: 5,
+        fields: ['description'],
+      }))
       await measure('mcp kanbo_card_get', async () => await tool('kanbo_card_get', { card: 'WOR-005' }))
+      await measure('mcp kanbo_card_get, everything', async () => await tool('kanbo_card_get', {
+        card: 'WOR-005',
+        include: ['comments', 'subCards', 'runs', 'history', 'prs'],
+      }))
+      await measure('mcp kanbo_sprints', async () => await tool('kanbo_sprints'))
     }
     finally {
       await client.close()
@@ -236,30 +276,38 @@ describe.each<Engine>(['sqlite', 'postgres'])('statements per read on %s', (engi
 const QUERY_BUDGETS: Record<Engine, Counts> = {
   sqlite: {
     'cli card list': 4,
-    'cli ready': 6,
+    'cli card list, filtered': 5,
+    'cli ready': 4,
     'cli prime': 2,
-    'cli card get': 4,
+    'cli card get': 6,
     'cli board': 4,
     'ops card get + comments': 5,
     'mcp kanbo_card_list': 3,
-    'mcp kanbo_ready': 5,
+    'mcp kanbo_card_list, filtered': 4,
+    'mcp kanbo_ready': 3,
     'mcp kanbo_prime': 1,
-    'mcp kanbo_card_get': 4,
+    'mcp kanbo_card_get': 5,
+    'mcp kanbo_card_get, everything': 8,
+    'mcp kanbo_sprints': 3,
     'serve GET /issues': 2,
     'serve GET /issues/:id/comments': 3,
   },
   // Two more per command: the schema guard an external board is opened behind.
   postgres: {
     'cli card list': 6,
-    'cli ready': 8,
+    'cli card list, filtered': 7,
+    'cli ready': 6,
     'cli prime': 4,
-    'cli card get': 6,
+    'cli card get': 8,
     'cli board': 6,
     'ops card get + comments': 5,
     'mcp kanbo_card_list': 3,
-    'mcp kanbo_ready': 5,
+    'mcp kanbo_card_list, filtered': 4,
+    'mcp kanbo_ready': 3,
     'mcp kanbo_prime': 1,
-    'mcp kanbo_card_get': 4,
+    'mcp kanbo_card_get': 5,
+    'mcp kanbo_card_get, everything': 8,
+    'mcp kanbo_sprints': 3,
     'serve GET /issues': 2,
     'serve GET /issues/:id/comments': 3,
   },

@@ -28,12 +28,12 @@ export function toIssueView(issue: Issue): IssueView {
  * person, an agent and a provider target speak for themselves, so every
  * `system.*` marker — whatever it marks — is the board speaking as `system`.
  */
-export function normalizeCommentAuthorKind(authorKind: IssueComment['authorKind']): IssueActorKind {
-  if (authorKind === 'user' || authorKind === 'agent' || authorKind === 'provider-target') {
-    return authorKind
-  }
-  return 'system'
+export function normalizeCommentAuthorKind(authorKind: string): IssueActorKind {
+  return SPEAKING_AUTHOR_KINDS.find(kind => kind === authorKind) ?? 'system'
 }
+
+/** The author kinds that speak for themselves; the stored kind is taken as a string, as a server sends it. */
+const SPEAKING_AUTHOR_KINDS = ['user', 'agent', 'provider-target'] as const satisfies readonly IssueActorKind[]
 
 /** Who a row is filed under, as the row stores it — what a host resolves into a name to show. */
 export interface IssueActorReference {

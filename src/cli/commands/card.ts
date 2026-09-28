@@ -1,13 +1,18 @@
 import type { Command } from 'commander'
 
+import { BoardError } from '../../domain/errors'
+import { readUnixSeconds } from '../../domain/time'
+import type { KanboCardInclude } from '../../mcp/transport'
+import { DEFAULT_KANBO_CARD_INCLUDES, DEFAULT_KANBO_COMMENT_LIMIT, KANBO_CARD_INCLUDES } from '../../mcp/transport'
 import type { BoardCardWrite, UpdateCardInput } from '../../ops/cards'
 import type { Issue, IssuePullRequest } from '../../sqlite/schema'
 import { createCliActor, createPlacementActor } from '../actor'
+import { describeCardExtras, readCardExtras } from '../card-extras'
 import type { BoardCommandOptions, BoardSession } from '../command'
 import { parseCount, parseExecutionMode, requireCard, runBoardCommand, withBoardOptions } from '../command'
 import { CliError } from '../output'
 import type { CardView } from '../view'
-import { CARD_VIEW_FIELDS, describeCard, describeCards, projectCard } from '../view'
+import { CARD_DETAIL_VIEW_FIELDS, CARD_VIEW_FIELDS, describeCard, describeCards, projectCard } from '../view'
 
 /**
  * `kanbo card …` — the cards themselves.
@@ -21,9 +26,26 @@ import { CARD_VIEW_FIELDS, describeCard, describeCards, projectCard } from '../v
 const PRIORITIES = ['none', 'low', 'medium', 'high', 'urgent'] as const
 
 interface ListOptions extends BoardCommandOptions {
-  column?: string
+  column?: string[]
+  waiting?: boolean
+  parent?: string
+  active?: boolean
+  text?: string
+  updatedSince?: number
+  label?: string[]
+  priority?: Issue['priority'][]
   limit?: number
+  offset?: number
+  all?: boolean
 }
+
+interface GetOptions extends BoardCommandOptions {
+  include?: KanboCardInclude[]
+  comments?: number
+}
+
+/** How many cards `kanbo card list` prints when the caller names no limit. */
+const DEFAULT_LIST_LIMIT = 50
 
 interface CreateOptions extends BoardCommandOptions {
   title?: string
@@ -60,35 +82,67 @@ export function registerCardCommands(program: Command): void {
 
   withBoardOptions(card
     .command('list')
-    .description('List cards in board order')
-    .option('--column <column>', 'only cards in this column, by slug, name or id')
-    .option('--limit <count>', 'how many cards to print', parseCount))
+    .description(`List cards in board order, ${DEFAULT_LIST_LIMIT} at a time; filters combine`)
+    .option('--column <columns>', 'only cards in these columns, by slug, name or id (comma-separated, or repeat)', collectList, undefined)
+    .option('--waiting', 'only cards waiting for a person')
+    .option('--parent <card>', 'only the sub-cards of this card')
+    .option('--active', 'only cards an agent is working on now')
+    .option('--text <text>', 'only cards whose key, title or description contains this, ignoring case')
+    .option('--updated-since <time>', 'only cards changed since then: unix seconds or a date such as 2026-09-28T10:00:00Z', parseMoment)
+    .option('--label <labels>', 'only cards carrying every one of these labels (comma-separated, or repeat)', collectList, undefined)
+    .option('--priority <priorities>', `only cards of these priorities: ${PRIORITIES.join(', ')} (comma-separated)`, parsePriorities)
+    .option('--limit <count>', `how many cards to print (${DEFAULT_LIST_LIMIT} when left out)`, parseCount)
+    .option('--offset <count>', 'how many picked cards to skip first', parseOffset)
+    .option('--all', 'print every picked card'))
     .action(async (options: ListOptions) => {
       await runBoardCommand(options, 'read', async (session) => {
-        const columns = await session.ops.listColumns(session.workspace.id)
-        const wanted = options.column
-          ? await session.ops.findColumn(session.workspace.id, options.column)
-          : null
-        if (options.column && !wanted) {
-          throw new CliError(1, `This board has no column "${options.column}".`)
-        }
-
-        const rows = (await session.store.issues.listInBoardOrder(session.workspace.id))
-          .filter(row => !wanted || row.statusId === wanted.id)
-          .slice(0, options.limit ?? Number.POSITIVE_INFINITY)
-        const runs = await session.ops.readBoardProjectionForIssues(rows.map(row => row.id))
-        const cards = rows.map((row, index) => projectCard(row, columns, runs[index]))
+        const parent = options.parent ? await requireCard(session, options.parent) : null
+        const page = await session.ops.queryCards({
+          workspaceId: session.workspace.id,
+          columns: options.column,
+          waitingForPerson: options.waiting ? true : undefined,
+          parentIssueId: parent?.id,
+          hasActiveRun: options.active ? true : undefined,
+          text: options.text,
+          updatedSince: options.updatedSince,
+          labels: options.label,
+          priorities: options.priority,
+          offset: options.offset,
+          limit: options.all ? undefined : options.limit ?? DEFAULT_LIST_LIMIT,
+        }).catch(rethrowUnknownColumn(options.column))
+        const runs = await session.ops.readBoardProjectionForIssues(page.cards.map(row => row.id))
+        const cards = page.cards.map((row, index) => projectCard(row, page.columns, runs[index]))
+        noteMoreCards(page.total, options.offset ?? 0, cards.length)
         return { value: cards, text: describeCards(cards), fields: CARD_VIEW_FIELDS }
       })
     })
 
   withBoardOptions(card
     .command('get')
-    .description('Show one card')
-    .argument('<card>', 'the card, as MAN-012, MAN-12 or 12'))
-    .action(async (reference: string, options: BoardCommandOptions) => {
+    .description('Show one card, with its last comments and its sub-cards')
+    .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
+    .option('--include <parts>', `what to show with the card: ${KANBO_CARD_INCLUDES.join(', ')} (comma-separated; ${DEFAULT_KANBO_CARD_INCLUDES.join(',')} when left out, none for the card alone)`, parseIncludes)
+    .option('--comments <count>', `how many of the latest comments to show (${DEFAULT_KANBO_COMMENT_LIMIT} when left out)`, parseCount))
+    .action(async (reference: string, options: GetOptions) => {
       await runBoardCommand(options, 'read', async (session) => {
-        return await presentCard(session, await requireCard(session, reference))
+        const found = await requireCard(session, reference)
+        const [columns, runs] = await Promise.all([
+          session.ops.listColumns(session.workspace.id),
+          session.ops.readBoardProjectionForIssue(found.id),
+        ])
+        const view = projectCard(found, columns, runs)
+        const extras = await readCardExtras(
+          session,
+          found,
+          columns,
+          options.include ?? DEFAULT_KANBO_CARD_INCLUDES,
+          options.comments ?? DEFAULT_KANBO_COMMENT_LIMIT,
+        )
+        return {
+          value: { ...view, ...extras },
+          text: [describeCard(view), describeCardExtras(extras)].filter(Boolean).join('\n\n'),
+          fields: CARD_DETAIL_VIEW_FIELDS,
+        }
       })
     })
 
@@ -328,4 +382,60 @@ function parsePriority(value: string): Issue['priority'] {
 
 function parseLabels(value: string): string[] {
   return value.split(',').map(label => label.trim()).filter(label => label.length > 0)
+}
+
+/** A list option given comma-separated, repeated, or both. */
+function collectList(value: string, previous: string[] | undefined): string[] {
+  return [...(previous ?? []), ...value.split(',').map(item => item.trim()).filter(item => item.length > 0)]
+}
+
+function parsePriorities(value: string): Issue['priority'][] {
+  return collectList(value, undefined).map(parsePriority)
+}
+
+function parseOffset(value: string): number {
+  const count = Number(value)
+  if (!Number.isInteger(count) || count < 0) {
+    throw new CliError(1, `Expected a whole number of cards to skip, got "${value}".`)
+  }
+  return count
+}
+
+function parseMoment(value: string): number {
+  const seconds = readUnixSeconds(value)
+  if (seconds === null) {
+    throw new CliError(1, `"${value}" is neither unix seconds nor a date. Pass e.g. 2026-09-28T10:00:00Z.`)
+  }
+  return seconds
+}
+
+function parseIncludes(value: string): KanboCardInclude[] {
+  if (value.trim() === 'none') {
+    return []
+  }
+  return collectList(value, undefined).map((part) => {
+    const include = KANBO_CARD_INCLUDES.find(candidate => candidate.toLowerCase() === part.toLowerCase())
+    if (!include) {
+      throw new CliError(1, `Unknown part "${part}". Use ${KANBO_CARD_INCLUDES.join(', ')} or none.`)
+    }
+    return include
+  })
+}
+
+/** A column the board does not have, said the way the rest of `kanbo card` says it. */
+function rethrowUnknownColumn(named: string[] | undefined) {
+  return (error: unknown): never => {
+    if (error instanceof BoardError && error.code === 'issue_status_not_found' && named) {
+      throw new CliError(1, `This board has no column "${String(error.details?.statusName)}".`)
+    }
+    throw error
+  }
+}
+
+/** When the page is not every picked card, say so on stderr — where the next page starts, and how to get all of them. */
+function noteMoreCards(total: number, offset: number, shown: number): void {
+  const more = total - offset - shown
+  if (more > 0) {
+    console.error(`kanbo: ${more} more of ${total}; next page: --offset ${offset + shown}, or --all for every card`)
+  }
 }

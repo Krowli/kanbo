@@ -62,6 +62,17 @@ export const CARD_VIEW_FIELDS: readonly (keyof CardView)[] = [
   'updatedAt',
 ]
 
+/** Every field `kanbo card get --json` may ask for: a card's, and the parts `--include` reads with it. */
+export const CARD_DETAIL_VIEW_FIELDS: readonly string[] = [
+  ...CARD_VIEW_FIELDS,
+  'subCards',
+  'comments',
+  'commentCount',
+  'runs',
+  'history',
+  'pullRequests',
+]
+
 /** The run going on right now, as much as a line in a card list needs. */
 interface CardActiveRunView {
   id: string
@@ -219,13 +230,13 @@ export function projectRun(run: BoardRunView): RunView {
 }
 
 /** One card per line: the key, the column it is in, and what it is called (`cardDisplayTitle`). */
-export function describeCards(cards: CardView[]): string {
+export function describeCards(cards: Pick<CardView, 'id' | 'title' | 'description' | 'column'>[]): string {
   if (cards.length === 0) {
     return 'No cards'
   }
 
   const keyWidth = Math.max(...cards.map(card => card.id.length))
-  const column = (card: CardView): string => sanitizeTerminalText(card.column ?? '—')
+  const column = (card: Pick<CardView, 'column'>): string => sanitizeTerminalText(card.column ?? '—')
   const columnWidth = Math.max(...cards.map(card => displayWidth(column(card))))
   return cards
     .map(card => `${card.id.padEnd(keyWidth)}  ${padToWidth(column(card), columnWidth)}  ${sanitizeTerminalText(cardDisplayTitle(card))}`)

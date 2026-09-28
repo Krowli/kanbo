@@ -42,8 +42,9 @@ export function registerBoardCommand(program: Command): void {
           throw new CliError(1, `This board has no column "${options.column}". See kanbo columns list.`)
         }
 
-        const rows = (await session.store.issues.listInBoardOrder(workspaceId))
-          .filter(row => !wanted || row.statusId === wanted.id)
+        const rows = wanted
+          ? (await session.store.issues.listPage({ workspaceId, statusIds: [wanted.id] })).cards
+          : await session.store.issues.listInBoardOrder(workspaceId)
         const runs = await session.ops.readBoardProjectionForIssues(rows.map(row => row.id))
         const cards = rows.map((row, index) => projectCard(row, columns, runs[index]!))
         // A column asked for by name is shown even when it is an empty Canceled.
