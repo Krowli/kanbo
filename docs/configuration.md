@@ -20,14 +20,25 @@ kanbo has no configuration file of its own beyond the per-project binding. Every
 
 Every time kanbo starts, it asks npm (`https://registry.npmjs.org/kanbo-cli/latest`) which version is the latest, alongside the command — once per run, with no schedule and nothing cached. The request gets about 1.5 seconds and never holds the command up: its answer is used only if it arrives before the command finishes, plus at most 0.3 seconds. A command that fails ends at once, and the request is dropped. Pre-releases count only when you run one. If npm cannot be reached, nothing is said (`KANBO_DEBUG=1` says why).
 
+Only a **global install** (`npm install -g kanbo-cli`) is ever updated in place; how kanbo was started decides what else happens:
+
+| Install kind | Detected as | Update command |
+| --- | --- | --- |
+| Global | anything not below, run from this Node's own global `node_modules` | `npm install -g kanbo-cli@latest` |
+| Project | a `node_modules/kanbo-cli` in the current folder or one above it | `npm install kanbo-cli@latest` |
+| npx | run from npm's `_npx` cache | `npx kanbo-cli@latest` |
+
 When a newer kanbo is out:
 
-- **A person at a terminal** is asked after the command's output: `kanbo X is available (you have Y). Update now?` (default No). Yes runs `npm install -g kanbo-cli@latest` in the same terminal and prints `Updated to X.`, or npm's failure and the command to run yourself. When npm could not write its global folder (`EACCES`/`EPERM`), the failure adds: `Your npm global folder needs permissions — see https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally`.
-- **The home screen** (`kanbo` alone) shows a dim line under the summary and a menu item *Update kanbo to X* instead of the question. After a successful update it prints `Updated to X — start kanbo again to use it.` and ends (exit 0): the running process is still the old kanbo. Leaving the menu (Exit or Ctrl-C) without updating prints the one-line notice below — no question — if npm's answer has come by then (waiting 0.3 seconds at most).
-- **On Windows** kanbo never installs itself: the running kanbo holds its SQLite module open, and Windows does not let npm replace a file in use. Instead of the question there is one line on stderr: `kanbo X is available (you have Y). Close kanbo and run: npm install -g kanbo-cli@latest`; the home screen's item reads *How to update kanbo to X* and prints the same line.
-- **An agent's shell, or any shell with nobody to ask**, gets one line on stderr: `kanbo X is available (you have Y) — npm install -g kanbo-cli@latest` (on Windows, the line above).
-- **`kanbo doctor`** shows it as an `update` finding (`info`) instead of asking; with `--fix`, the second round of checks reports the same answer. It waits for npm no longer than any other command does.
-- **`kanbo mcp`** asks once, when the server starts, and ends the `kanbo_prime` tool's answer with `Note: kanbo X is available (running Y). Ask a person to update: npm install -g kanbo-cli@latest`. It never prints anything else on stdout.
+- **A person at a terminal, global install,** is asked after the command's output: `kanbo X is available (you have Y). Update now?` (default No). Yes runs `npm install -g kanbo-cli@latest` in the same terminal and prints `Updated to X.`, or npm's failure and the command to run yourself. When npm could not write its global folder (`EACCES`/`EPERM`), the failure adds: `Your npm global folder needs permissions — see https://docs.npmjs.com/resolving-eacces-permissions-errors-when-installing-packages-globally`.
+- **The home screen** (`kanbo` alone) shows a dim line under the summary and a menu item instead of the question — *Update kanbo to X — npm install -g kanbo-cli@latest* for a global install (a successful update prints `Updated to X — start kanbo again to use it.` and ends, exit 0: the running process is still the old kanbo); *How to update kanbo to X — `<its command>`* otherwise (Windows, a project install, npx), which only prints the line. Leaving the menu (Exit or Ctrl-C) without updating prints the one-line notice below — no question — if npm's answer has come by then (waiting 0.3 seconds at most).
+- **On Windows**, a global install never installs itself: the running kanbo holds its SQLite module open, and Windows does not let npm replace a file in use. Instead of the question there is one line on stderr: `kanbo X is available (you have Y). Close kanbo and run: npm install -g kanbo-cli@latest`.
+- **A project install** gets one line, in a person's shell or nobody's: `kanbo X is available (you have Y). This project installs kanbo; update it here: npm install kanbo-cli@latest`. Nothing is asked and nothing is installed.
+- **npx** gets one line: `kanbo X is available (you have Y). npx runs the newest kanbo when you pass @latest: npx kanbo-cli@latest`. Nothing is asked and nothing is installed — `npx kanbo-cli …` without `@latest` keeps running whatever npx has cached.
+- **An agent's shell** is told to ask a person, never the raw install command: `kanbo X is available (running Y). Ask a person to update: <the install kind's command above>`.
+- **Any other shell with nobody to ask** (a script, CI) gets the same one-line form a person's terminal would for that install kind, e.g. `kanbo X is available (you have Y) — npm install -g kanbo-cli@latest` for a global install.
+- **`kanbo doctor`** shows it as an `update` finding (`info`) instead of asking, its fix always the global command (`npm install -g kanbo-cli@latest`) whatever this install's kind; with `--fix`, the second round of checks reports the same answer. It waits for npm no longer than any other command does.
+- **`kanbo mcp`** asks once, when the server starts, and ends the `kanbo_prime` tool's answer with `Note: kanbo X is available (running Y). Ask a person to update: npm install -g kanbo-cli@latest` — always the global command, since an MCP client starts kanbo the way it was registered. It never prints anything else on stdout.
 
 No check is made when `CI` is set (to anything but empty, `0` or `false`), with `KANBO_NO_UPDATE_CHECK=1` or `NO_UPDATE_NOTIFIER` set, for machine output (`--json`, `--format json`), for `--version` and `--help`, and on the `kanbo mcp` command line itself (only its `kanbo_prime` note).
 

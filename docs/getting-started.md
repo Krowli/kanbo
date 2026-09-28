@@ -171,7 +171,7 @@ Write the README
 Write the README
 ```
 
-The same as `kanbo card create --title "Write the README"`. It lands in the first column — To Do on a Standard board.
+The same as `kanbo card create --title "Write the README"` in your own terminal, which lands a card with no `--column` in To Do (an agent's own `kanbo card create` defaults to the board's first column instead — Backlog on a Standard board — so its own follow-up cards are not handed straight to the next `kanbo ready`).
 
 ## 5. Connecting an agent
 
