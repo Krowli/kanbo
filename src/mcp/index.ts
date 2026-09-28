@@ -29,12 +29,27 @@ export {
   type KanboToolRegistration,
 } from './tools'
 export type { KanboTool, KanboToolResult } from './tools/tool'
+export {
+  DEFAULT_KANBO_CARD_INCLUDES,
+  DEFAULT_KANBO_COMMENT_LIMIT,
+  KANBO_CARD_INCLUDES,
+  matchesKanboCardQuery,
+  pageOf,
+} from './transport'
 export type {
   KanboActiveRunResult,
+  KanboCardCommentResult,
+  KanboCardDetailResult,
+  KanboCardFacts,
+  KanboCardInclude,
+  KanboCardPage,
+  KanboCardQuery,
   KanboCardResult,
   KanboColumnResult,
   KanboCommentResult,
+  KanboFieldChangeResult,
   KanboPullRequestResult,
   KanboRunResult,
+  KanboSprintResult,
   KanboToolTransport,
 } from './transport'
