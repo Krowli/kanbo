@@ -54,6 +54,11 @@ export interface InitPlan {
   connect: ConnectPlan | null
   /** The title of a card to put in To Do once the board is there. */
   firstCard: string | null
+  /**
+   * What `--columns` and `--key` asked of a board that already has its own,
+   * which it keeps — one sentence each, said rather than silently dropped.
+   */
+  kept: string[]
 }
 
 export interface InitFileChange {

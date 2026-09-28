@@ -450,6 +450,33 @@ describe('kanbo init', () => {
       expect(readBinding(path)).toEqual(binding)
     })
 
+    it('says it kept the columns and the key of a board already there, instead of ignoring --columns and --key', async () => {
+      await runWithoutHost(['--key', 'ABC'])
+      const printed: string[] = []
+      vi.spyOn(console, 'log').mockImplementation((line: unknown) => void printed.push(String(line)))
+      const program = new Command().exitOverride()
+      registerInitCommand(program)
+
+      await program.parseAsync(['init', '--yes', '--key', 'XYZ', '--columns', 'simple'], { from: 'user' })
+
+      const text = printed.join('\n')
+      expect(text).toContain('Kept the existing columns (Backlog, To Do, In Progress, In Review, Done, Canceled); to change columns use kanbo columns')
+      expect(text).toContain('Kept the existing key (ABC); --key names the key of a new board only')
+      expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))?.identifier).toBe('ABC')
+    })
+
+    it('says nothing is kept when the flags repeat what the board already has', async () => {
+      await runWithoutHost(['--key', 'ABC'])
+      const printed: string[] = []
+      vi.spyOn(console, 'log').mockImplementation((line: unknown) => void printed.push(String(line)))
+      const program = new Command().exitOverride()
+      registerInitCommand(program)
+
+      await program.parseAsync(['init', '--yes', '--key', 'ABC'], { from: 'user' })
+
+      expect(printed.join('\n')).not.toContain('Kept the existing')
+    })
+
     it('is idempotent: running it again leaves the file, the binding and the ignore file unchanged', async () => {
       await runFile([])
       const firstBinding = readBinding(join(projectDir, '.kanbo', 'binding.json'))

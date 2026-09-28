@@ -21,16 +21,22 @@ export interface ExistingWorkspace {
   /** What this workspace's cards are numbered with; `null` when it has none yet. */
   key: string | null
   hasColumns: boolean
+  /** Its columns' names, in board order. */
+  columnNames: string[]
 }
 
 export async function readExistingWorkspace(store: BoardStore, workspaceId: string): Promise<ExistingWorkspace> {
   const [columns, newestNumber] = await Promise.all([
-    store.statuses.countByWorkspace(workspaceId),
+    store.statuses.listByWorkspace(workspaceId),
     store.issues.maxNumber(workspaceId),
   ])
   const newest = newestNumber > 0 ? await store.issues.findByNumber(workspaceId, newestNumber) : null
   const dash = newest ? newest.id.lastIndexOf('-') : -1
-  return { key: newest && dash > 0 ? newest.id.slice(0, dash) : null, hasColumns: columns > 0 }
+  return {
+    key: newest && dash > 0 ? newest.id.slice(0, dash) : null,
+    hasColumns: columns.length > 0,
+    columnNames: columns.map(column => column.name),
+  }
 }
 
 /** The same, on a shared Postgres board; `null` when its tables are not there yet. */

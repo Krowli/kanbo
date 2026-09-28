@@ -246,6 +246,7 @@ export async function planInit(projectDir: string, options: InitOptions): Promis
   const newBoard = (boardFile !== null && !boardFile.exists)
     || (migrate && !(await inspectPostgresWorkspace(target.url, workspace.id))?.hasColumns)
   return {
+    kept: await describeKept(target, workspace, options, newBoard),
     projectDir,
     target,
     workspace,
@@ -260,6 +261,27 @@ export async function planInit(projectDir: string, options: InitOptions): Promis
     connect: options.connect?.length ? await planAgents(projectDir, options.connect, options) : null,
     firstCard: options.firstCard?.trim() || null,
   }
+}
+
+/**
+ * `--columns` shapes a new board only, and `--key` a workspace that has no key
+ * yet: a board that is already there keeps its columns (changed with `kanbo
+ * columns`), and a project already bound keeps its key. Either is said.
+ */
+async function describeKept(target: BoardTarget, workspace: BoardWorkspaceIdentity, options: InitOptions, newBoard: boolean): Promise<string[]> {
+  const kept: string[] = []
+  if (options.columns && !newBoard) {
+    const existing = target.kind === 'postgres'
+      ? await inspectPostgresWorkspace(target.url, workspace.id)
+      : await inspectBoardFile(target.path, workspace.id)
+    const names = existing?.columnNames.length ? ` (${existing.columnNames.join(', ')})` : ''
+    kept.push(`Kept the existing columns${names}; to change columns use kanbo columns`)
+  }
+  const key = options.identifier?.trim().toUpperCase()
+  if (key && key !== workspace.identifier) {
+    kept.push(`Kept the existing key (${workspace.identifier}); --key names the key of a new board only`)
+  }
+  return kept
 }
 
 /** Connect these agents the way `kanbo connect <agents>` does: the kanbo section in the project, the MCP server where each agent reads it. */
@@ -622,6 +644,7 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
   if (applied.columns.length > 0) {
     lines.push(`Columns: ${applied.columns.join(', ')}`)
   }
+  lines.push(...plan.kept)
   if (instructions) {
     lines.push(`Instructions: ${instructions.path} (${instructions.state})`)
   }
@@ -662,6 +685,7 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
       instructions,
       mcp,
       columns: applied.columns,
+      kept: plan.kept,
       connect: applied.connect,
       firstCard: applied.firstCard,
     },

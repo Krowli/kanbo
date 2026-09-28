@@ -244,7 +244,7 @@ async function askBoard(context: InitWizardContext, projectDir: string, options:
     const filePath = resolve(projectDir, typeof options.file === 'string' && options.file.trim() ? options.file.trim() : DEFAULT_BOARD_FILE_PATH)
     existing = await inspectBoardFile(filePath, options.workspace?.trim() || deriveProjectSlug(projectDir))
     // A file that is there is a board already: its columns stay as they are.
-    existing = existing ?? (existsSync(filePath) ? { key: null, hasColumns: true } : null)
+    existing = existing ?? (existsSync(filePath) ? { key: null, hasColumns: true, columnNames: [] } : null)
   }
 
   if (options.identifier === undefined) {
