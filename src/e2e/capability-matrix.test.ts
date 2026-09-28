@@ -129,7 +129,7 @@ const CASES: MatrixCase[] = [
     covers: ['card create', 'card get', 'kanbo_card_get', 'kanbo_card_list'],
     run: async (b) => {
       await b.cli(['card', 'create', '--title', 'Parent', '--column', 'to_do', '--execution-mode', 'main'])
-      await b.cli(['card', 'create', '--title', 'Child', '--parent', 'MAT-001', '--description', 'part of it'])
+      await b.cli(['card', 'create', '--title', 'Child', '--parent', 'MAT-001', '--description', 'part of it', '--column', 'backlog'])
 
       const parent = await b.tool('kanbo_card_get', { card: 'MAT-1' })
       expect(parent).toMatchObject({ id: 'MAT-001', executionMode: 'main', columnSlug: 'to_do' })

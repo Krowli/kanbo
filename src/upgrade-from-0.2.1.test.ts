@@ -179,7 +179,7 @@ describe('a board made by kanbo 0.2.1', () => {
     })
 
     await kanbo(['columns', 'add-standard'])
-    await kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema'])
+    await kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema', '--column', 'backlog'])
     await kanbo(['migrate'])
     await kanbo(['card', 'create', '--title', 'Written after kanbo migrate', '--column', 'to_do'])
 
@@ -213,7 +213,7 @@ describe('a board made by kanbo 0.2.1', () => {
       })
 
       await kanbo(['columns', 'add-standard'])
-      await kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema'])
+      await kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema', '--column', 'backlog'])
       await kanbo(['migrate'])
       await kanbo(['card', 'create', '--title', 'Written after kanbo migrate', '--column', 'to_do'])
 
