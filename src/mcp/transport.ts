@@ -238,6 +238,8 @@ export interface KanboCardUpdateInput {
   priority?: Issue['priority']
   labels?: string[]
   executionMode?: Issue['executionMode']
+  /** The card to put this one under; `null` makes it a top-level card, and absent leaves it where it is. */
+  parent?: string | null
 }
 
 /** What `kanbo_run_start` records about a launch. */

@@ -80,6 +80,7 @@ interface UpdateOptions extends BoardCommandOptions {
   priority?: Issue['priority']
   labels?: string[]
   executionMode?: Issue['executionMode']
+  parent?: string
 }
 
 /** A command that takes a line of text as `--text`, and `--content` for it too. */
@@ -187,17 +188,21 @@ export function registerCardCommands(program: Command): void {
 
   withBoardOptions(card
     .command('update')
-    .description('Change a card\'s title, description, priority or labels')
+    .description('Change a card\'s title, description, priority, labels or parent')
     .argument('<card>', 'the card, as MAN-012, MAN-12 or 12')
     .option('--title <title>', 'what the card is called')
     .option('--description <text>', 'what the card is about')
     .option('--priority <priority>', `one of ${PRIORITIES.join(', ')}`, parsePriority)
     .option('--labels <labels>', 'comma-separated labels, replacing the ones the card has', parseLabels)
-    .option('--execution-mode <mode>', 'where the work happens: worktree (its own checkout) or main', parseExecutionMode))
+    .option('--execution-mode <mode>', 'where the work happens: worktree (its own checkout) or main', parseExecutionMode)
+    .option('--parent <card>', 'the card to put it under; none puts it on the top level'))
     .action(async (reference: string, options: UpdateOptions) => {
       await runBoardCommand(options, 'write', async (session) => {
         const input = readUpdateInput(options)
         const existing = await requireCard(session, reference)
+        if (options.parent !== undefined) {
+          input.parentIssueId = options.parent === 'none' ? null : (await requireCard(session, options.parent)).id
+        }
         return await presentCard(session, await session.ops.updateCard(existing.id, input, createPlacementActor()))
       })
     })
@@ -391,9 +396,10 @@ async function presentCard(session: BoardSession, card: BoardCardWrite): Promise
 }
 
 /**
- * The fields `card update` was asked to change. A command that names none of
- * them is refused rather than obeyed: an empty update still bumps the board
- * version, and every reader would be told the board changed when it did not.
+ * The fields `card update` was asked to change — all but the parent, a card
+ * of the board, looked up there once the card itself is. A command that names
+ * none of them is refused rather than obeyed: an empty update still bumps the
+ * board version, and every reader would be told the board changed when it did not.
  */
 function readUpdateInput(options: UpdateOptions): UpdateCardInput {
   const input: UpdateCardInput = {}
@@ -413,8 +419,8 @@ function readUpdateInput(options: UpdateOptions): UpdateCardInput {
     input.executionMode = options.executionMode
   }
 
-  if (Object.keys(input).length === 0) {
-    throw new CliError(1, 'Nothing to update. Pass --title, --description, --priority, --labels or --execution-mode.')
+  if (Object.keys(input).length === 0 && options.parent === undefined) {
+    throw new CliError(1, 'Nothing to update. Pass --title, --description, --priority, --labels, --execution-mode or --parent.')
   }
   return input
 }

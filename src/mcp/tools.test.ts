@@ -232,6 +232,39 @@ describe('the board\'s tools over a real board', () => {
     await client.close()
   })
 
+  it('puts a card under another with kanbo_card_update parent, by its key, back on the top level with "none", and reads a null parent as not given', async () => {
+    const parent = await createCard('Parent')
+    const card = await createCard('Created at the wrong level')
+    const client = await connectClient()
+    const update = async (args: Record<string, unknown>) => await client.callTool({ name: 'kanbo_card_update', arguments: { card: card.id, ...args } }) as CallToolResult
+    const text = (result: CallToolResult) => (result.content[0] as { text: string }).text
+    const parentOf = async (id: string) =>
+      (readJson(await client.callTool({ name: 'kanbo_card_get', arguments: { card: id, include: [] } }) as CallToolResult) as KanboCardResult).parentIssueId
+
+    expect(readJson(await update({ parent: 'WOR-1' }))).toMatchObject({ id: card.id, parentId: parent.id })
+    expect(await parentOf(card.id)).toBe(parent.id)
+
+    // Models send null for the fields they are not changing: that must not take the card out from under its parent.
+    expect(readJson(await update({ title: 'Renamed', parent: null }))).toMatchObject({ title: 'Renamed', parentId: parent.id })
+    const nothing = await update({ parent: null })
+    expect(nothing.isError).toBe(true)
+    expect(text(nothing)).toBe('Nothing to update. Pass title, description, priority, labels, executionMode or parent.')
+
+    expect(readJson(await update({ parent: 'none' }))).not.toHaveProperty('parentId')
+    expect(await parentOf(card.id)).toBeNull()
+
+    const unknown = await update({ parent: 'WOR-404' })
+    expect(unknown.isError).toBe(true)
+    expect(text(unknown)).toContain('No card "WOR-404" on this board.')
+
+    await update({ parent: parent.id })
+    const cycle = await client.callTool({ name: 'kanbo_card_update', arguments: { card: parent.id, parent: card.id } }) as CallToolResult
+    expect(cycle.isError).toBe(true)
+    expect(text(cycle)).toBe(`issue_parent_cycle {"issueId":"${parent.id}","parentIssueId":"${card.id}"}`)
+    expect(await parentOf(parent.id)).toBeNull()
+    await client.close()
+  })
+
   it('tells an agent in kanbo_prime to break work down with subtasks', async () => {
     const client = await connectClient()
 
@@ -330,6 +363,33 @@ describe('the board\'s tools over a real board', () => {
     await overHttp.runStart({ card: 'WOR-001', agent: 'Claude', session: 'codex:session-9' })
 
     expect(bodies).toEqual([{ agentName: 'Claude', externalSessionRef: 'codex:session-9' }])
+  })
+
+  it('sends kanbo_card_update\'s parent to the server as parentIssueId — null for "none" — and no parent at all when none was given', async () => {
+    const card = await createCard('A card')
+    const ops = boardOps()
+    const writes: { path: string, body: Record<string, unknown> | undefined }[] = []
+    const overHttp = createHttpTransport({
+      workspaceId: () => WORKSPACE.id,
+      request: async (method, path, body) => {
+        if (method === 'PATCH') {
+          writes.push({ path, body })
+        }
+        return path.startsWith('/issues/statuses') ? await ops.listColumns(WORKSPACE.id) : await toCardView(ops, card)
+      },
+    })
+    const update = KANBO_TOOLS.find(tool => tool.name === 'kanbo_card_update')!
+
+    for (const args of [{ parent: 'WOR-002' }, { parent: 'none' }, { title: 'Renamed' }, { title: 'Again', parent: null }]) {
+      expect((await update.run(overHttp, { card: card.id, ...args })).isError, JSON.stringify(args)).toBeUndefined()
+    }
+
+    expect(writes).toStrictEqual([
+      { path: `/issues/${card.id}`, body: { parentIssueId: 'WOR-002' } },
+      { path: `/issues/${card.id}`, body: { parentIssueId: null } },
+      { path: `/issues/${card.id}`, body: { title: 'Renamed' } },
+      { path: `/issues/${card.id}`, body: { title: 'Again' } },
+    ])
   })
 
   it('links a pull request through kanbo_card_link_pr, once, and lists it through kanbo_card_pull_requests', async () => {
@@ -591,7 +651,7 @@ describe('the board\'s tools over a real board', () => {
     // `detail` says how to answer; it is not a field to change.
     const nothing = await tools.kanbo_card_update!.run(transport, { card: 'WOR-002', detail: 'full' })
     expect(nothing.isError).toBe(true)
-    expect(readText(nothing)).toBe('Nothing to update. Pass title, description, priority, labels or executionMode.')
+    expect(readText(nothing)).toBe('Nothing to update. Pass title, description, priority, labels, executionMode or parent.')
   })
 
   it('picks the same cards with every filter, from the board file and over HTTP', async () => {

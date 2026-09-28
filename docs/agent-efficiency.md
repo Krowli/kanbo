@@ -51,7 +51,7 @@ The 16 MCP tools, what an agent calls each one for, and what changed.
 | `kanbo_card_get` | Everything about this card | 1 | `include` (`comments`, `subCards`, `runs`, `history`, `prs`), `commentLimit`; comments and sub-cards by default; sub-cards read by parent |
 | `kanbo_card_list` | Which cards are waiting / running / in these columns / under this card / mention this / changed since? | 1 | `columns`, `waitingForPerson`, `parent`, `hasActiveRun`, `text`, `updatedSince`, `labels`, `priority`, `offset`, `detail`, `fields`; compact, 50 by default; filtered in the database |
 | `kanbo_card_create` | Put a card (or a subtask) on the board | 1 | Answers the card compact; `detail: "full"` for every field |
-| `kanbo_card_update` | Change title, description, priority, labels | 1 | Answers the card compact; `detail: "full"` for every field |
+| `kanbo_card_update` | Change title, description, priority, labels; put a card at the wrong level under another | 1 | `parent` (`"none"`: the top level) — before, a card created at the wrong level could not be moved; answers the card compact; `detail: "full"` for every field |
 | `kanbo_card_move` | Move a card | 1 | Answers the card compact; `detail: "full"` for every field |
 | `kanbo_card_comment` | Write a finding or a question | 1 | — |
 | `kanbo_card_link_pr` | Link a pull request | 1 | — |

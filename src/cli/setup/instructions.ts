@@ -143,6 +143,7 @@ export const COMMAND_SHEET = [
   '- `kanbo card status-line TST-5 --text "Running the tests"` — what is happening on the card right now',
   '- `kanbo card comment TST-5 --content "Added slugify with a test"` — a finding, result, decision or question',
   '- `kanbo card create --description "..." --parent TST-5` — a subtask',
+  '- `kanbo card update TST-7 --parent TST-5` — move a card at the wrong level under another (`--parent none`: the top level)',
   '- `kanbo card wait-approval TST-5 --text "Ready for review: ..."` — ask a person, then end your turn',
   '- `kanbo run start TST-5 --agent claude` — record a run you started yourself; it prints the finish command',
   '- `kanbo run finish <run id> --state finished` — end it: finished, failed or stopped',

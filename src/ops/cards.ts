@@ -675,10 +675,33 @@ async function requireParentInWorkspace(
   if (parentIssueId === issueId) {
     throw new BoardError('issue_parent_self_reference', { issueId, parentIssueId })
   }
-  if (!await store.issues.findInWorkspace(workspaceId, parentIssueId)) {
+  const parent = await store.issues.findInWorkspace(workspaceId, parentIssueId)
+  if (!parent) {
     throw new BoardError('issue_parent_not_found', { workspaceId, parentIssueId })
   }
+  if (issueId !== undefined && await isUnder(store, parent, issueId)) {
+    throw new BoardError('issue_parent_cycle', { issueId, parentIssueId })
+  }
   return parentIssueId
+}
+
+/**
+ * Is the card somewhere under `ancestorId` — its parent, its parent's parent,
+ * and so on up? A card put under one of its own sub-cards would make a loop no
+ * reader of the board can walk to the top of. The cards already seen end the
+ * walk, so a loop the data holds from before cannot hang it.
+ */
+async function isUnder(store: BoardStore, card: Issue, ancestorId: string): Promise<boolean> {
+  const seen = new Set<string>()
+  let id = card.parentIssueId
+  while (id !== null && !seen.has(id)) {
+    if (id === ancestorId) {
+      return true
+    }
+    seen.add(id)
+    id = (await store.issues.findById(id))?.parentIssueId ?? null
+  }
+  return false
 }
 
 /** Is the card's own number already taken by another card in the target workspace? */

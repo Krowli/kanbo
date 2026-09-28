@@ -204,6 +204,15 @@ const CASES: MatrixCase[] = [
       const history = JSON.stringify((await b.http('GET', '/issues/MAT-001/field-changes')).json)
       expect(history).toContain('After')
       expect(history).toContain('Written by the agent')
+
+      // A card created at the wrong level: the agent puts it under another, the terminal takes it back out.
+      await b.cli(['card', 'create', '--title', 'Part of it'])
+      expect(await b.tool('kanbo_card_update', { card: 'MAT-002', parent: 'MAT-1' })).toMatchObject({ id: 'MAT-002', parentId: 'MAT-001' })
+      expect(await b.cliJson(['card', 'get', 'MAT-002', '--json', 'parentIssueId'])).toEqual({ parentIssueId: 'MAT-001' })
+      await b.cli(['card', 'update', 'MAT-002', '--parent', 'none'])
+      expect(await b.tool('kanbo_card_get', { card: 'MAT-002', include: [] })).toMatchObject({ parentIssueId: null })
+      const moves = (await b.http<{ field: string, toValue: string | null }[]>('GET', '/issues/MAT-002/field-changes')).json
+      expect(moves.filter(change => change.field === 'parentIssueId').map(change => change.toValue)).toEqual(['MAT-001', null])
     },
   },
   {

@@ -28,6 +28,8 @@ describe('the kanbo MCP server instructions', () => {
     expect(instructions).toContain('kanbo_prime')
     expect(instructions).toContain('kanbo_wait_approval')
     expect(instructions).toContain('kanbo://capabilities.md')
+    // A card created at the wrong level is moved, not made again.
+    expect(instructions).toContain('`kanbo_card_update` and `parent` (`"none"` for the top level)')
   })
 
   it('stay compact enough to sit in every session\'s context', () => {

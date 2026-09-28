@@ -4,9 +4,18 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- `kanbo_card_update` takes `parent`, and `kanbo card update` takes `--parent <card>`: a card created at the wrong level is put under another card, or back on the top level with `"none"` (`--parent none`), and its history records the move like any other field's. A `null` for `parent` is read as not given — models send `null` for the fields they are not changing — so it never takes a card out from under its parent. The MCP server's instructions and the commands `kanbo prime` prints say so in one line each.
+- For applications that use kanbo as a library: `KanboCardUpdateInput.parent` (`string | null`; `null` is the top level, absent leaves the parent as it is) — a hand-written `KanboToolTransport` passes it on, and `createHttpTransport` sends it as `parentIssueId`, the card's exact id, as for a new card. `BoardErrorCode` gains `issue_parent_cycle`, `400` in `BOARD_ERROR_RESPONSES`.
+
 ### Changed
 
 - The MCP tools that write a card — `kanbo_card_create`, `kanbo_card_update`, `kanbo_card_move`, `kanbo_status_line`, `kanbo_wait_approval` — answer with the card compact, on one line, as `kanbo_card_list` prints it (`id`, `title`, `column` slug, `statusLine`, `waitingFor`, `parentId`, `attempt`, `activeRun`, `updatedAt`), instead of every field pretty-printed: an orchestrator writing its card 20–40 times a session got 5–19k characters back each time — 19k for a one-sentence status line — and read them again on every later turn. Each takes `detail: "full"` for the whole card, as before. The CLI prints what it printed. For applications that read these tools' answers: they are compact now; pass `detail: "full"` for the old answer.
+
+### Fixed
+
+- A card can no longer be put under one of its own sub-cards, at any depth: the board operation refuses it (`issue_parent_cycle` — "A card can't be put under one of its own sub-cards."), so `PATCH /issues/:id` does too, where it used to write the loop. A loop already in a board's data does not hang the check.
 
 ## [0.3.0] — 2026-09-28
 

@@ -240,5 +240,8 @@ describe('the kanbo instruction block', () => {
     // The arguments agents got wrong, written out, so they need no `kanbo capabilities` first.
     expect(out).toContain('--content "')
     expect(out).toContain('--state finished')
+    // A card created at the wrong level is moved, not made again.
+    expect(out).toContain('`kanbo card update TST-7 --parent TST-5`')
+    expect(out).toContain('`--parent none`')
   })
 })

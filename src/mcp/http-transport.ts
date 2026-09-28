@@ -311,8 +311,13 @@ export function createHttpTransport(input: KanboHttpTransportInput): KanboToolTr
       }),
     ),
 
-    cardUpdate: async ({ card, ...patch }) => await projectOne(
-      await request('PATCH', `/issues/${encodeURIComponent(card)}`, patch),
+    // The server's field is `parentIssueId`, sent only when a parent was named;
+    // like a new card's parent, it is taken as the card's exact id.
+    cardUpdate: async ({ card, parent, ...patch }) => await projectOne(
+      await request('PATCH', `/issues/${encodeURIComponent(card)}`, {
+        ...patch,
+        ...(parent !== undefined ? { parentIssueId: parent } : {}),
+      }),
     ),
 
     cardMove: async ({ card, column }) => await projectOne(

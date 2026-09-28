@@ -221,6 +221,52 @@ describe.each(BOARD_STORE_FACTORIES)('board cards on $name', (factory) => {
     expect((await updateCard(store, card.id, { title: 'Renamed' }, USER)).title).toBe('Renamed')
   })
 
+  it('puts a card under another and back on the top level, and records both in its history', async () => {
+    const parent = await createCard(store, { workspace: WORKSPACE, title: 'Parent' }, USER)
+    const card = await createCard(store, { workspace: WORKSPACE, title: 'Created at the wrong level' }, USER)
+
+    expect((await updateCard(store, card.id, { parentIssueId: parent.id }, AGENT)).parentIssueId).toBe(parent.id)
+    expect((await updateCard(store, card.id, { title: 'Renamed' }, AGENT)).parentIssueId).toBe(parent.id)
+    expect((await updateCard(store, card.id, { parentIssueId: null }, USER)).parentIssueId).toBeNull()
+    expect(await store.fieldChanges.listByIssueField(card.id, 'parentIssueId')).toEqual([
+      expect.objectContaining({ field: 'parentIssueId', fromValue: null, toValue: parent.id, actorKind: 'agent' }),
+      expect.objectContaining({ field: 'parentIssueId', fromValue: parent.id, toValue: null, actorKind: 'user' }),
+    ])
+  })
+
+  it('refuses to put a card under itself, under one of its own sub-cards at any depth, or under a card of another workspace', async () => {
+    const a = await createCard(store, { workspace: WORKSPACE, title: 'A' }, USER)
+    const b = await createCard(store, { workspace: WORKSPACE, title: 'B' }, USER)
+    await updateCard(store, a.id, { parentIssueId: b.id }, AGENT)
+    const c = await createSubCard(store, a.id, { workspace: WORKSPACE, title: 'C' }, USER)
+    const elsewhere = await createCard(store, { workspace: { id: 'other', identifier: 'OTH', name: 'Other' }, title: 'Elsewhere' }, USER)
+    const before = await readChangeSeq(store)
+
+    await expect(updateCard(store, b.id, { parentIssueId: b.id }, AGENT)).rejects.toMatchObject({ code: 'issue_parent_self_reference' })
+    await expect(updateCard(store, b.id, { parentIssueId: a.id }, AGENT))
+      .rejects
+      .toMatchObject({ code: 'issue_parent_cycle', details: { issueId: b.id, parentIssueId: a.id } })
+    await expect(updateCard(store, b.id, { parentIssueId: c.id }, AGENT))
+      .rejects
+      .toMatchObject({ code: 'issue_parent_cycle', details: { issueId: b.id, parentIssueId: c.id } })
+    await expect(updateCard(store, b.id, { parentIssueId: elsewhere.id }, AGENT)).rejects.toMatchObject({ code: 'issue_parent_not_found' })
+
+    expect((await store.issues.findById(b.id))?.parentIssueId).toBeNull()
+    expect(await store.fieldChanges.listByIssueField(b.id, 'parentIssueId')).toEqual([])
+    expect(await readChangeSeq(store)).toBe(before)
+  })
+
+  it('stops walking up a loop of parents the data already holds, rather than hanging on it', async () => {
+    const first = await createCard(store, { workspace: WORKSPACE, title: 'First' }, USER)
+    const second = await createSubCard(store, first.id, { workspace: WORKSPACE, title: 'Second' }, USER)
+    // A loop no write of the board makes, put straight into the row.
+    await store.issues.update(first.id, { parentIssueId: second.id })
+    const card = await createCard(store, { workspace: WORKSPACE, title: 'Card' }, USER)
+
+    expect((await updateCard(store, card.id, { parentIssueId: second.id }, USER)).parentIssueId).toBe(second.id)
+    await expect(updateCard(store, first.id, { parentIssueId: card.id }, USER)).rejects.toMatchObject({ code: 'issue_parent_cycle' })
+  })
+
   it('writes a deduplicated comment once, however often it is asked for', async () => {
     const card = await createCard(store, { workspace: WORKSPACE, title: 'Card' }, USER)
 

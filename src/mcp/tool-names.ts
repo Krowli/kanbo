@@ -68,7 +68,7 @@ export const KANBO_TOOL_CLI_EQUIVALENTS: Record<KanboToolName, KanboToolCliEquiv
     kanbo: 'kanbo card create --description <text> [--title <title>] [--parent <id>]',
   },
   kanbo_card_update: {
-    kanbo: 'kanbo card update <id> [--title <title>] [--description <text>]',
+    kanbo: 'kanbo card update <id> [--title <title>] [--description <text>] [--parent <id>]',
   },
   kanbo_card_move: {
     kanbo: 'kanbo card move <id> <column>',

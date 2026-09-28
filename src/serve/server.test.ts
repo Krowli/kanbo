@@ -230,6 +230,21 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     expect(returned.json.code).toBe('issue_return_requires_user')
   })
 
+  it('refuses to put a card under one of its own sub-cards, and leaves it where it is', async () => {
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Parent' } })
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Child', parentIssueId: 'WOR-001' } })
+
+    const refused = await call(client, 'PATCH', '/issues/WOR-001', { body: { parentIssueId: 'WOR-002' } })
+
+    expect(refused.status).toBe(400)
+    expect(refused.json).toEqual({
+      code: 'issue_parent_cycle',
+      message: 'Issue cannot be put under one of its own sub-issues',
+      details: { issueId: 'WOR-001', parentIssueId: 'WOR-002' },
+    })
+    expect((await call(client, 'GET', '/issues/WOR-001')).json.parentIssueId).toBeNull()
+  })
+
   it('reads the agent header among several values, however spelled', async () => {
     await waitingCard()
     const approved = await call(client, 'POST', '/issues/WOR-001/approve', { body: {}, headers: { 'x-kanbo-actor': 'external, Agent ' } })

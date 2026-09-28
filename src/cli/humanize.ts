@@ -114,6 +114,7 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
     next: 'kanbo sprint list',
   }),
   issue_not_found: details => ({ text: `No card "${named(details.issueId)}" here.`, next: 'kanbo card list' }),
+  issue_parent_cycle: () => ({ text: 'A card can\'t be put under one of its own sub-cards.' }),
   issue_parent_not_found: details => ({
     text: `No card "${named(details.parentIssueId)}" here to put this one under.`,
     next: 'kanbo card list',

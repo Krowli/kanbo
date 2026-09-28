@@ -46,6 +46,7 @@ const EXPECTED: Record<BoardErrorCode, [Record<string, unknown>, string]> = {
   issue_context_ref_invalid_index: [{ issueId: 'MYA-1', index: 4 }, 'MYA-1 has no context link number 4.\n  Next: kanbo card get MYA-1'],
   issue_milestone_not_found: [{ milestoneId: 'm1' }, 'No sprint "m1" on this board.\n  Next: kanbo sprint list'],
   issue_not_found: [{ issueId: 'MYA-9' }, 'No card "MYA-9" here.\n  Next: kanbo card list'],
+  issue_parent_cycle: [{ issueId: 'MYA-1', parentIssueId: 'MYA-2' }, 'A card can\'t be put under one of its own sub-cards.'],
   issue_parent_not_found: [{ parentIssueId: 'MYA-9' }, 'No card "MYA-9" here to put this one under.\n  Next: kanbo card list'],
   issue_parent_self_reference: [{ issueId: 'MYA-1' }, 'A card can\'t be put under itself.'],
   issue_relation_not_found: [{ relationId: 'x1' }, 'No link "x1" between cards on this board.'],

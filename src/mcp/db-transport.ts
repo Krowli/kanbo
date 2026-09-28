@@ -168,10 +168,12 @@ export async function createDbTransport(input: KanboDbTransportInput): Promise<K
       }, actor))
     },
 
-    cardUpdate: async ({ card, ...patch }) => {
+    cardUpdate: async ({ card, parent, ...patch }) => {
       await session.assertWritable()
       const existing = await resolveCard(card)
-      return await project(await ops.updateCard(existing.id, patch, actor))
+      // A parent is written only when one was named: an update of the title leaves the card where it is.
+      const placement = parent === undefined ? {} : { parentIssueId: parent === null ? null : (await resolveCard(parent)).id }
+      return await project(await ops.updateCard(existing.id, { ...patch, ...placement }, actor))
     },
 
     cardMove: async ({ card, column }) => {

@@ -34,6 +34,7 @@ export type BoardErrorCode
     | 'issue_context_ref_invalid_index'
     | 'issue_milestone_not_found'
     | 'issue_not_found'
+    | 'issue_parent_cycle'
     | 'issue_parent_not_found'
     | 'issue_parent_self_reference'
     | 'issue_relation_not_found'

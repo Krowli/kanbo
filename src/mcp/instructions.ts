@@ -34,6 +34,7 @@ export const KANBO_MCP_INSTRUCTIONS = [
   `- ${STATUS_LINE_RULE} (${tool('kanbo_status_line')})`,
   `- ${COMMENT_RULE} (${tool('kanbo_card_comment')})`,
   `- ${SUBTASK_RULE} (${tool('kanbo_card_create')} with \`parent\`)`,
+  `- A card at the wrong level is moved with ${tool('kanbo_card_update')} and \`parent\` (\`"none"\` for the top level).`,
   `- ${WAIT_FOR_PERSON_RULE} (${tool('kanbo_wait_approval')})`,
   `- ${PERSON_ONLY_RULE}`,
   `- Every tool, rule and canonical string: the resource \`${KANBO_CAPABILITIES_MARKDOWN_RESOURCE_URI}\`.`,

@@ -369,6 +369,30 @@ describe('board commands', () => {
     expect(JSON.parse(await run(['card', 'get', String(card.number), '--json', 'id']))).toEqual({ id: card.id })
   })
 
+  it('puts a card under another with card update --parent, and back on the top level with --parent none', async () => {
+    vi.stubEnv('KANBO_DEBUG', '')
+    const parent = await createCardIn('Parent', 'To Do')
+    const card = await createCardIn('Card', 'To Do')
+    const parentOf = async (...argv: string[]) => JSON.parse(await run(['card', 'update', card.id, ...argv, '--json', 'parentIssueId']))
+
+    expect(await parentOf('--parent', String(parent.number))).toEqual({ parentIssueId: parent.id })
+    expect(await parentOf('--title', 'Renamed')).toEqual({ parentIssueId: parent.id })
+    const cycle = await run(['card', 'update', parent.id, '--parent', card.id]).then(() => undefined, (error: unknown) => error)
+    expect(describeFailure(cycle)).toEqual({
+      exitCode: 1,
+      code: 'issue_parent_cycle',
+      message: 'A card can\'t be put under one of its own sub-cards.  [issue_parent_cycle]',
+    })
+    expect(await parentOf('--parent', 'none')).toEqual({ parentIssueId: null })
+
+    await expect(run(['card', 'update', card.id, '--parent', '999']))
+      .rejects
+      .toThrowError(expect.objectContaining({ exitCode: 2, message: 'No card "999" on this board.\n  Next: kanbo card list' }))
+    await expect(run(['card', 'update', card.id]))
+      .rejects
+      .toThrowError(expect.objectContaining({ exitCode: 1, message: 'Nothing to update. Pass --title, --description, --priority, --labels, --execution-mode or --parent.' }))
+  })
+
   it('never touches a card from another workspace, whatever its key looks like', async () => {
     const mine = await createCardIn('Mine', 'To Do')
     seedHostWorkspace(board, 'other-workspace', 'OTH')

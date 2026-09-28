@@ -63,6 +63,7 @@ export const BOARD_ERROR_RESPONSES: Record<BoardErrorCode, BoardErrorResponse> =
   issue_context_ref_invalid_index: { status: 400, message: 'Invalid context ref index' },
   issue_milestone_not_found: { status: 404, message: 'Milestone not found' },
   issue_not_found: { status: 404, message: 'Issue not found' },
+  issue_parent_cycle: { status: 400, message: 'Issue cannot be put under one of its own sub-issues' },
   issue_parent_not_found: { status: 404, message: 'Parent issue not found' },
   issue_parent_self_reference: { status: 400, message: 'Issue cannot be its own parent' },
   issue_relation_not_found: { status: 404, message: 'Relation not found' },
