@@ -14,18 +14,22 @@ export default defineConfig({
     // machine and more than vitest's default 10 s hook budget on a loaded one —
     // every failure seen was that timeout, never an assertion.
     hookTimeout: 30_000,
-    // `npm run coverage`. The thresholds are what the suite measured when they
-    // were set, rounded down: coverage may rise, and a change that lowers it
-    // fails. Raise them when it rises. Code run only in a child process (the
-    // built CLI a test starts) is not counted.
+    // `npm run coverage`. The thresholds are one point below the lower of what
+    // the suite measured on macOS and on Linux (CI) when they were set, rounded
+    // down to a tenth: the two differ by a few tenths (platform-only branches),
+    // and the point of margin keeps that from failing a run. Coverage may rise,
+    // and a change that lowers it by more than the margin fails. Raise them when
+    // it rises. Code run only in a child process (the built CLI a test starts)
+    // is not counted.
     coverage: {
       provider: 'v8',
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts', 'src/testing/**'],
       reporter: ['text-summary', 'lcov'],
       reportsDirectory: 'coverage',
-      // Measured 2026-09-28 (macOS, Node 24): 86.14 / 80.21 / 89.72 / 86.05.
-      thresholds: { statements: 86, branches: 80, functions: 89, lines: 86 },
+      // Measured 2026-09-28, Node 24 — Linux (CI run for 3e69998): 86.71 / 81.26 / 90.25 / 86.59;
+      // macOS (after the phase-7 fixes): 86.82 / 81.46 / 90.30 / 86.70.
+      thresholds: { statements: 85.7, branches: 80.2, functions: 89.2, lines: 85.5 },
     },
   },
 })

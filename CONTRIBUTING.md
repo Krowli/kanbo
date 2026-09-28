@@ -33,7 +33,7 @@ Tests need no external services. Board-file tests use real SQLite files in a tem
 
 ### Coverage
 
-`npm run coverage` runs the suite with V8 coverage and fails below the thresholds in `vitest.config.ts` (statements, branches, functions, lines — what the suite measured when they were set, rounded down). CI runs it on Linux, Node 24, prints the summary in the log and keeps `coverage/lcov.info` as the `coverage-lcov` artifact. When coverage rises, raise the thresholds with it; code run only in a child process (the built CLI some tests start) is not counted.
+`npm run coverage` runs the suite with V8 coverage and fails below the thresholds in `vitest.config.ts` (statements, branches, functions, lines). They are set one point below the lower of the macOS and Linux measurements, rounded down to a tenth: the two platforms differ by a few tenths, and the margin keeps that from failing a run. Take the Linux numbers from the CI log (`gh run view <run-id> --log | grep -E 'Statements|Branches|Functions|Lines'`) and the macOS numbers from a local `npm run coverage`, and write both beside the thresholds. CI runs it on Linux, Node 24, prints the summary in the log and keeps `coverage/lcov.info` as the `coverage-lcov` artifact. When coverage rises, raise the thresholds with it; code run only in a child process (the built CLI some tests start) is not counted.
 
 ### The smoke test
 
