@@ -1,0 +1,1 @@
+ALTER TABLE "issue_milestones" ADD COLUMN "start_date" bigint;

@@ -1,0 +1,1 @@
+ALTER TABLE `issue_milestones` ADD `start_date` integer;

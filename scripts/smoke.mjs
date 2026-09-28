@@ -4,7 +4,12 @@
 // new project — board, card, agent connection, MCP handshake, `serve`,
 // `doctor`, `uninstall`. Plain Node, the same on every OS.
 //
+// With --upgrade it checks an upgrade instead: the published kanbo-cli@0.2.1
+// sets up a project and fills its board, then the tarball is installed over
+// it and has to find everything where 0.2.1 left it (needs the npm registry).
+//
 //   node scripts/smoke.mjs                  # packs this checkout first (runs the build through prepack)
+//   node scripts/smoke.mjs --upgrade        # from kanbo-cli@0.2.1 to this checkout
 //   node scripts/smoke.mjs --tarball <tgz>  # installs a tarball packed already
 //   node scripts/smoke.mjs --keep           # leaves the temporary folders for a look
 //
@@ -12,7 +17,7 @@
 // CODEX_HOME and CLAUDE_CONFIG_DIR point inside them for every kanbo run.
 
 import { execFileSync, spawn, spawnSync } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -26,6 +31,7 @@ const TOKEN = 't'
 
 const args = process.argv.slice(2)
 const keep = args.includes('--keep')
+const upgrade = args.includes('--upgrade')
 const tarballArg = args.includes('--tarball') ? args[args.indexOf('--tarball') + 1] : null
 
 // ---------------------------------------------------------------- the log
@@ -142,8 +148,8 @@ function readTomlServer(text) {
   return { command: strings(command[1])[0], args: argsLine ? strings(argsLine[1]) : [] }
 }
 
-/** Start the server as a client would from its registration, shake hands, call kanbo_ready. */
-async function mcpHandshake(label, launch) {
+/** Start the server as a client would from its registration, shake hands, call kanbo_ready and find `card` in it. */
+async function mcpHandshake(label, launch, card = `${KEY}-001`) {
   note(`${label}: ${launch.command} ${launch.args.join(' ')}`)
   // The SDK the installed kanbo depends on — what a user's machine has.
   const require = createRequire(join(packageDir, 'package.json'))
@@ -161,8 +167,8 @@ async function mcpHandshake(label, launch) {
     check(typeof instructions === 'string' && instructions.trim().length > 0, `${label}: the server sent no instructions`)
     const ready = await withTimeout(client.callTool({ name: 'kanbo_ready', arguments: {} }), 60_000, `${label}: kanbo_ready did not answer`)
     const text = (ready.content ?? []).map(part => part.text ?? '').join('\n')
-    check(!ready.isError && text.includes(`${KEY}-001`), `${label}: kanbo_ready does not list ${KEY}-001`, text)
-    note(`${label}: serverInfo ${info.name} ${info.version}, ${instructions.length} chars of instructions, kanbo_ready lists ${KEY}-001`)
+    check(!ready.isError && text.includes(card), `${label}: kanbo_ready does not list ${card}`, text)
+    note(`${label}: serverInfo ${info.name} ${info.version}, ${instructions.length} chars of instructions, kanbo_ready lists ${card}`)
   }
   finally {
     await client.close().catch(() => {})
@@ -225,10 +231,8 @@ async function serveCheck() {
 
 // ---------------------------------------------------------------- the run
 
-async function main() {
-  console.log(`kanbo smoke ${VERSION} — Node ${process.version}, ${process.platform}/${process.arch}`)
-  console.log(`temporary folder: ${root}`)
-
+/** The tarball to install: the one given, or this checkout packed now. */
+function packTarball() {
   step('pack')
   let tarball
   if (tarballArg) {
@@ -246,6 +250,14 @@ async function main() {
     tarball = join(packDir, packed[0])
   }
   note(tarball)
+  return tarball
+}
+
+async function main() {
+  console.log(`kanbo smoke ${VERSION} — Node ${process.version}, ${process.platform}/${process.arch}`)
+  console.log(`temporary folder: ${root}`)
+
+  const tarball = packTarball()
 
   step('install the tarball globally into a temporary prefix')
   // npm itself keeps the real environment (its cache, its registry settings); only kanbo runs get the throwaway home.
@@ -348,13 +360,178 @@ async function main() {
   }
 }
 
+// ---------------------------------------------------------------- --upgrade: from kanbo-cli@0.2.1
+
+const OLD_VERSION = '0.2.1'
+const UPGRADE_KEY = 'UPG'
+const TEXT_BEFORE = '# My project\n\nNotes a person wrote before kanbo was installed.\n'
+const TEXT_AFTER = '\n## Build\n\nNotes a person wrote after the kanbo section.\n'
+
+/** Every table of the board file and every row in it, read with the better-sqlite3 installed beside kanbo. */
+function readBoardTables(file) {
+  const globalModules = WINDOWS ? join(prefix, 'node_modules') : join(prefix, 'lib', 'node_modules')
+  const Database = createRequire(join(globalModules, 'noop.js'))('better-sqlite3')
+  const database = new Database(file, { readonly: true, fileMustExist: true })
+  try {
+    const tables = database.prepare(`select name from sqlite_master where type = 'table' and name not like 'sqlite_%' order by name`).all()
+    return Object.fromEntries(tables.map(({ name }) => {
+      const columns = database.prepare(`select name from pragma_table_info(?)`).all(name).map(column => column.name)
+      const rows = database.prepare(`select * from "${name}" order by rowid`).all()
+      return [name, { columns, rows }]
+    }))
+  }
+  finally {
+    database.close()
+  }
+}
+
+/** What differs between the board before and after: a table or a row gone or changed. New columns and new migrations are allowed. */
+function compareBoardTables(before, after) {
+  const differences = []
+  for (const [name, table] of Object.entries(before)) {
+    const now = after[name]
+    if (!now) {
+      differences.push(`table ${name} is gone`)
+      continue
+    }
+    const project = row => JSON.stringify(table.columns.map(column => row[column]))
+    const kept = now.rows.map(project)
+    const was = table.rows.map(project)
+    // A later build may add migrations; every other table must hold exactly the rows it held.
+    const same = name === '__drizzle_migrations'
+      ? was.every((row, index) => kept[index] === row)
+      : was.length === kept.length && was.every((row, index) => kept[index] === row)
+    if (!same) {
+      differences.push(`table ${name}: ${was.length} rows before, ${kept.length} after\n  before ${JSON.stringify(table.rows)}\n  after  ${JSON.stringify(now.rows)}`)
+    }
+  }
+  return differences
+}
+
+async function upgradeMain() {
+  console.log(`kanbo upgrade smoke ${OLD_VERSION} → ${VERSION} — Node ${process.version}, ${process.platform}/${process.arch}`)
+  console.log(`temporary folder: ${root}`)
+
+  const tarball = packTarball()
+
+  step(`u1. install the published kanbo-cli@${OLD_VERSION}, and better-sqlite3 beside it as ${OLD_VERSION} asked`)
+  run('npm', ['install', '--global', '--prefix', prefix, '--no-audit', '--no-fund', `kanbo-cli@${OLD_VERSION}`], { env: process.env, cwd: root })
+  run('npm', ['install', '--global', '--prefix', prefix, '--no-audit', '--no-fund', 'better-sqlite3@13'], { env: process.env, cwd: root })
+  const oldVersion = kanbo(['--version']).stdout.trim()
+  check(oldVersion === OLD_VERSION, `kanbo --version printed ${JSON.stringify(oldVersion)}, expected ${OLD_VERSION}`)
+  note(oldVersion)
+
+  step(`u2. ${OLD_VERSION}: kanbo init --file --instructions claude --mcp claude --yes`)
+  run('git', ['init', '-q'], { env: kanboEnv() })
+  const claudeMdPath = join(project, 'CLAUDE.md')
+  writeFileSync(claudeMdPath, TEXT_BEFORE)
+  kanbo(['init', '--file', '--workspace', 'upgrade', '--identifier', UPGRADE_KEY, '--instructions', 'claude', '--mcp', 'claude', '--yes'])
+  const oldBlock = BLOCK_PATTERN.exec(readText(claudeMdPath))
+  check(oldBlock !== null && !/v2/.test(oldBlock[1]), `${OLD_VERSION} wrote no unversioned kanbo block`, readText(claudeMdPath))
+  appendFileSync(claudeMdPath, TEXT_AFTER)
+  const oldMcpEntry = JSON.parse(readText(join(project, '.mcp.json'))).mcpServers?.kanbo
+  check(oldMcpEntry !== undefined, `${OLD_VERSION} wrote no kanbo entry in .mcp.json`)
+  note(`.mcp.json kanbo: ${JSON.stringify(oldMcpEntry)}`)
+
+  step(`u3. ${OLD_VERSION}: cards, a comment, runs, a status line, a wait for approval, a column description`)
+  kanbo(['card', 'create', '--title', 'First card', '--description', 'What the first card is about'])
+  kanbo(['card', 'create', '--description', 'A card with only a description'])
+  kanbo(['card', 'create', '--title', 'Third card'])
+  kanbo(['card', 'comment', `${UPGRADE_KEY}-001`, '--content', 'A finding from before the upgrade'])
+  kanbo(['run', 'start', `${UPGRADE_KEY}-001`, '--agent', 'Claude', '--session', 'claude:before-upgrade'])
+  const finished = JSON.parse(kanbo(['run', 'start', `${UPGRADE_KEY}-003`, '--agent', 'Codex', '--format', 'json']).stdout)
+  kanbo(['run', 'finish', finished.id, '--state', 'finished'])
+  kanbo(['card', 'status-line', `${UPGRADE_KEY}-001`, '--text', 'halfway through'])
+  kanbo(['card', 'wait-approval', `${UPGRADE_KEY}-001`, '--text', 'please look'], { env: kanboEnv({ KANBO_ACTOR_KIND: 'agent' }) })
+  kanbo(['columns', 'describe', 'in_review', '--text', 'A person checks it here'])
+  kanbo(['card', 'move', `${UPGRADE_KEY}-002`, 'to_do'])
+
+  const cardFields = 'id,title,description,column,statusLine,waitingFor,attemptCount,parentIssueId,labels,priority'
+  const boardFile = join(project, '.kanbo', 'board.db')
+  const cardsBefore = JSON.parse(kanbo(['card', 'list', '--json', cardFields]).stdout)
+  const columnsBefore = JSON.parse(kanbo(['columns', 'list', '--json', 'name,slug,description']).stdout)
+  const tablesBefore = readBoardTables(boardFile)
+  note(`${cardsBefore.length} cards; ${Object.entries(tablesBefore).map(([name, table]) => `${name} ${table.rows.length}`).join(', ')}`)
+
+  step(`u4. install this build (${VERSION}) over the same prefix`)
+  run('npm', ['install', '--global', '--prefix', prefix, '--no-audit', '--no-fund', tarball], { env: process.env, cwd: root })
+  const newVersion = kanbo(['--version']).stdout.trim()
+  check(newVersion === VERSION, `kanbo --version printed ${JSON.stringify(newVersion)}, expected ${VERSION}`)
+  // The version may not have moved yet (it is bumped at release); a command 0.2.1 did not have tells the builds apart.
+  kanbo(['connect', '--help'])
+  note(`${newVersion}, and kanbo connect exists`)
+
+  step('u5. every card, comment, run and change is where it was')
+  const cardsAfter = JSON.parse(kanbo(['card', 'list', '--json', cardFields]).stdout)
+  check(JSON.stringify(cardsAfter) === JSON.stringify(cardsBefore), 'kanbo card list differs after the upgrade', `before ${JSON.stringify(cardsBefore)}\nafter  ${JSON.stringify(cardsAfter)}`)
+  const columnsAfter = JSON.parse(kanbo(['columns', 'list', '--json', 'name,slug,description']).stdout)
+  check(JSON.stringify(columnsAfter) === JSON.stringify(columnsBefore), 'kanbo columns list differs after the upgrade', `before ${JSON.stringify(columnsBefore)}\nafter  ${JSON.stringify(columnsAfter)}`)
+  const differences = compareBoardTables(tablesBefore, readBoardTables(boardFile))
+  check(differences.length === 0, 'the board file changed in the upgrade', differences.join('\n'))
+  note(`${cardsAfter.length} cards and ${Object.keys(tablesBefore).length} tables the same, row for row`)
+
+  step('u6. prime, ready and card list on the old board')
+  const prime = kanbo(['prime'])
+  check(prime.stdout.includes('A person checks it here'), 'kanbo prime does not show the column description written by the old kanbo', prime.all)
+  const ready = JSON.parse(kanbo(['ready', '--json', 'id']).stdout)
+  check(ready.some(card => card.id === `${UPGRADE_KEY}-002`), `kanbo ready does not list ${UPGRADE_KEY}-002`, JSON.stringify(ready))
+  const waiting = JSON.parse(kanbo(['card', 'get', `${UPGRADE_KEY}-001`, '--json', 'waitingFor,statusLine']).stdout)
+  check(waiting.waitingFor === 'human' && waiting.statusLine === 'please look', `${UPGRADE_KEY}-001 is no longer waiting`, JSON.stringify(waiting))
+
+  step(`u7. MCP handshake from the .mcp.json entry ${OLD_VERSION} wrote`)
+  if (WINDOWS) {
+    // `kanbo` is npm's kanbo.cmd here, which a client that starts programs without a shell cannot run (see the plain smoke).
+    note('.mcp.json (project form) is not started directly on Windows')
+  }
+  else {
+    await mcpHandshake('.mcp.json from 0.2.1', oldMcpEntry, `${UPGRADE_KEY}-002`)
+  }
+
+  step(`u8. kanbo doctor sees the ${OLD_VERSION} block as older, and --fix brings it up to date`)
+  const doctorBefore = kanbo(['doctor', '--json'], { expectCode: null })
+  const findingsBefore = JSON.parse(doctorBefore.stdout).findings
+  const failsBefore = findingsBefore.filter(f => f.status === 'fail')
+  check(failsBefore.length === 0, `kanbo doctor failed on the upgraded project (exit ${doctorBefore.code})`, JSON.stringify(failsBefore, null, 2))
+  const instructionsBefore = findingsBefore.find(f => f.check === 'instructions')
+  check(instructionsBefore?.status === 'warn' && instructionsBefore.fixable === true, 'kanbo doctor does not warn about the old block, fixably', JSON.stringify(instructionsBefore))
+  note(`instructions: ${instructionsBefore.status} — ${instructionsBefore.detail}`)
+  kanbo(['doctor', '--fix', '--yes'])
+  const claudeMd = readText(claudeMdPath)
+  const newBlock = BLOCK_PATTERN.exec(claudeMd)
+  check(newBlock !== null && /(^|\s)v2(\s|$)/.test(newBlock[1]), 'CLAUDE.md has no v2 kanbo block after doctor --fix', claudeMd)
+  check(claudeMd.startsWith(TEXT_BEFORE) && claudeMd.endsWith(TEXT_AFTER), 'doctor --fix changed the text outside the kanbo block', claudeMd)
+  check(claudeMd.split('KANBO_START').length === 2, 'CLAUDE.md has more than one kanbo block', claudeMd)
+  const doctorAfter = kanbo(['doctor', '--json'], { expectCode: null })
+  const findingsAfter = JSON.parse(doctorAfter.stdout).findings
+  const instructionsAfter = findingsAfter.find(f => f.check === 'instructions')
+  check(instructionsAfter?.status === 'ok' && doctorAfter.code === 0, 'kanbo doctor still reports the block or a failure after --fix', JSON.stringify(findingsAfter, null, 2))
+  for (const finding of findingsAfter.filter(f => f.status === 'warn')) {
+    warnings.push(`doctor warn ${finding.check}: ${finding.detail}`)
+    note(warnings.at(-1))
+  }
+
+  step('u9. kanbo connect --check')
+  const connectCheck = kanbo(['connect', '--check'])
+  check(/claude/i.test(connectCheck.all), 'kanbo connect --check does not mention Claude Code', connectCheck.all)
+  note(connectCheck.stdout.trim().split('\n').join(' | '))
+
+  step('u10. bare kanbo without a terminal prints the board')
+  const bare = kanbo([])
+  check(bare.stdout.includes(UPGRADE_KEY) && bare.stdout.includes('More: kanbo --help'), 'bare kanbo does not print the board summary', bare.all)
+
+  console.log(`\n✔ kanbo upgrade smoke passed on ${process.platform}/${process.arch}, Node ${process.version}${warnings.length ? ` — ${warnings.length} warning(s):` : ''}`)
+  for (const warning of warnings) {
+    console.log(`  ${warning}`)
+  }
+}
+
 let failed = false
 try {
-  await main()
+  await (upgrade ? upgradeMain() : main())
 }
 catch (error) {
   failed = true
-  console.error(`\n✖ kanbo smoke failed at step "${currentStep}":\n${error instanceof SmokeFailure ? error.message : error?.stack ?? error}`)
+  console.error(`\n✖ kanbo ${upgrade ? 'upgrade ' : ''}smoke failed at step "${currentStep}":\n${error instanceof SmokeFailure ? error.message : error?.stack ?? error}`)
 }
 finally {
   if (keep) {

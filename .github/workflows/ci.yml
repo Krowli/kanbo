@@ -51,6 +51,9 @@ jobs:
       # What users install: pack, `npm install -g` the tarball into a temporary
       # prefix, and drive the installed kanbo through a new project.
       - run: node scripts/smoke.mjs
+      # An upgrade: the published kanbo-cli@0.2.1 sets up a project and fills
+      # its board, then this build is installed over it (needs the registry).
+      - run: node scripts/smoke.mjs --upgrade
 
   # Not required yet: arm64 runners and Alpine (musl). The results are
   # reported on every run, and a failure does not fail the workflow.
@@ -74,6 +77,7 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: node scripts/smoke.mjs
+      - run: node scripts/smoke.mjs --upgrade
 
   alpine:
     name: Node 22 on Alpine (not required)
@@ -89,3 +93,4 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: node scripts/smoke.mjs
+      - run: node scripts/smoke.mjs --upgrade

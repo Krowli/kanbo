@@ -43,9 +43,12 @@ Tests need no external services. Board-file tests use real SQLite files in a tem
 node scripts/smoke.mjs                          # pack and check this checkout
 node scripts/smoke.mjs --tarball kanbo-cli-x.y.z.tgz   # check a tarball packed already
 node scripts/smoke.mjs --keep                   # keep the temporary folder to look at
+node scripts/smoke.mjs --upgrade                # the upgrade from kanbo-cli@0.2.1 instead (needs the npm registry)
 ```
 
-CI runs it on every job after the tests, and the release workflow runs it on the tarball before publishing.
+`--upgrade` checks an upgrade instead: it installs the published `kanbo-cli@0.2.1` (and `better-sqlite3` beside it, as 0.2.1 needed) into the prefix, runs `init --file --instructions claude --mcp claude --yes` in a new project with text of a person's own around the `CLAUDE.md` block, and fills the board — cards, a comment, a started and a finished run, a status line, a wait for approval, a column description. Then it installs the tarball over the same prefix and checks that every table of the board file holds the same rows, `card list` and `columns list` read the same, `prime`, `ready` and the MCP server started from 0.2.1's `.mcp.json` entry work, `doctor --json` warns (fixably) about the old block and `doctor --fix --yes` makes it current without touching the text around it, `connect --check` answers, and bare `kanbo` prints the board. `src/upgrade-from-0.2.1.test.ts` checks the same without the network, on boards built with the migrations as v0.2.1 shipped them (`src/testing/fixtures/v0.2.1/`).
+
+CI runs both on every job after the tests, and the release workflow runs it on the tarball before publishing.
 
 Every prompt goes through `src/cli/ui/ui.ts`; a test answers one with `src/testing/prompt-driver.ts` (fake terminal streams and key presses, no pty). A test that needs a program on `PATH` writes it with `src/testing/fake-bin.ts`, which works on Windows too.
 
