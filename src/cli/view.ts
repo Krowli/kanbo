@@ -246,22 +246,33 @@ export function projectRun(run: BoardRunView): RunView {
 }
 
 /** One card per line: the key, the column it is in, and what it is called (`cardDisplayTitle`). */
-export function describeCards(cards: Pick<CardView, 'id' | 'title' | 'description' | 'column' | 'returned' | 'lastComment'>[]): string {
+export function describeCards(
+  cards: (Pick<CardView, 'id' | 'title' | 'description' | 'column'> & Partial<Pick<CardView, 'statusLine' | 'waitingFor' | 'returned' | 'lastComment'>>)[],
+): string {
   if (cards.length === 0) {
     return 'No cards'
   }
 
   const keyWidth = Math.max(...cards.map(card => card.id.length))
+  const indent = ' '.repeat(keyWidth + 2)
   const column = (card: Pick<CardView, 'column'>): string => sanitizeTerminalText(card.column ?? '—')
   const columnWidth = Math.max(...cards.map(card => displayWidth(column(card))))
   return cards
     .map((card) => {
       const line = `${card.id.padEnd(keyWidth)}  ${padToWidth(column(card), columnWidth)}  ${sanitizeTerminalText(cardDisplayTitle(card))}`
-      // What the card waits on, or why it came back, under it — so "what is waiting" is one command.
-      const said = card.lastComment
-        ? `\n${' '.repeat(keyWidth + 2)}${card.returned ? 'returned — ' : ''}${describeCommentAuthor(card.lastComment.author)}: ${sanitizeTerminalText(card.lastComment.text)}`
-        : card.returned ? `\n${' '.repeat(keyWidth + 2)}returned` : ''
-      return `${line}${said}`
+      // What the card waits on, or why it came back, under it — so "what is
+      // waiting" is one command: an agent that saw only the titles opened
+      // every waiting card to learn what it asked (docs/performance.md).
+      const under = [
+        card.waitingFor === 'human'
+          ? `waiting for a person${card.statusLine ? ` — ${sanitizeTerminalText(card.statusLine)}` : ''}`
+          : null,
+        card.returned && !card.lastComment ? 'returned' : null,
+        card.lastComment
+          ? `${card.returned ? 'returned — ' : 'last comment, '}${describeCommentAuthor(card.lastComment.author)}: ${sanitizeTerminalText(card.lastComment.text)}`
+          : null,
+      ].filter(text => text !== null)
+      return [line, ...under.map(text => `${indent}${text}`)].join('\n')
     })
     .join('\n')
 }

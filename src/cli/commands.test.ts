@@ -265,6 +265,8 @@ describe('board commands', () => {
     await waitApproval(store, waiting.id, { statusLine: 'Please review' }, USER)
     await createCardIn('Ready one', 'To Do')
 
+    // What each waiting card asks is under it: no card needs opening to answer "what is waiting".
+    expect(await run(['card', 'list', '--waiting'])).toBe(`${waiting.id}  In Review  Waiting\n${' '.repeat(waiting.id.length + 2)}waiting for a person — Please review`)
     const returned = await run(['card', 'list', '--returned'])
     expect(returned).toBe(`${sentBack.id}  In Progress  Sent back\n${' '.repeat(sentBack.id.length + 2)}returned — person: Tests are missing`)
     expect(JSON.parse(await run(['card', 'list', '--returned', '--json', 'id,returned,lastComment']))).toEqual([
