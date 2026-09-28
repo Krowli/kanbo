@@ -18,6 +18,7 @@ cd kanbo
 npm install
 npm run build        # dist/cli.cjs, dist/lib/, dist/page/
 npm test             # the whole suite
+npm run coverage     # the same suite, with a coverage summary and coverage/lcov.info
 npm run typecheck
 npm link             # optional: `kanbo` on your PATH, pointing at this checkout
 ```
@@ -25,6 +26,14 @@ npm link             # optional: `kanbo` on your PATH, pointing at this checkout
 `npm run kanbo -- <args>` runs the CLI from source through `tsx`, without building.
 
 Tests need no external services. Board-file tests use real SQLite files in a temporary directory; Postgres tests use [PGlite](https://pglite.dev), an in-process Postgres, so no database server is required. Some tests run the built output, so run `npm run build` before `npm test`.
+
+### The capability matrix
+
+`src/e2e/capability-matrix.test.ts` drives every command and every MCP tool the capabilities manifest lists against a board file and a Postgres (PGlite) board, and checks each result through another door: a card created over MCP in `kanbo card list` and on `serve`'s `/issues`, a move typed in the terminal in the agent's `kanbo_card_get` and the card's history, a person's approval in both. Its last test fails when the manifest lists a command or tool with no case; add a case when you add one (or, if it cannot run in-process, an entry in `NOT_DRIVEN_HERE` saying why).
+
+### Coverage
+
+`npm run coverage` runs the suite with V8 coverage and fails below the thresholds in `vitest.config.ts` (statements, branches, functions, lines — what the suite measured when they were set, rounded down). CI runs it on Linux, Node 24, prints the summary in the log and keeps `coverage/lcov.info` as the `coverage-lcov` artifact. When coverage rises, raise the thresholds with it; code run only in a child process (the built CLI some tests start) is not counted.
 
 ### The smoke test
 

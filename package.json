@@ -105,6 +105,7 @@
   "scripts": {
     "build": "tsdown --config tsdown.cli.config.ts && tsdown --config tsdown.lib.config.ts && tsdown --config tsdown.page.config.ts && node scripts/copy-build-assets.mjs",
     "test": "vitest run src",
+    "coverage": "vitest run src --coverage",
     "typecheck": "tsc --noEmit && tsc --noEmit -p src/serve/page/tsconfig.json",
     "generate:postgres": "drizzle-kit generate --config drizzle.postgres.config.ts --name board",
     "generate:sqlite": "drizzle-kit generate --config drizzle.sqlite.config.ts --name board",
@@ -137,6 +138,7 @@
     "@types/better-sqlite3": "^9.6.0",
     "@types/cross-spawn": "^6.0.6",
     "@types/node": "^22.20.1",
+    "@vitest/coverage-v8": "^5.0.2",
     "better-sqlite3": "^13.0.3",
     "drizzle-kit": "^0.31.10",
     "jsdom": "^30.0.1",

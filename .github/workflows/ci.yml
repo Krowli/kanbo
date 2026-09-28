@@ -35,7 +35,19 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run typecheck
+      # One cell measures coverage while it runs the suite: a summary in the
+      # log, the lcov report as an artifact, and the thresholds in
+      # vitest.config.ts fail the job when coverage drops.
       - run: npm test
+        if: ${{ !(matrix.os == 'ubuntu-latest' && matrix.node == 24) }}
+      - run: npm run coverage
+        if: ${{ matrix.os == 'ubuntu-latest' && matrix.node == 24 }}
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && matrix.os == 'ubuntu-latest' && matrix.node == 24 }}
+        with:
+          name: coverage-lcov
+          path: coverage/lcov.info
+          if-no-files-found: ignore
       # What users install: pack, `npm install -g` the tarball into a temporary
       # prefix, and drive the installed kanbo through a new project.
       - run: node scripts/smoke.mjs
