@@ -71,11 +71,10 @@ export async function createDbTransport(input: KanboDbTransportInput): Promise<K
 
   async function projectAll(cards: Issue[]): Promise<KanboCardResult[]> {
     const columns = await readColumns()
+    // One entry per card, in the order asked — read by position, not searched
+    // for, which on a board of thousands was a scan per card.
     const runs = await ops.readBoardProjectionForIssues(cards.map(card => card.id))
-    return cards.map(card => projectKanboCard({
-      ...toIssueView(card),
-      ...(runs.find(projection => projection.issueId === card.id) ?? { attemptCount: 0, activeRun: null }),
-    }, columns))
+    return cards.map((card, index) => projectKanboCard({ ...toIssueView(card), ...runs[index]! }, columns))
   }
 
   /** The card a tool named: the key, the key without its padding, or the number. */
