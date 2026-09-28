@@ -22,7 +22,7 @@ import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-dat
 import { createTestPostgresDatabase } from '../testing/postgres-database'
 import type { QueryCounter } from './query-counter'
 import { countQueriesOfNewBoardHandles, createQueryCounter } from './query-counter'
-import { SEED_WORKSPACE, seedBoard } from './seed-board'
+import { SEED_LABEL, SEED_PARENT_NUMBER, SEED_WORKSPACE, seedBoard } from './seed-board'
 
 /**
  * The statements each read an agent or a person makes most often costs, on a
@@ -101,11 +101,22 @@ async function openBoard(engine: Engine, count: number, counter: QueryCounter, p
 /** Statements each surface ran, by name. */
 type Counts = Record<string, number>
 
-async function measureSurfaces(engine: Engine, count: number, projectDir: string): Promise<{ counts: Counts, statements: Record<string, readonly string[]> }> {
+/** The seeded parent, as an agent names it. */
+const PARENT_KEY = `${SEED_WORKSPACE.identifier}-${String(SEED_PARENT_NUMBER).padStart(3, '0')}`
+
+interface Measured {
+  counts: Counts
+  statements: Record<string, readonly string[]>
+  /** How many cards the reads whose answer is a list of cards found — a filter that finds none proves nothing. */
+  rows: Counts
+}
+
+async function measureSurfaces(engine: Engine, count: number, projectDir: string): Promise<Measured> {
   const counter = createQueryCounter()
   const board = await openBoard(engine, count, counter, projectDir)
   const counts: Counts = {}
   const statements: Record<string, readonly string[]> = {}
+  const rows: Counts = {}
   const measure = async (name: string, body: () => Promise<unknown>): Promise<void> => {
     counter.reset()
     await body()
@@ -124,33 +135,32 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
       'card',
       'list',
       '--column',
-      'in_progress,in_review',
-      '--waiting',
-      '--active',
+      'to_do,in_review',
       '--parent',
-      'WOR-001',
+      PARENT_KEY,
       '--text',
-      'card',
+      'SETTINGS',
       '--updated-since',
       '2020-01-01',
       '--label',
-      'area',
+      SEED_LABEL,
       '--priority',
       'none,high',
-      '--offset',
-      '1',
       '--limit',
       '5',
+      '--json',
+      'id',
     ))
+    rows['cli card list, filtered'] = (JSON.parse(String(vi.mocked(console.log).mock.lastCall?.[0])) as unknown[]).length
     await measure('cli ready', async () => await kanbo('ready'))
     await measure('cli prime', async () => await kanbo('prime'))
-    await measure('cli card get', async () => await kanbo('card', 'get', 'WOR-005'))
+    await measure('cli card get', async () => await kanbo('card', 'get', PARENT_KEY))
     await measure('cli board', async () => await kanbo('board'))
 
     // The same board's operations, the way a host calls them: a card with its comments.
     const ops = createBoardOps(board.store)
     await measure('ops card get + comments', async () => {
-      const card = await board.store.issues.findByNumber(SEED_WORKSPACE.id, 5)
+      const card = await board.store.issues.findByNumber(SEED_WORKSPACE.id, SEED_PARENT_NUMBER)
       await Promise.all([
         ops.listColumns(SEED_WORKSPACE.id),
         ops.readBoardProjectionForIssue(card!.id),
@@ -169,31 +179,36 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
     const [clientChannel, serverChannel] = InMemoryTransport.createLinkedPair()
     await Promise.all([client.connect(clientChannel), server.connect(serverChannel)])
     try {
+      let answer: { cards?: unknown[], subCards?: unknown[] } = {}
       const tool = async (name: string, args: Record<string, unknown> = {}): Promise<void> => {
         const result = await client.callTool({ name, arguments: args })
         expect(result.isError, JSON.stringify(result.content)).toBeFalsy()
+        const [content] = result.content as { type: string, text: string }[]
+        answer = content?.type === 'text' && content.text.startsWith('{') ? JSON.parse(content.text) : {}
       }
       await measure('mcp kanbo_card_list', async () => await tool('kanbo_card_list'))
       await measure('mcp kanbo_ready', async () => await tool('kanbo_ready'))
       await measure('mcp kanbo_prime', async () => await tool('kanbo_prime'))
       await measure('mcp kanbo_card_list, filtered', async () => await tool('kanbo_card_list', {
-        columns: ['in_progress', 'in_review'],
+        columns: ['to_do', 'in_review'],
         waitingForPerson: false,
-        hasActiveRun: true,
-        parent: 'WOR-001',
-        text: 'card',
+        hasActiveRun: false,
+        parent: PARENT_KEY,
+        text: 'settings',
         updatedSince: '2020-01-01T00:00:00Z',
-        labels: ['area'],
+        labels: [SEED_LABEL],
         priority: ['none', 'high'],
-        offset: 1,
         limit: 5,
         fields: ['description'],
       }))
-      await measure('mcp kanbo_card_get', async () => await tool('kanbo_card_get', { card: 'WOR-005' }))
+      rows['mcp kanbo_card_list, filtered'] = answer.cards?.length ?? 0
+      await measure('mcp kanbo_card_get', async () => await tool('kanbo_card_get', { card: PARENT_KEY }))
+      rows['mcp kanbo_card_get sub-cards'] = answer.subCards?.length ?? 0
       await measure('mcp kanbo_card_get, everything', async () => await tool('kanbo_card_get', {
-        card: 'WOR-005',
+        card: PARENT_KEY,
         include: ['comments', 'subCards', 'runs', 'history', 'prs'],
       }))
+      rows['mcp kanbo_card_get, everything sub-cards'] = answer.subCards?.length ?? 0
       await measure('mcp kanbo_sprints', async () => await tool('kanbo_sprints'))
     }
     finally {
@@ -221,7 +236,7 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
         await response.json()
       }
       await measure('serve GET /issues', async () => await get('/issues'))
-      const card = await board.store.issues.findByNumber(SEED_WORKSPACE.id, 5)
+      const card = await board.store.issues.findByNumber(SEED_WORKSPACE.id, SEED_PARENT_NUMBER)
       await measure('serve GET /issues/:id/comments', async () => await get(`/issues/${card!.id}/comments`))
     }
     finally {
@@ -233,7 +248,7 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
     overridePostgresOpenerForTests(null)
     await board.dispose()
   }
-  return { counts, statements }
+  return { counts, statements, rows }
 }
 
 describe.each<Engine>(['sqlite', 'postgres'])('statements per read on %s', (engine) => {
@@ -265,8 +280,29 @@ describe.each<Engine>(['sqlite', 'postgres'])('statements per read on %s', (engi
         .toBe(small.counts[name])
     }
     expect(large.counts).toEqual(QUERY_BUDGETS[engine])
+
+    // The filtered reads and the sub-cards found cards on both boards, and more
+    // of them on the bigger one: the counts above are of reads that returned rows.
+    expect(small.rows).toEqual(SMALL_ROWS)
+    expect(large.rows).toEqual(LARGE_ROWS)
   })
 })
+
+/** Cards the seeded board answers the filtered reads with, on 10 cards and on 50. */
+const SMALL_ROWS: Counts = {
+  'cli card list, filtered': 1,
+  'mcp kanbo_card_list, filtered': 1,
+  'mcp kanbo_card_get sub-cards': 2,
+  'mcp kanbo_card_get, everything sub-cards': 2,
+}
+const LARGE_ROWS: Counts = {
+  // One more than the tool: the command line asks nothing of waiting, so the
+  // sub-card waiting in review counts.
+  'cli card list, filtered': 3,
+  'mcp kanbo_card_list, filtered': 2,
+  'mcp kanbo_card_get sub-cards': 12,
+  'mcp kanbo_card_get, everything sub-cards': 12,
+}
 
 /**
  * What each read costs today, on either board size. A change that adds a

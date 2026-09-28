@@ -8,7 +8,10 @@ import type { BoardActor } from '../ops/types'
  * A board shaped like one in use, for the query-count tests and the bench:
  * cards spread over the standard columns, each with a description and two
  * comments; every card in progress has a run going, every Done card a finished
- * one, and every card in review waits for a person.
+ * one, and every card in review waits for a person. Every third card carries
+ * the label `frontend`, and every fourth card after the fifth is a sub-card of
+ * the fifth (`WOR-005`, `SEED_PARENT_NUMBER`) — so a filtered read and a card
+ * read with its sub-cards find rows, and more of them on a bigger board.
  *
  * Written through the operations, not straight into the tables, so the rows —
  * numbering, field history, the comments a run leaves — are the ones a real
@@ -16,6 +19,12 @@ import type { BoardActor } from '../ops/types'
  */
 
 export const SEED_WORKSPACE: BoardWorkspaceIdentity = { id: 'workspace', identifier: 'WOR', name: 'Workspace' }
+
+/** The number of the card the seeded sub-cards sit under. */
+export const SEED_PARENT_NUMBER = 5
+
+/** The label every third seeded card carries. */
+export const SEED_LABEL = 'frontend'
 
 const PERSON: BoardActor = { kind: 'user', id: '__self__' }
 const AGENT: BoardActor = { kind: 'agent', id: 'claude' }
@@ -46,6 +55,7 @@ const DESCRIPTION = 'The settings page loads every preference on open and saves 
 export async function seedBoard(store: BoardStore, count: number, workspace = SEED_WORKSPACE): Promise<void> {
   const ops = createBoardOps(store)
   await ensureDefaultColumns(store, workspace.id)
+  let parentId: string | null = null
   for (let index = 0; index < count; index++) {
     const column = columnOf(index)
     const card = await ops.createCard({
@@ -53,8 +63,12 @@ export async function seedBoard(store: BoardStore, count: number, workspace = SE
       title: `Task ${index + 1}: tidy the settings page, section ${index % 7}`,
       description: DESCRIPTION,
       statusName: column,
-      labels: index % 3 === 0 ? ['frontend'] : [],
+      labels: index % 3 === 0 ? [SEED_LABEL] : [],
+      parentIssueId: parentId !== null && index % 4 === 1 ? parentId : null,
     }, PERSON)
+    if (index + 1 === SEED_PARENT_NUMBER) {
+      parentId = card.id
+    }
     await ops.addComment({ issueId: card.id, content: 'Started reading the code; the save path is in settings/store.ts.' }, AGENT)
     await ops.addComment({ issueId: card.id, content: 'Please keep the old keyboard shortcuts working.' }, PERSON)
     if (column === 'In Progress') {
