@@ -20,7 +20,7 @@ import type {
   IssueStatusStore,
   KanbanMetaStore,
 } from '../board-store'
-import { containsLikePattern } from '../domain/like-pattern'
+import { foldCase } from '../domain/fold-case'
 import {
   issueComments,
   issueFieldChanges,
@@ -33,7 +33,7 @@ import {
   kanbanMeta,
 } from './schema'
 import type { SqliteDatabase } from './transaction'
-import { runSqliteTransaction } from './transaction'
+import { readSqliteConnection, runSqliteTransaction } from './transaction'
 
 /**
  * One `BoardStore` group with the `Promise` taken off every method: better-sqlite3
@@ -178,6 +178,9 @@ function selectCardPage(database: SqliteDatabase, query: BoardCardQuery): BoardC
   if (query.statusIds?.length === 0 || query.priorities?.length === 0) {
     return { cards: [], total: 0 }
   }
+  if (query.text !== undefined) {
+    registerFoldFunction(database)
+  }
   const where = and(...cardQueryPredicates(query))
   const rows = database
     .select({ ...getTableColumns(issues), pickedTotal: sql<number>`count(*) over ()` })
@@ -200,10 +203,31 @@ function selectCardPage(database: SqliteDatabase, query: BoardCardQuery): BoardC
   }
 }
 
+/** The connections `kanbo_fold` is registered on already. */
+const foldingConnections = new WeakSet<object>()
+
+/**
+ * Teach the connection `kanbo_fold(text)`, the search's `foldCase`, once.
+ *
+ * SQLite's `like` and `lower()` fold A–Z and nothing else, so `über` would not
+ * find `Über` on a board file while Postgres `ilike` and the HTTP transport find
+ * it. The function is registered on the connection the statement runs on —
+ * the host may have opened it, not this package — and stays one statement.
+ */
+function registerFoldFunction(database: SqliteDatabase): void {
+  const connection = readSqliteConnection(database)
+  if (foldingConnections.has(connection)) {
+    return
+  }
+  connection.function('kanbo_fold', { deterministic: true }, (value: unknown) => typeof value === 'string' ? foldCase(value) : value)
+  foldingConnections.add(connection)
+}
+
 function cardQueryPredicates(query: BoardCardQuery) {
   // One set of running cards for the whole statement, not a lookup per card.
   const running = sql`${issues.id} in (select ${issueRuns.issueId} from ${issueRuns} where ${issueRuns.state} = 'running')`
-  const pattern = containsLikePattern(query.text ?? '')
+  // `instr` takes the text as written: no `like` wildcards to escape.
+  const text = foldCase(query.text ?? '')
   return [
     eq(issues.workspaceId, query.workspaceId),
     query.statusIds === undefined ? undefined : inArray(issues.statusId, [...query.statusIds]),
@@ -214,7 +238,7 @@ function cardQueryPredicates(query: BoardCardQuery) {
     query.hasActiveRun === undefined ? undefined : query.hasActiveRun ? running : sql`not ${running}`,
     query.text === undefined
       ? undefined
-      : sql`(${issues.id} like ${pattern} escape '\\' or ${issues.title} like ${pattern} escape '\\' or coalesce(${issues.description}, '') like ${pattern} escape '\\')`,
+      : sql`(instr(kanbo_fold(${issues.id}), ${text}) > 0 or instr(kanbo_fold(${issues.title}), ${text}) > 0 or instr(kanbo_fold(coalesce(${issues.description}, '')), ${text}) > 0)`,
     query.updatedSince === undefined ? undefined : gte(issues.updatedAt, query.updatedSince),
     ...(query.labels ?? []).map(label => sql`exists (select 1 from json_each(${issues.labels}) where value = ${label})`),
     query.priorities === undefined ? undefined : inArray(issues.priority, [...query.priorities]),

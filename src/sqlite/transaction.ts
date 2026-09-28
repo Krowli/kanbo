@@ -26,7 +26,7 @@ export type SqliteDatabase = BetterSQLite3Database<Record<string, unknown>>
  * hand. Its `inTransaction` is the only honest answer to "is a
  * transaction already open", including one this module did not open.
  */
-function readSqliteConnection(database: SqliteDatabase): SqliteConnection {
+export function readSqliteConnection(database: SqliteDatabase): SqliteConnection {
   return (database as SqliteDatabase & { $client: SqliteConnection }).$client
 }
 

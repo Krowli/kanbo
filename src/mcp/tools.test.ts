@@ -600,6 +600,19 @@ describe('the board\'s tools over a real board', () => {
     }
   })
 
+  it('finds text ignoring case beyond ASCII, from the board file and over HTTP alike', async () => {
+    const umlaut = await createCard('Über die Brücke')
+    await createCard('Unrelated')
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+    const overHttp = overHttpFromBoard()
+
+    for (const text of ['über', 'ÜBER', 'brÜcke']) {
+      const fromBoardFile = readText(await tools.kanbo_card_list!.run(transport, { text }))
+      expect(JSON.parse(fromBoardFile).cards.map((card: { id: string }) => card.id), text).toEqual([umlaut.id])
+      expect(readText(await tools.kanbo_card_list!.run(overHttp, { text })), text).toBe(fromBoardFile)
+    }
+  })
+
   it('answers kanbo_ready with ten cards by default, and how many are ready in all', async () => {
     for (let index = 1; index <= 12; index++) {
       await createCard(`Ready ${index}`)

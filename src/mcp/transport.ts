@@ -1,5 +1,6 @@
 import type { EntryRule } from '../domain/entry-rules'
 import { ENTRY_RULES, readEntryRules } from '../domain/entry-rules'
+import { foldCase } from '../domain/fold-case'
 import type { IssueActorKind } from '../domain/issue-view'
 import { normalizeCommentAuthorKind } from '../domain/issue-view'
 import { normalizeStatusName } from '../domain/status-name'
@@ -452,12 +453,12 @@ export function matchesKanboCardQuery(
   query: KanboCardQuery,
   statusIds: ReadonlySet<string> | null,
 ): boolean {
-  const text = query.text?.toLowerCase()
+  const text = query.text === undefined ? undefined : foldCase(query.text)
   return (statusIds === null || (card.statusId !== null && statusIds.has(card.statusId)))
     && (query.waitingForPerson === undefined || (card.waitingFor === 'human') === query.waitingForPerson)
     && (query.parent === undefined || card.parentIssueId === query.parent)
     && (query.hasActiveRun === undefined || (card.activeRun !== null) === query.hasActiveRun)
-    && (text === undefined || [card.id, card.title, card.description ?? ''].some(value => value.toLowerCase().includes(text)))
+    && (text === undefined || [card.id, card.title, card.description ?? ''].some(value => foldCase(value).includes(text)))
     && (query.updatedSince === undefined || card.updatedAt >= query.updatedSince)
     && (query.labels ?? []).every(label => card.labels.includes(label))
     && (query.priority === undefined || query.priority.includes(card.priority))

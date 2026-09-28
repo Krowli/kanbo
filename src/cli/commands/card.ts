@@ -87,7 +87,7 @@ export function registerCardCommands(program: Command): void {
     .option('--waiting', 'only cards waiting for a person')
     .option('--parent <card>', 'only the sub-cards of this card')
     .option('--active', 'only cards an agent is working on now')
-    .option('--text <text>', 'only cards whose key, title or description contains this, ignoring case')
+    .option('--text <text>', 'only cards whose key, title or description contains this, ignoring case in any script (über finds Über)')
     .option('--updated-since <time>', 'only cards changed since then: unix seconds, 2026-09-28T10:00:00Z (a zone is required) or 2026-09-28 (UTC midnight)', parseMoment)
     .option('--label <labels>', 'only cards carrying every one of these labels (comma-separated, or repeat)', collectList, undefined)
     .option('--priority <priorities>', `only cards of these priorities: ${PRIORITIES.join(', ')} (comma-separated)`, parsePriorities)

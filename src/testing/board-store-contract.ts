@@ -181,6 +181,23 @@ export function runBoardStoreContract(name: string, makeStore: () => Promise<Boa
         expect(paged).toEqual(unpaged)
       })
 
+      it('finds text ignoring case beyond ASCII, and keeps like wildcards literal', async () => {
+        await createIssue({ id: 'issue-umlaut', number: 1, title: 'Über die Brücke' })
+        await store.issues.create({ id: 'issue-body', workspaceId, number: 2, title: 'Plain', description: 'ÉCOLE Straße' })
+        await createIssue({ id: 'issue-wild', number: 3, title: '50% off_now' })
+        const found = async (text: string) => (await store.issues.listPage({ workspaceId, text })).cards.map(card => card.id)
+
+        expect(await found('über')).toEqual(['issue-umlaut'])
+        expect(await found('ÜBER')).toEqual(['issue-umlaut'])
+        expect(await found('brÜcke')).toEqual(['issue-umlaut'])
+        expect(await found('école')).toEqual(['issue-body'])
+        expect(await found('STRASSE')).toEqual([])
+        expect(await found('ISSUE-UMLAUT')).toEqual(['issue-umlaut'])
+        expect(await found('0%')).toEqual(['issue-wild'])
+        expect(await found('f_n')).toEqual(['issue-wild'])
+        expect(await found('f_x')).toEqual([])
+      })
+
       it('updates issue fields', async () => {
         const issue = await createIssue({ id: 'issue-1', number: 1, title: 'Original title' })
 
