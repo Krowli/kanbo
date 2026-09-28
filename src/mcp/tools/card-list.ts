@@ -24,7 +24,7 @@ export const cardListTool = defineKanboTool({
     hasActiveRun: z.boolean().optional().describe('true: only cards an agent is working on now; false: only cards nobody is.'),
     text: z.string().min(1).optional().describe('Only cards whose id, title or description contains this, ignoring case.'),
     updatedSince: z.union([z.number().int().nonnegative(), z.string().min(1)]).optional()
-      .describe('Only cards changed at or after this moment: unix seconds, or an ISO date such as 2026-09-28T10:00:00Z.'),
+      .describe('Only cards changed at or after this moment: unix seconds (not milliseconds), an ISO date-time with Z or an offset such as 2026-09-28T10:00:00Z, or a date such as 2026-09-28 (UTC midnight).'),
     labels: z.array(z.string().min(1)).optional().describe('Only cards carrying every one of these labels.'),
     priority: z.array(z.enum(PRIORITIES)).optional().describe('Only cards of any of these priorities.'),
     limit: z.number().int().positive().optional().describe(`How many cards to return; ${DEFAULT_CARD_LIST_LIMIT} when absent.`),
@@ -45,9 +45,10 @@ export const cardListTool = defineKanboTool({
 
 /** The moment `updatedSince` names, as unix seconds, or the error that says it names none. */
 function readMoment(value: number | string): number {
-  const seconds = readUnixSeconds(value)
-  if (seconds === null) {
-    throw new TypeError(`updatedSince: "${value}" is neither unix seconds nor a date. Pass e.g. 2026-09-28T10:00:00Z.`)
+  try {
+    return readUnixSeconds(value)
   }
-  return seconds
+  catch (error) {
+    throw new TypeError(`updatedSince: ${(error as Error).message}`)
+  }
 }

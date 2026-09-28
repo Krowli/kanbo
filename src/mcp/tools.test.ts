@@ -575,9 +575,16 @@ describe('the board\'s tools over a real board', () => {
       expect(fromServer, JSON.stringify(input)).toBe(fromBoardFile)
     }
 
-    const refused = await tools.kanbo_card_list!.run(transport, { updatedSince: 'last tuesday-ish' })
-    expect(refused.isError).toBe(true)
-    expect(readText(refused)).toContain('updatedSince')
+    for (const [updatedSince, reason] of [
+      ['last tuesday-ish', 'neither unix seconds nor an ISO date'],
+      [Date.now(), 'looks like milliseconds — pass seconds or an ISO date'],
+      ['2026-09-28T10:00:00', 'has no time zone'],
+    ] as const) {
+      const refused = await tools.kanbo_card_list!.run(transport, { updatedSince })
+      expect(refused.isError, String(updatedSince)).toBe(true)
+      expect(readText(refused)).toContain(`updatedSince: `)
+      expect(readText(refused)).toContain(reason)
+    }
   })
 
   it('answers kanbo_ready with ten cards by default, and how many are ready in all', async () => {

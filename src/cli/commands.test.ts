@@ -331,7 +331,12 @@ describe('board commands', () => {
     expect(await ids('--updated-since', '4000000000')).toEqual([])
     expect(await ids('--priority', 'none', '--label', 'ui')).toEqual([])
     await expect(run(['card', 'list', '--column', 'nowhere'])).rejects.toThrowError('This board has no column "nowhere".')
-    await expect(run(['card', 'list', '--updated-since', 'someday'])).rejects.toThrowError('neither unix seconds nor a date')
+    await expect(run(['card', 'list', '--updated-since', 'someday']))
+      .rejects.toThrowError(expect.objectContaining({ exitCode: 2, message: expect.stringContaining('neither unix seconds nor an ISO date') }))
+    await expect(run(['card', 'list', '--updated-since', String(Date.now())]))
+      .rejects.toThrowError(expect.objectContaining({ exitCode: 2, message: expect.stringContaining('looks like milliseconds') }))
+    await expect(run(['card', 'list', '--updated-since', '2026-09-28T10:00']))
+      .rejects.toThrowError(expect.objectContaining({ exitCode: 2, message: expect.stringContaining('has no time zone') }))
   })
 
   it('prints 50 cards unless told otherwise, and says on stderr where the rest start', async () => {
