@@ -7,6 +7,8 @@
 
 **A Kanban board your coding agents work, and you approve.**
 
+[Website](https://kanbo.aioomi.com) · [npm](https://www.npmjs.com/package/kanbo-cli)
+
 ## Quick start
 
 ```bash
