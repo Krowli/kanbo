@@ -71,13 +71,15 @@ export function renderFilterBar(
     })))
   }
 
-  bar.append(
-    search,
-    worker,
-    toggle('Waiting for you', 'filter-toggle', filters.waiting, () => onChange({ ...filters, waiting: !filters.waiting })),
-    toggle('Running now', 'filter-toggle', filters.running, () => onChange({ ...filters, running: !filters.running })),
-    priorities,
-  )
+  // The wrapper draws the select's chevron.
+  const workerWrap = el('span', 'select-wrap')
+  workerWrap.append(worker)
+  const waiting = toggle('Waiting for you', 'filter-toggle', filters.waiting, () => onChange({ ...filters, waiting: !filters.waiting }))
+  waiting.dataset.filter = 'waiting'
+  const running = toggle('Running now', 'filter-toggle', filters.running, () => onChange({ ...filters, running: !filters.running }))
+  running.dataset.filter = 'running'
+
+  bar.append(search, workerWrap, waiting, running, priorities)
 
   // A label chosen earlier that no card has now stays visible, so it can be unchosen.
   const labels = [...new Set([...options.labels, ...filters.labels])]

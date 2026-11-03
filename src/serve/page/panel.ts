@@ -6,7 +6,7 @@ import type { ServeCardView, ServeCommentView, ServeStatusView } from '../views'
 import { button, el } from './dom'
 import { cardWorker } from './filters'
 import type { HistoryEntry } from './history'
-import { groupByDay, relativeTime, toHistory } from './history'
+import { groupByDay, relativeDay, relativeTime, toHistory } from './history'
 
 /**
  * The side panel a card opens into: everything the board holds about it, read
@@ -62,7 +62,7 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
   panel.append(renderDecision(card, actions))
   panel.append(section('Comments', ...renderComments(detail.comments), renderCommentForm(actions)))
   panel.append(renderHistory(history, new Date()))
-  panel.append(section('Runs', renderList(detail.runs, run => [describeRun(run), run.startedAt], 'No runs.')))
+  panel.append(section('Runs', renderList(detail.runs, run => [describeRun(run), run.startedAt, run.state], 'No runs.')))
   return panel
 }
 
@@ -82,10 +82,11 @@ function renderFacts(card: ServeCardView, status: ServeStatusView | null, histor
   const creator = created
     ? { kind: created.actor.kind, name: created.actor.name, label: created.actor.label }
     : { kind: card.createdByKind, name: card.createdByKind === 'user' ? 'You' : card.createdById ?? card.createdByKind, label: null }
-  row('Created by', actorChip(creator), ' ', el('span', 'muted', `· ${relativeTime(created?.at ?? card.createdAt, now)}`))
+  row('Created by', actorChip(creator), ' ', el('span', 'muted', `· ${relativeDay(created?.at ?? card.createdAt, now)}`))
 
   const worker = cardWorker(card)
-  row('Worked by', worker ? el('span', 'actor-chip', worker.label) : 'Nobody', ...(card.activeRun?.state === 'running' ? [' ', el('span', 'muted', '· running')] : []))
+  const workerChip = worker ? actorChip({ kind: worker.key === 'user' ? 'user' : 'agent', name: worker.label, label: null }) : 'Nobody'
+  row('Worked by', workerChip, ...(card.activeRun?.state === 'running' ? [' ', el('span', 'muted', '· running')] : []))
 
   if (card.priority !== 'none') {
     const priority = el('span', 'priority', card.priority)
@@ -192,7 +193,11 @@ function renderDecision(card: ServeCardView, actions: PanelActions): HTMLElement
     }
     actions.returnCard(comment)
   }))
-  return section('Decision', note, row, hint)
+  const decision = section('Decision', note, row, hint)
+  if (card.waitingFor === 'human') {
+    decision.dataset.waiting = ''
+  }
+  return decision
 }
 
 function renderComments(comments: ServeCommentView[]): HTMLElement[] {
@@ -203,7 +208,7 @@ function renderComments(comments: ServeCommentView[]): HTMLElement[] {
   for (const comment of comments) {
     const item = el('li')
     const meta = el('div', 'entry-meta')
-    meta.append(el('span', 'entry-author', comment.author.displayName), el('span', undefined, formatTime(comment.createdAt)))
+    meta.append(actorChip({ kind: comment.author.kind, name: comment.author.displayName, label: null }), el('span', undefined, formatTime(comment.createdAt)))
     item.append(meta, el('div', 'entry-text', comment.content))
     list.append(item)
   }
@@ -225,14 +230,15 @@ function renderCommentForm(actions: PanelActions): HTMLElement {
   return form
 }
 
-function renderList<T>(items: T[], describe: (item: T) => [string, number], empty: string): HTMLElement {
+function renderList<T>(items: T[], describe: (item: T) => [text: string, time: number, runState: string], empty: string): HTMLElement {
   if (items.length === 0) {
     return el('p', 'empty', empty)
   }
   const list = el('ul', 'entries')
   for (const item of items) {
-    const [text, time] = describe(item)
+    const [text, time, runState] = describe(item)
     const row = el('li')
+    row.dataset.runState = runState
     row.append(el('div', 'entry-text', text), el('div', 'entry-meta', formatTime(time)))
     list.append(row)
   }

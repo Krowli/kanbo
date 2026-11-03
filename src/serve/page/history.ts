@@ -71,7 +71,7 @@ export function toHistory(activity: IssueActivityItemView[], fieldChanges: Issue
       entries.push({ ...base, verb, field: fieldName(change.field), from: describeValue(change.fromValue), to: describeValue(change.toValue) })
     }
   }
-  return entries.toSorted((left, right) => right.at - left.at)
+  return [...entries].sort((left, right) => right.at - left.at)
 }
 
 export function describeValue(value: IssueActivityValueView | null): string {
@@ -125,7 +125,16 @@ export function groupByDay(entries: HistoryEntry[], now: Date): { day: string, e
   return groups
 }
 
+/**
+ * When something happened, for a line under its day's heading: today as
+ * `just now`, `N min ago` or `N h ago`; any other day as the clock time
+ * (`14:02`), since the heading already says which day.
+ */
 export function relativeTime(seconds: number, now: Date): string {
+  const date = new Date(seconds * 1000)
+  if (!sameDay(date, now)) {
+    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+  }
   const elapsed = Math.floor(now.getTime() / 1000) - seconds
   if (elapsed < 60) {
     return 'just now'
@@ -133,9 +142,11 @@ export function relativeTime(seconds: number, now: Date): string {
   if (elapsed < 3600) {
     return `${Math.floor(elapsed / 60)} min ago`
   }
-  if (elapsed < 86_400) {
-    return `${Math.floor(elapsed / 3600)} h ago`
-  }
+  return `${Math.floor(elapsed / 3600)} h ago`
+}
+
+/** When something happened, said with no day heading above it: today's relative time, else the day. */
+export function relativeDay(seconds: number, now: Date): string {
   const date = new Date(seconds * 1000)
-  return dayLabel(date, now) === 'Yesterday' ? 'yesterday' : shortDate(date, now)
+  return sameDay(date, now) ? relativeTime(seconds, now) : dayLabel(date, now)
 }

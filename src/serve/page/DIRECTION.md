@@ -2,7 +2,7 @@
 
 The source of truth for how the board page looks and moves. Edit this first, then `board.css`.
 Mockup: `/tmp/kanbo-mockup/index.html` + `board.css` (its tokens layer is the one to copy).
-Status: proposed, waiting for the owner's approval (plan 006, step 2).
+Status: approved by the owner on 2026-11-03 (see the last line); built in plan 006.
 
 ## 1. Core idea
 
@@ -24,7 +24,7 @@ App-like single screen, one CSS grid on `#app` (no new wrappers):
 
 | Row | Element | Notes |
 |---|---|---|
-| 1 | `.topbar` | wordmark · project switcher · "where" line · token form. Spans every column. Phone: wraps to three rows. |
+| 1 | `.topbar` | wordmark · project switcher · "where" line · token form. Spans every column. Phone: wraps to three rows; once a kept token has loaded the board, the token form folds into a small "Token" button that reveals it (`.topbar[data-token="folded"]`), and a refused token unfolds it by itself. |
 | 2 | `.notice` | collapses when hidden |
 | 3 | `.filter-bar` | one row that wraps on desktop; on phone one sideways-scrolling row with search, "Showing N of M" and Clear first |
 | 4 | `.board` | columns side by side, the board scrolls sideways; each column's card list scrolls on its own, the column head stays put. Phone: columns 86 % wide with scroll snap so the next one peeks. |

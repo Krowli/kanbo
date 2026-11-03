@@ -4,6 +4,8 @@ import type { BoardApi } from './api'
 import { ApiError, createBoardApi } from './api'
 import { renderCard } from './card-element'
 import { button, el } from './dom'
+import type { Placement } from './enter'
+import { enterOf, placementsOf, startsWaiting } from './enter'
 import { renderFilterBar, updateFilterCount } from './filter-bar'
 import type { CardFilters } from './filters'
 import { filterOptions, matchesFilters, readFilters, writeFilters } from './filters'
@@ -59,22 +61,56 @@ let detail: CardDetail | null = null
 let panelNotice: string | null = null
 let draggedCardId: string | null = null
 
+/** The last render's card placements, so only a card that is new or changed column moves; `null` before the first render. */
+let lastPlacement: ReadonlyMap<string, Placement> | null = null
+
 const root = document.querySelector<HTMLElement>('#app') ?? document.body
+const header = el('header', 'topbar')
 const tokenInput = el('input', 'field token-input')
+const tokenToggle = button('Token', 'ghost token-toggle', () => {
+  tokenUnfolded = !tokenUnfolded
+  updateTokenFold()
+  if (tokenUnfolded) {
+    tokenInput.focus()
+  }
+})
 const notice = el('p', 'notice')
 const boardElement = el('main', 'board')
 const panelHost = el('div', 'panel-host')
 const projectSlot = el('span', 'project-slot')
 const filterSlot = el('div', 'filter-slot')
 
+/** The last load of the board worked. */
+let loadWorked = false
+/** The person opened the folded token form with its button. */
+let tokenUnfolded = false
+
+/**
+ * Once a kept token has loaded the board, the token form may fold into its
+ * "Token" button (only a narrow screen does, by CSS); a refused token, a
+ * missing one or a failed load unfolds it again.
+ */
+function updateTokenFold(): void {
+  if (token === null || needsToken || !loadWorked) {
+    tokenUnfolded = false
+    delete header.dataset.token
+  }
+  else {
+    header.dataset.token = tokenUnfolded ? 'unfolded' : 'folded'
+  }
+  tokenToggle.setAttribute('aria-expanded', String(header.dataset.token !== 'folded'))
+}
+
 function mountShell(): void {
-  const header = el('header', 'topbar')
+  root.classList.add('app')
   const title = el('h1', 'topbar-title', 'Kanbo')
   const workspace = el('span', 'workspace')
   workspace.id = 'workspace'
   projectSlot.id = 'project-switcher'
 
   const tokenForm = el('form', 'token-form')
+  tokenForm.id = 'token-form'
+  tokenToggle.setAttribute('aria-controls', tokenForm.id)
   tokenInput.type = 'password'
   tokenInput.autocomplete = 'off'
   tokenInput.placeholder = 'Server token'
@@ -89,11 +125,13 @@ function mountShell(): void {
     token = tokenInput.value.trim() || null
     storeToken(token)
     needsToken = false
+    tokenUnfolded = false
     showNotice(null)
     void refresh()
   })
 
-  header.append(title, projectSlot, workspace, tokenForm)
+  header.append(title, projectSlot, tokenToggle, workspace, tokenForm)
+  updateTokenFold()
   notice.setAttribute('role', 'status')
   notice.hidden = true
   root.replaceChildren(header, notice, filterSlot, boardElement, panelHost)
@@ -118,6 +156,8 @@ function describeFailure(error: unknown): string {
     }
     if (error.status === 401) {
       needsToken = true
+      // Unfolded first: a folded field cannot take the focus.
+      updateTokenFold()
       tokenInput.focus()
       return 'This server needs its token. Enter it in the Token field above.'
     }
@@ -129,9 +169,14 @@ function describeFailure(error: unknown): string {
 function showLoadFailure(error: unknown): void {
   showNotice(describeFailure(error), 'error')
   loadFailed = true
+  loadWorked = false
+  updateTokenFold()
 }
 
+/** A load worked: take away the notice that said it had not. */
 function clearLoadFailure(): void {
+  loadWorked = true
+  updateTokenFold()
   if (loadFailed) {
     loadFailed = false
     showNotice(null)
@@ -204,6 +249,8 @@ function chooseProject(id: string | null): void {
   closePanel()
   statuses = []
   cards = []
+  // Another project's first render moves nothing, like the page's first.
+  lastPlacement = null
   workspaceInfo = null
   identityKey = ''
   showNotice(null)
@@ -288,6 +335,9 @@ function renderBoard(): void {
     updateFilterCount(filterSlot.firstElementChild as HTMLElement, counts)
   }
   boardElement.replaceChildren(...groupBoard(statuses, shown).map(renderColumn))
+  // Every card, shown or not: a filter that brings a card into view does not make it new.
+  lastPlacement = placementsOf(cards)
+  markOpenCard()
 
   if (searchHadFocus) {
     const next = filterSlot.querySelector<HTMLInputElement>('.filter-search')
@@ -301,6 +351,13 @@ function renderBoard(): void {
   }
   else if (focusedCardId) {
     focusCard(focusedCardId)
+  }
+}
+
+/** The card whose panel is open carries `data-open`, so it reads as open on the board. */
+function markOpenCard(): void {
+  for (const card of boardElement.querySelectorAll<HTMLElement>('.card')) {
+    card.toggleAttribute('data-open', card.dataset.cardId === openCardId)
   }
 }
 
@@ -329,6 +386,13 @@ function renderColumn(column: BoardColumn): HTMLElement {
   }
   for (const card of column.cards) {
     const cardElement = renderCard(card, status?.category ?? null, opened => void openCard(opened.id))
+    const enter = enterOf(lastPlacement, card)
+    if (enter) {
+      cardElement.dataset.enter = enter
+    }
+    if (startsWaiting(lastPlacement, card)) {
+      cardElement.querySelector<HTMLElement>('.waiting-badge')?.setAttribute('data-enter', 'waiting')
+    }
     cardElement.addEventListener('dragstart', (event) => {
       draggedCardId = card.id
       event.dataTransfer?.setData('text/plain', card.id)
@@ -434,6 +498,7 @@ function openDraft(status: ServeStatusView): void {
 async function openCard(cardId: string): Promise<void> {
   openCardId = cardId
   panelNotice = null
+  markOpenCard()
   await loadDetail()
 }
 
@@ -483,6 +548,8 @@ function renderPanelHost(): void {
   const opening = !panelHost.firstChild
   panelHost.replaceChildren(panel)
   if (opening) {
+    // Slides in this once; the rebuilds on later polls stay still.
+    panel.classList.add('panel--opening')
     panel.querySelector<HTMLElement>('button')?.focus()
   }
 }
@@ -518,6 +585,7 @@ function closePanel(): void {
   detail = null
   panelNotice = null
   panelHost.replaceChildren()
+  markOpenCard()
   if (cardId) {
     focusCard(cardId)
   }

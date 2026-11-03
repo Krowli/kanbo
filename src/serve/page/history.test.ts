@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { IssueFieldChange } from '../../sqlite/schema'
 import { activityFixture } from './fixtures'
 import type { HistoryEntry } from './history'
-import { groupByDay, relativeTime, toHistory } from './history'
+import { groupByDay, relativeDay, relativeTime, toHistory } from './history'
 
 const text = (value: string) => ({ kind: 'text' as const, text: value })
 
@@ -79,9 +79,33 @@ describe('groupByDay', () => {
 describe('relativeTime', () => {
   const now = new Date(2026, 10, 3, 12, 0, 0)
   const ago = (seconds: number) => Math.floor(now.getTime() / 1000) - seconds
+  const at = (date: Date) => Math.floor(date.getTime() / 1000)
+  const clock = (date: Date) => date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+
   it('moves from just now to minutes to hours at the boundaries', () => {
     expect(relativeTime(ago(59), now)).toBe('just now')
     expect(relativeTime(ago(60), now)).toBe('1 min ago')
     expect(relativeTime(ago(2 * 3600), now)).toBe('2 h ago')
+  })
+
+  it('gives the clock time for any day but today, which the day heading above names', () => {
+    const lateYesterday = new Date(2026, 10, 2, 23, 30)
+    const yesterday = new Date(2026, 10, 2, 14, 2)
+    const older = new Date(2026, 9, 31, 17, 20)
+    expect(relativeTime(at(lateYesterday), now)).toBe(clock(lateYesterday))
+    expect(relativeTime(at(yesterday), now)).toBe(clock(yesterday))
+    expect(relativeTime(at(older), now)).toBe(clock(older))
+    expect(relativeTime(at(yesterday), now)).not.toBe(relativeTime(at(lateYesterday), now))
+  })
+})
+
+describe('relativeDay', () => {
+  const now = new Date(2026, 10, 3, 12, 0, 0)
+  const at = (date: Date) => Math.floor(date.getTime() / 1000)
+
+  it('is the relative time today and the day otherwise', () => {
+    expect(relativeDay(at(new Date(2026, 10, 3, 11, 30)), now)).toBe('30 min ago')
+    expect(relativeDay(at(new Date(2026, 10, 2, 14, 2)), now)).toBe('Yesterday')
+    expect(relativeDay(at(new Date(2026, 9, 31, 17, 20)), now)).toBe(new Date(2026, 9, 31).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))
   })
 })

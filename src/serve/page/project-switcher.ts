@@ -18,7 +18,9 @@ export function renderProjectSwitcher(
   onChoose: (projectId: string) => void,
   startedOn: { name: string | null } | null = null,
 ): HTMLElement {
-  const label = el('label', 'project-switcher', 'Project')
+  // The label names the select for a screen reader; the select shows the project itself. The wrapper draws its chevron.
+  const label = el('label', 'project-switcher select-wrap')
+  label.append(el('span', 'visually-hidden', 'Project'))
   const select = el('select', 'field project-select')
   if (startedOn) {
     const own = el('option', undefined, `${startedOn.name ? `${startedOn.name} · ` : ''}the board this server was started on`)
@@ -42,11 +44,18 @@ export function renderProjectSwitcher(
  * With no project (the board the server was started on), only what the board says of itself.
  */
 export function renderWhere(project: ServeProjectView | null, workspace: { identifier: string, name?: string }): HTMLElement {
+  // The key stands out, like a callsign; the rest is where it lives.
+  const where = el('span', 'project-where')
+  where.append(el('span', 'where-key', workspace.identifier))
   if (!project) {
-    return el('span', 'project-where', [workspace.identifier, workspace.name].filter(Boolean).join(' · '))
+    if (workspace.name) {
+      where.append(` · ${workspace.name}`)
+    }
+    return where
   }
   const storage = project.storage.kind === 'file'
     ? `board file ${project.storage.path}`
     : `Postgres at ${project.storage.where}`
-  return el('span', 'project-where', `${workspace.identifier} · ${project.folder} · ${storage}`)
+  where.append(` · ${project.folder} · ${storage}`)
+  return where
 }
