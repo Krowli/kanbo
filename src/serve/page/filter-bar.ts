@@ -110,9 +110,21 @@ export function renderFilterBar(
 
   if (isFiltering(filters)) {
     bar.append(
-      el('span', 'filter-count', `Showing ${counts.shown} of ${counts.total}`),
+      el('span', 'filter-count', countText(counts)),
       button('Clear', 'ghost filter-clear', () => onChange(NO_FILTERS)),
     )
   }
   return bar
+}
+
+function countText(counts: { shown: number, total: number }): string {
+  return `Showing ${counts.shown} of ${counts.total}`
+}
+
+/** Say how many cards show, in a bar already on the page, so an open dropdown in it is left alone. */
+export function updateFilterCount(bar: HTMLElement, counts: { shown: number, total: number }): void {
+  const count = bar.querySelector('.filter-count')
+  if (count) {
+    count.textContent = countText(counts)
+  }
 }

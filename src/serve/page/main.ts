@@ -4,7 +4,7 @@ import type { BoardApi } from './api'
 import { ApiError, createBoardApi } from './api'
 import { renderCard } from './card-element'
 import { button, el } from './dom'
-import { renderFilterBar } from './filter-bar'
+import { renderFilterBar, updateFilterCount } from './filter-bar'
 import type { CardFilters } from './filters'
 import { filterOptions, matchesFilters, readFilters, writeFilters } from './filters'
 import type { BoardColumn } from './grouping'
@@ -40,6 +40,8 @@ const api: BoardApi = createBoardApi(() => token, () => projectId === null ? '' 
 
 /** What the bar above the board narrows the cards to; kept in the address so a reload shows the same. */
 let filters: CardFilters = readFilters(location.search)
+/** What the filter bar was last built from. */
+let filterBarKey = ''
 
 let statuses: ServeStatusView[] = []
 let cards: ServeCardView[] = []
@@ -274,7 +276,17 @@ function renderBoard(): void {
   const caret = searchInput ? [searchInput.selectionStart, searchInput.selectionEnd, searchInput.selectionDirection] as const : null
 
   const shown = cards.filter(card => matchesFilters(card, filters))
-  filterSlot.replaceChildren(renderFilterBar(filters, filterOptions(cards), { shown: shown.length, total: cards.length }, changeFilters))
+  const counts = { shown: shown.length, total: cards.length }
+  const options = filterOptions(cards)
+  // Rebuilt only when what it is built from changed: a poll that only moved a status line leaves an open dropdown alone.
+  const barKey = JSON.stringify([filters, options])
+  if (barKey !== filterBarKey || !filterSlot.firstElementChild) {
+    filterBarKey = barKey
+    filterSlot.replaceChildren(renderFilterBar(filters, options, counts, changeFilters))
+  }
+  else {
+    updateFilterCount(filterSlot.firstElementChild as HTMLElement, counts)
+  }
   boardElement.replaceChildren(...groupBoard(statuses, shown).map(renderColumn))
 
   if (searchHadFocus) {

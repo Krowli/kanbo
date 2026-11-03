@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 
-import { renderFilterBar } from './filter-bar'
+import { renderFilterBar, updateFilterCount } from './filter-bar'
 import { NO_FILTERS } from './filters'
 
 const counts = { shown: 1, total: 2 }
@@ -31,6 +31,14 @@ describe('renderFilterBar', () => {
     expect(bar.querySelector('.filter-count')?.textContent).toBe('Showing 1 of 2')
     bar.querySelector<HTMLButtonElement>('.filter-clear')?.click()
     expect(onChange).toHaveBeenCalledWith(NO_FILTERS)
+  })
+
+  it('updates the count in place, leaving the dropdowns as they are', () => {
+    const bar = renderFilterBar({ ...NO_FILTERS, text: 'x' }, { workers: [{ key: 'user', label: 'You' }], labels: [] }, counts, () => {})
+    const select = bar.querySelector('select')
+    updateFilterCount(bar, { shown: 5, total: 9 })
+    expect(bar.querySelector('.filter-count')?.textContent).toBe('Showing 5 of 9')
+    expect(bar.querySelector('select')).toBe(select)
   })
 
   it('sends typed text, and Escape in the search clears it', () => {
