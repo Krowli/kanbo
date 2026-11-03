@@ -49,11 +49,18 @@ export function createBoardApi(readToken: () => string | null, readBase: () => s
     if (method !== 'GET') {
       headers['content-type'] = 'application/json'
     }
-    const response = await fetch(path, {
-      method,
-      headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
-    })
+    let response: Response
+    try {
+      response = await fetch(path, {
+        method,
+        headers,
+        body: body === undefined ? undefined : JSON.stringify(body),
+      })
+    }
+    catch {
+      // `fetch` rejects only when it got no answer at all.
+      throw new ApiError(0, 'server_unreachable', 'The board server has stopped. Run kanbo serve to open it again.')
+    }
     const text = await response.text()
     if (!response.ok) {
       const failure = readFailure(text)

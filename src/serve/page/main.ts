@@ -102,12 +102,11 @@ function showNotice(text: string | null, kind: 'info' | 'error' = 'info'): void 
 
 /** What a failed request says to the person, asking for the token when that is what is missing. */
 function describeFailure(error: unknown): string {
-  if (error instanceof TypeError) {
-    // `fetch` throws a TypeError when it cannot reach the server at all.
-    serverGone = true
-    return 'The board server has stopped. Run kanbo serve to open it again.'
-  }
   if (error instanceof ApiError) {
+    if (error.code === 'server_unreachable') {
+      serverGone = true
+      return error.message
+    }
     if (error.status === 401) {
       needsToken = true
       tokenInput.focus()
@@ -488,6 +487,7 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('visibilitychange', () => void poll())
 
 mountShell()
-startPresence(() => token)
 void refresh()
 setInterval(() => void poll(), POLL_INTERVAL_MS)
+// Last, so nothing presence does can keep the board from loading.
+startPresence(() => token)

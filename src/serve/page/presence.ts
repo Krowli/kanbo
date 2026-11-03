@@ -7,8 +7,16 @@
 
 const HEARTBEAT_MS = 20_000
 
+/** A random id for this tab. `randomUUID` exists only on secure contexts (https, localhost); a page opened over plain http from another address falls back to random bytes. */
+export function makeTabId(source: Pick<Crypto, 'getRandomValues'> & Partial<Pick<Crypto, 'randomUUID'>> = globalThis.crypto): string {
+  if (typeof source.randomUUID === 'function') {
+    return source.randomUUID()
+  }
+  return Array.from(source.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
 export function startPresence(readToken: () => string | null): void {
-  const tabId = crypto.randomUUID()
+  const tabId = makeTabId()
   let timer: ReturnType<typeof setInterval> | null = null
 
   function send(state: 'open' | 'closed'): void {
