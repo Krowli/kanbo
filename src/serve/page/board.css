@@ -484,6 +484,47 @@ button {
   overflow-wrap: anywhere;
 }
 
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filter-search {
+  width: 200px;
+}
+
+.filter-group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.filter-toggle,
+.filter-chip {
+  padding: 2px 10px;
+  font-size: 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.filter-toggle.active,
+.filter-chip.active {
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.filter-count {
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
 [hidden] {
   display: none !important;
 }

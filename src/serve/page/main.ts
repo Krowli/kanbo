@@ -4,6 +4,9 @@ import type { BoardApi } from './api'
 import { ApiError, createBoardApi } from './api'
 import { renderCard } from './card-element'
 import { button, el } from './dom'
+import { renderFilterBar } from './filter-bar'
+import type { CardFilters } from './filters'
+import { filterOptions, matchesFilters, readFilters, writeFilters } from './filters'
 import type { BoardColumn } from './grouping'
 import { groupBoard } from './grouping'
 import type { CardDetail } from './panel'
@@ -35,6 +38,9 @@ let workspaceInfo: { id: string, identifier: string, name: string } | null = nul
 let identityKey = ''
 const api: BoardApi = createBoardApi(() => token, () => projectId === null ? '' : `/projects/${encodeURIComponent(projectId)}`)
 
+/** What the bar above the board narrows the cards to; kept in the address so a reload shows the same. */
+let filters: CardFilters = readFilters(location.search)
+
 let statuses: ServeStatusView[] = []
 let cards: ServeCardView[] = []
 let seq: number | null = null
@@ -57,6 +63,7 @@ const notice = el('p', 'notice')
 const boardElement = el('main', 'board')
 const panelHost = el('div', 'panel-host')
 const projectSlot = el('span', 'project-slot')
+const filterSlot = el('div', 'filter-slot')
 
 function mountShell(): void {
   const header = el('header', 'topbar')
@@ -87,7 +94,7 @@ function mountShell(): void {
   header.append(title, projectSlot, workspace, tokenForm)
   notice.setAttribute('role', 'status')
   notice.hidden = true
-  root.replaceChildren(header, notice, boardElement, panelHost)
+  root.replaceChildren(header, notice, filterSlot, boardElement, panelHost)
 }
 
 /** Whether the notice on screen says the board could not be loaded, so that the next good load takes it away. */
@@ -187,7 +194,9 @@ function chooseProject(id: string | null): void {
   else {
     url.searchParams.set('project', id)
   }
-  history.replaceState(null, '', url)
+  // Who works a card and which labels exist belong to a project; the rest of the filters carry over.
+  filters = { ...filters, worker: null, labels: [] }
+  writeFiltersToAddress(url)
   seq = null
   draft = null
   closePanel()
@@ -245,14 +254,37 @@ function renderIdentity(): void {
   }
 }
 
+/** Put the filters into the address (keeping `project` and whatever else is there) without adding a history entry. */
+function writeFiltersToAddress(url: URL = new URL(location.href)): void {
+  history.replaceState(null, '', `${url.pathname}${writeFilters(filters, url.search)}${url.hash}`)
+}
+
+function changeFilters(next: CardFilters): void {
+  filters = next
+  writeFiltersToAddress()
+  renderBoard()
+}
+
 function renderBoard(): void {
   renderIdentity()
   const draftHadFocus = draft !== null && document.activeElement === draft.input
   const focusedCardId = document.activeElement?.closest<HTMLElement>('.card')?.dataset.cardId ?? null
+  const searchInput = filterSlot.querySelector<HTMLInputElement>('.filter-search')
+  const searchHadFocus = searchInput !== null && document.activeElement === searchInput
+  const caret = searchInput ? [searchInput.selectionStart, searchInput.selectionEnd, searchInput.selectionDirection] as const : null
 
-  boardElement.replaceChildren(...groupBoard(statuses, cards).map(renderColumn))
+  const shown = cards.filter(card => matchesFilters(card, filters))
+  filterSlot.replaceChildren(renderFilterBar(filters, filterOptions(cards), { shown: shown.length, total: cards.length }, changeFilters))
+  boardElement.replaceChildren(...groupBoard(statuses, shown).map(renderColumn))
 
-  if (draftHadFocus) {
+  if (searchHadFocus) {
+    const next = filterSlot.querySelector<HTMLInputElement>('.filter-search')
+    next?.focus()
+    if (next && caret) {
+      next.setSelectionRange(caret[0], caret[1], caret[2] ?? undefined)
+    }
+  }
+  else if (draftHadFocus) {
     draft?.input.focus()
   }
   else if (focusedCardId) {
@@ -483,7 +515,15 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && openCardId) {
     closePanel()
   }
+  else if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey && !isTyping(event.target)) {
+    event.preventDefault()
+    filterSlot.querySelector<HTMLInputElement>('.filter-search')?.focus()
+  }
 })
+
+function isTyping(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+}
 document.addEventListener('visibilitychange', () => void poll())
 
 mountShell()
