@@ -39,7 +39,38 @@ describe('renderProjectSwitcher', () => {
   })
 })
 
+describe('renderProjectSwitcher with no default project', () => {
+  it('puts the board the server was started on first, selected while nothing is chosen', () => {
+    const chosen: string[] = []
+    const element = renderProjectSwitcher([project({ isDefault: false })], null, id => chosen.push(id), { name: 'Host' })
+    const options = [...element.querySelectorAll('option')]
+    expect(options).toHaveLength(2)
+    expect(options[0].value).toBe('')
+    expect(options[0].textContent).toBe('Host · the board this server was started on')
+    expect(options[0].selected).toBe(true)
+    const select = element.querySelector('select')!
+    select.value = 'aaaaaaaaaaaa'
+    select.dispatchEvent(new Event('change'))
+    select.value = ''
+    select.dispatchEvent(new Event('change'))
+    expect(chosen).toEqual(['aaaaaaaaaaaa', ''])
+  })
+
+  it('is not selected when a project is', () => {
+    const element = renderProjectSwitcher([project({ isDefault: false })], 'aaaaaaaaaaaa', () => {}, { name: null })
+    expect(element.querySelector('option')?.textContent).toBe('the board this server was started on')
+    expect(element.querySelector('select')?.value).toBe('aaaaaaaaaaaa')
+  })
+})
+
 describe('renderWhere', () => {
+  it('says nothing about a folder or file for the board the server was started on', () => {
+    const text = renderWhere(null, { identifier: 'WOR', name: 'Host' }).textContent
+    expect(text).toBe('WOR · Host')
+    expect(text).not.toContain('~/')
+    expect(text).not.toContain('board file')
+  })
+
   it('names the board file of a file board', () => {
     expect(renderWhere(project(), { identifier: 'WOR' }).textContent)
       .toBe('WOR · ~/code/app · board file ~/code/app/.kanbo/board.db')

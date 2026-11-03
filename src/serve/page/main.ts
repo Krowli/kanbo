@@ -163,9 +163,9 @@ function fallBackToDefaultProject(error: unknown): boolean {
   if (!(error instanceof ApiError) || error.code !== 'project_not_found' || projectId === null) {
     return false
   }
-  const fallback = projects.find(project => project.isDefault) ?? projects[0]
+  const fallback = projects.find(project => project.isDefault)
   chooseProject(null)
-  showNotice(`That project is no longer on this computer's list; showing ${fallback?.name ?? 'the default project'}.`)
+  showNotice(`That project is no longer on this computer's list; showing ${fallback?.name ?? 'the board this server was started on'}.`)
   fellBack = true
   return true
 }
@@ -215,24 +215,26 @@ async function poll(): Promise<void> {
 
 /** The top bar's project switcher and the line saying where this board lives. */
 function renderIdentity(): void {
-  const current = projects.find(project => project.id === projectId) ?? projects.find(project => project.isDefault) ?? projects[0] ?? null
-  const key = JSON.stringify([projects, current?.id, workspaceInfo])
+  // Never a guess: with no project named and none the server's own, nothing is "current".
+  const current = projectId === null
+    ? projects.find(project => project.isDefault) ?? null
+    : projects.find(project => project.id === projectId) ?? null
+  const key = JSON.stringify([projects, projectId, current?.id, workspaceInfo])
   if (key === identityKey) {
     return
   }
   identityKey = key
-  const workspace = document.querySelector('#workspace')
-  projectSlot.replaceChildren(...(projects.length > 1
-    ? [renderProjectSwitcher(projects, current?.id ?? null, (id) => {
-        chooseProject(id)
-        void refresh()
-      })]
+  const hasDefault = projects.some(project => project.isDefault)
+  const choose = (id: string): void => {
+    chooseProject(id === '' ? null : id)
+    void refresh()
+  }
+  projectSlot.replaceChildren(...(projects.length > (hasDefault ? 1 : 0)
+    ? [renderProjectSwitcher(projects, current?.id ?? null, choose, hasDefault ? null : { name: projectId === null ? workspaceInfo?.name ?? null : null })]
     : []))
-  if (workspace) {
-    workspace.replaceChildren(...(current && workspaceInfo ? [renderWhere(current, workspaceInfo)] : []))
-    if (!current) {
-      workspace.textContent = workspaceInfo?.identifier ?? ''
-    }
+  const where = document.querySelector('#workspace')
+  if (where) {
+    where.replaceChildren(...(workspaceInfo ? [renderWhere(current, workspaceInfo)] : []))
   }
 }
 
