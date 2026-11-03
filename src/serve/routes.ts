@@ -402,6 +402,11 @@ export function createIssueRoutes(session: BoardSession): Route[] {
     }),
     route({
       method: 'GET',
+      path: '/issues/workspace',
+      handle: async () => ({ id: workspace.id, identifier: workspace.identifier, name: workspace.name }),
+    }),
+    route({
+      method: 'GET',
       path: '/issues/:id',
       handle: async ({ params }) => await toCardView(ops, await requireCard(params.id)),
     }),

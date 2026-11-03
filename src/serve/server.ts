@@ -11,6 +11,7 @@ import { ACTOR_HEADER, resolveRequestActors } from './actors'
 import { isBoardPagePath, readBoardPageAssets, resolveBoardPageDirectory, sendBoardPage } from './board-page'
 import type { ServeErrorBody } from './errors'
 import { readErrorResponse, ServeError } from './errors'
+import type { ServeProjects } from './projects'
 import type { Route } from './router'
 import { matchRoute } from './router'
 import { createIssueRoutes } from './routes'
@@ -47,6 +48,8 @@ const PREFLIGHT_MAX_AGE_SECONDS = 600
 export interface KanboServeOptions {
   /** The open board and workspace every route is about. The caller closes it. */
   session: BoardSession
+  /** The other projects this server offers under `/projects`. Without it the server serves only `session`, as before. */
+  projects?: ServeProjects
   actors: ServeActors
   host: string
   /** `0` asks the system for a free port. */
@@ -225,8 +228,16 @@ function createRequestHandler(routes: readonly Route[], options: KanboServeOptio
       if (!SAFE_METHODS.has(request.method ?? 'GET') && !isJsonContentType(request.headers['content-type'])) {
         throw new ServeError(415, 'unsupported_media_type', 'Send the request as content-type: application/json')
       }
-      const matched = matchRoute(routes, request.method ?? 'GET', url.pathname)
-      if (!matched) {
+      const projectPath = readProjectPath(url.pathname)
+      if (url.pathname === '/projects' && request.method === 'GET' && options.projects) {
+        sendJson(response, 200, options.projects.list())
+        return
+      }
+      const matched = projectPath ? null : matchRoute(routes, request.method ?? 'GET', url.pathname)
+      if (!projectPath && !matched) {
+        throw new ServeError(404, 'not_found', 'Not Found')
+      }
+      if (projectPath && !options.projects) {
         throw new ServeError(404, 'not_found', 'Not Found')
       }
       const body = await readJsonBody(request)
@@ -237,10 +248,18 @@ function createRequestHandler(routes: readonly Route[], options: KanboServeOptio
         authenticated: token !== null,
       })
       const result = queue.then(async () => {
-        if (matched.route.write) {
-          await options.session.assertWritable()
+        // Opening a project's board waits its turn like any other request.
+        const target = projectPath && options.projects
+          ? await options.projects.resolve(projectPath.projectId)
+          : { session: options.session, routes }
+        const found = matched ?? matchRoute(target.routes, request.method ?? 'GET', projectPath?.rest ?? url.pathname)
+        if (!found) {
+          throw new ServeError(404, 'not_found', 'Not Found')
         }
-        return await matched.route.run({ params: matched.params, query: readQuery(url.searchParams), body, actors })
+        if (found.route.write) {
+          await target.session.assertWritable()
+        }
+        return await found.route.run({ params: found.params, query: readQuery(url.searchParams), body, actors })
       })
       queue = result.catch(() => undefined)
       sendJson(response, 200, await result)
@@ -264,6 +283,22 @@ function createRequestHandler(routes: readonly Route[], options: KanboServeOptio
       sendJson(response, 500, { code: 'internal_server_error', message: 'Internal Server Error' } satisfies ServeErrorBody)
     }
   }
+}
+
+/** `/projects/<id>/issues/...` as the project's id and the `/issues/...` path under it; `null` for any other path. */
+function readProjectPath(pathname: string): { projectId: string, rest: string } | null {
+  const segments = pathname.split('/').filter(Boolean)
+  if (segments[0] !== 'projects' || segments.length < 3 || segments[2] !== 'issues') {
+    return null
+  }
+  let projectId: string
+  try {
+    projectId = decodeURIComponent(segments[1])
+  }
+  catch {
+    return null
+  }
+  return { projectId, rest: `/${segments.slice(2).join('/')}` }
 }
 
 function isJsonContentType(value: string | undefined): boolean {

@@ -98,8 +98,8 @@ export function withBoardOptions(command: Command): Command {
 export async function openBoardSession(
   options: BoardCommandOptions,
   mode: BoardCommandMode,
+  cwd: string = process.cwd(),
 ): Promise<OpenBoardSession> {
-  const cwd = process.cwd()
   const target = resolveDbTarget({
     explicitPath: options.db,
     explicitUrl: options.databaseUrl,

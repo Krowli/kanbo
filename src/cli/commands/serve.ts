@@ -2,6 +2,7 @@ import type { Command } from 'commander'
 
 import { openInBrowser, presentServePage, resolveServeAccess } from '../../serve/access'
 import type { ServeActors } from '../../serve/actors'
+import { createServeProjects } from '../../serve/projects'
 import {
   DEFAULT_SERVE_HOST,
   DEFAULT_SERVE_PORT,
@@ -9,9 +10,11 @@ import {
   startKanboServer,
 } from '../../serve/server'
 import { createCliActor, createPersonActor, isAgentShell } from '../actor'
+import { findBinding, readProjectBinding } from '../binding'
 import { openBoardSession } from '../command'
 import { describeFailure } from '../failure'
 import { CliError } from '../output'
+import { readProjectRegistry } from '../project-registry'
 
 /**
  * `kanbo serve` — the board over HTTP: the board page for a browser, and the
@@ -88,10 +91,22 @@ export async function startServe(options: ServeCommandOptions, output: ServeOutp
   // to start has no business connecting to anything first.
   const access = resolveServeAccess(options.host, options.token?.trim() || process.env.KANBO_SERVE_TOKEN?.trim() || null)
 
+  const here = findBinding(process.cwd())
+  // Started outside any project and told nothing about a board: the project
+  // used most recently stands in for "here".
+  const mostRecent = here === null && namesNoBoard(options) ? readProjectRegistry()[0] : undefined
+  const defaultDir = here?.projectDir ?? mostRecent?.path ?? null
   const session = await openBoardSession(
     { db: options.db, databaseUrl: options.databaseUrl, workspace: options.workspace },
     'read',
+    mostRecent?.path,
   )
+  const projects = createServeProjects({
+    defaultProject: defaultDir === null ? null : { dir: defaultDir, session },
+    readRegistry: () => readProjectRegistry(),
+    readBinding: dir => readProjectBinding(dir),
+    openSession: async dir => await openBoardSession({}, 'read', dir),
+  })
   const agentShell = isAgentShell()
   const actors: ServeActors = { writer: createCliActor(), person: agentShell ? null : createPersonActor() }
 
@@ -99,6 +114,7 @@ export async function startServe(options: ServeCommandOptions, output: ServeOutp
   try {
     server = await startKanboServer({
       session,
+      projects,
       actors,
       host: options.host,
       port,
@@ -111,7 +127,8 @@ export async function startServe(options: ServeCommandOptions, output: ServeOutp
     throw error
   }
 
-  output.status(`kanbo serve: ${server.url} — workspace ${session.workspace.id}, bearer token required${access.generated ? ' (generated for this run)' : ''}`)
+  const projectCount = projects.list().length
+  output.status(`kanbo serve: ${server.url} — workspace ${session.workspace.id}, ${projectCount} ${projectCount === 1 ? 'project' : 'projects'}, bearer token required${access.generated ? ' (generated for this run)' : ''}`)
   output.status(`kanbo serve: ${describePersonRights(actors)}`)
   presentServePage(
     { url: server.url, access, agentShell, terminal: process.stdout.isTTY === true, open: options.open },
@@ -125,10 +142,21 @@ export async function startServe(options: ServeCommandOptions, output: ServeOutp
         await server.close()
       }
       finally {
-        await session.close()
+        try {
+          await projects.close()
+        }
+        finally {
+          await session.close()
+        }
       }
     },
   }
+}
+
+/** Whether neither a flag nor the environment says which board to open. */
+function namesNoBoard(options: ServeCommandOptions): boolean {
+  return !options.db && !options.databaseUrl && !options.workspace
+    && !process.env.KANBO_DB_PATH && !process.env.KANBO_DATABASE_URL && !process.env.KANBO_WORKSPACE_ID
 }
 
 /** What `kanbo serve` with no options is told — the home menu serves the board this way. */

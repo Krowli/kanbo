@@ -11,6 +11,7 @@ import { createBoardOps } from '../ops'
 import type { TestBoardStore } from '../testing/board-stores'
 import { BOARD_STORE_FACTORIES } from '../testing/board-stores'
 import type { ServeActors } from './actors'
+import { createServeProjects } from './projects'
 import type { KanboServeOptions, RunningKanboServer } from './server'
 import { SERVE_BODY_LIMIT_BYTES, SERVE_TOKEN_REQUIRED_MESSAGE, startKanboServer } from './server'
 import type { ServeCardView } from './views'
@@ -169,6 +170,12 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Needs a person' } })
     expect((await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: { statusLine: 'look at this' } })).status).toBe(200)
   }
+
+  it('names the workspace it serves', async () => {
+    const answer = await call(client, 'GET', '/issues/workspace')
+    expect(answer.status).toBe(200)
+    expect(answer.json).toEqual({ id: 'workspace', identifier: 'WOR', name: 'Workspace' })
+  })
 
   it('lists a card it created with every field a card view carries', async () => {
     const created = await call(client, 'POST', '/issues/', {
@@ -650,6 +657,79 @@ describe('kanbo serve\'s board page', () => {
     const tokenless = await call({ server: client.server }, 'POST', '/issues', { body, headers: { origin: `http://127.0.0.1:${port}` } })
     expect(tokenless.status).toBe(401)
     expect(await board.store.issues.listByWorkspace(WORKSPACE.id)).toHaveLength(1)
+  })
+})
+
+describe('serving several projects', () => {
+  const DIR_A = '/work/app-a'
+  const DIR_B = '/work/app-b'
+  const WORKSPACE_B: BoardWorkspaceIdentity = { id: 'beta', identifier: 'BET', name: 'Beta' }
+  let boardA: TestBoardStore
+  let boardB: TestBoardStore
+  let client: Client
+  let idA: string
+  let idB: string
+
+  beforeEach(async () => {
+    boardA = await BOARD_STORE_FACTORIES[0].open([{ id: WORKSPACE.id, identifier: WORKSPACE.identifier }])
+    boardB = await BOARD_STORE_FACTORIES[0].open([{ id: WORKSPACE_B.id, identifier: WORKSPACE_B.identifier }])
+    const sessionA = sessionOn(boardA.store)
+    const sessionB = { ...sessionOn(boardB.store), workspace: WORKSPACE_B, close: async () => {} }
+    const projects = createServeProjects({
+      defaultProject: { dir: DIR_A, session: sessionA },
+      readRegistry: () => [DIR_A, DIR_B].map(path => ({ path, lastSeenAt: 1 })),
+      readBinding: () => ({ schemaVersion: 1, workspaceId: 'x' }),
+      openSession: async () => sessionB,
+    })
+    ;[idA, idB] = projects.list().map(project => project.id)
+    const server = await startKanboServer({ session: sessionA, projects, actors: PERSON_ACTORS, host: '127.0.0.1', port: 0, token: TOKEN })
+    client = { server, token: TOKEN }
+  })
+
+  afterEach(async () => {
+    await client.server.close()
+    await boardA.dispose()
+    await boardB.dispose()
+  })
+
+  it('lists projects only for a caller with the token', async () => {
+    expect((await call({ server: client.server }, 'GET', '/projects')).status).toBe(401)
+    const listed = await call(client, 'GET', '/projects')
+    expect(listed.status).toBe(200)
+    expect(listed.json.map((project: { id: string }) => project.id)).toEqual([idA, idB])
+  })
+
+  it('answers the bare routes for the default project and the prefixed ones for another', async () => {
+    await call(client, 'POST', `/projects/${idB}/issues`, { body: { workspaceId: WORKSPACE_B.id, title: 'In beta' } })
+    const inB = await call(client, 'GET', `/projects/${idB}/issues`)
+    expect(inB.json.map((card: { title: string }) => card.title)).toEqual(['In beta'])
+    expect((await call(client, 'GET', '/issues')).json).toEqual([])
+    expect(await boardB.store.issues.listByWorkspace(WORKSPACE_B.id)).toHaveLength(1)
+    expect(await boardA.store.issues.listByWorkspace(WORKSPACE.id)).toHaveLength(0)
+  })
+
+  it('does not find a card of one project under another', async () => {
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'In alpha' } })
+    const missing = await call(client, 'GET', `/projects/${idB}/issues/WOR-001`)
+    expect(missing.status).toBe(404)
+    expect(missing.json.code).toBe('issue_not_found')
+  })
+
+  it('answers project_not_found for an id nobody offers', async () => {
+    const answer = await call(client, 'GET', '/projects/unknown/issues')
+    expect(answer.status).toBe(404)
+    expect(answer.json.code).toBe('project_not_found')
+  })
+
+  it('has no /projects on a server started without projects', async () => {
+    const alone = await startKanboServer({ session: sessionOn(boardA.store), actors: PERSON_ACTORS, host: '127.0.0.1', port: 0, token: TOKEN })
+    try {
+      expect((await call({ server: alone, token: TOKEN }, 'GET', '/projects')).status).toBe(404)
+      expect((await call({ server: alone, token: TOKEN }, 'GET', `/projects/${idB}/issues`)).status).toBe(404)
+    }
+    finally {
+      await alone.close()
+    }
   })
 })
 
