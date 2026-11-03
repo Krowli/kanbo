@@ -24,3 +24,15 @@ process.env.KANBO_NO_UPDATE_CHECK = '1'
  */
 delete process.env.CLAUDE_CODE_SESSION_ID
 delete process.env.CODEX_THREAD_ID
+
+/**
+ * Nor in the real home: commands note the project they open in kanbo's
+ * per-user folder, and a test must never write to the one of whoever ran it.
+ * The built-ins come from `process.getBuiltinModule` rather than an import: the
+ * browser-page tests run in jsdom, where an `import 'node:fs'` in this shared
+ * setup file does not resolve.
+ */
+const fs = process.getBuiltinModule('node:fs')
+const os = process.getBuiltinModule('node:os')
+const path = process.getBuiltinModule('node:path')
+process.env.KANBO_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'kanbo-home-'))

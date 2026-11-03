@@ -12,9 +12,14 @@ kanbo has no configuration file of its own beyond the per-project binding. Every
 | `KANBO_ACTOR_ID` | every writing command, `kanbo mcp`, `kanbo serve` | The name writes are filed under. Defaults to the operating-system user name. |
 | `KANBO_ACTOR_KIND` | every command | `agent` marks the shell as an agent's: person-only commands exit `4`, no question is asked, column entry rules refuse instead of warning, and a Postgres binding's `agentDatabaseUrl` is used. `person` marks it as a person's even when an agent tool's mark is there (see [Agent shells kanbo recognises](#agent-shells-kanbo-recognises)). Unset, the marks decide. |
 | `KANBO_SERVE_TOKEN` | `kanbo serve` | Bearer token the HTTP server requires (same as `--token`, but not visible in `ps`). Unset on loopback, a token is generated for the run. |
+| `KANBO_HOME` | every board command, `kanbo init`, `kanbo serve` | Folder for kanbo's own per-user files; `~/.kanbo` when unset. Holds `projects.json`, the list of project folders `kanbo serve` offers. |
 | `KANBO_DEBUG` | every command | `1` adds the values that caused a board refusal (`Details: {…}`) under its message, and says why the update check got no answer. |
 | `KANBO_NO_UPDATE_CHECK` | every command, `kanbo mcp` | `1` turns off the update check (see [Update check](#update-check)). |
 | `NO_UPDATE_NOTIFIER` | every command, `kanbo mcp` | Set to anything: the same. The variable other command-line tools honour. |
+
+## The project list (~/.kanbo/projects.json)
+
+kanbo keeps a list of the project folders it has opened a board in: each folder's path and when it was last used, nothing else (no connection string, no board data). A board command or `kanbo init` in a bound folder writes it, at most once a day per project. Deleting the file is safe: it fills again as you use your projects. Folders whose `.kanbo/binding.json` is gone are dropped the next time the file is written. `KANBO_HOME` moves the folder it lives in.
 
 ## Update check
 

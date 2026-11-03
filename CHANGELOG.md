@@ -6,6 +6,7 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- kanbo remembers each project folder it opens a board in (and `kanbo init` binds), in `~/.kanbo/projects.json` — the folder's path and when it was last used, nothing else, written at most once a day per project; `KANBO_HOME` moves the folder. It is the list the board page will offer.
 - `kanbo_card_update` takes `parent`, and `kanbo card update` takes `--parent <card>`: a card created at the wrong level is put under another card, or back on the top level with `"none"` (`--parent none`), and its history records the move like any other field's. A `null` for `parent` is read as not given — models send `null` for the fields they are not changing — so it never takes a card out from under its parent. The MCP server's instructions and the commands `kanbo prime` prints say so in one line each.
 - For applications that use kanbo as a library: `KanboCardUpdateInput.parent` (`string | null`; `null` is the top level, absent leaves the parent as it is) — a hand-written `KanboToolTransport` passes it on, and `createHttpTransport` sends it as `parentIssueId`, the card's exact id, as for a new card. `BoardErrorCode` gains `issue_parent_cycle`, `400` in `BOARD_ERROR_RESPONSES`.
 
