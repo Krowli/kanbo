@@ -84,6 +84,11 @@ export function describeValue(value: IssueActivityValueView | null): string {
   if (value.kind === 'date') {
     return new Date(value.timestamp * 1000).toLocaleDateString()
   }
+  if (value.token.startsWith('priority-')) {
+    // The level alone, as the filter bar names it: `High`, not `priority high`.
+    const level = value.token.slice('priority-'.length)
+    return `${level.charAt(0).toUpperCase()}${level.slice(1)}`
+  }
   return value.token === 'current-user' ? 'you' : value.token.replaceAll('-', ' ')
 }
 
@@ -133,7 +138,7 @@ export function groupByDay(entries: HistoryEntry[], now: Date): { day: string, e
 export function relativeTime(seconds: number, now: Date): string {
   const date = new Date(seconds * 1000)
   if (!sameDay(date, now)) {
-    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    return clockTime(date)
   }
   const elapsed = Math.floor(now.getTime() / 1000) - seconds
   if (elapsed < 60) {
@@ -145,8 +150,19 @@ export function relativeTime(seconds: number, now: Date): string {
   return `${Math.floor(elapsed / 3600)} h ago`
 }
 
-/** When something happened, said with no day heading above it: today's relative time, else the day. */
-export function relativeDay(seconds: number, now: Date): string {
+/**
+ * When something happened, said with no day heading above it: today's
+ * relative time, else the day — and, `withClock`, its clock time
+ * (`31 Oct 17:20`).
+ */
+export function relativeDay(seconds: number, now: Date, { withClock = false } = {}): string {
   const date = new Date(seconds * 1000)
-  return sameDay(date, now) ? relativeTime(seconds, now) : dayLabel(date, now)
+  if (sameDay(date, now)) {
+    return relativeTime(seconds, now)
+  }
+  return withClock ? `${dayLabel(date, now)} ${clockTime(date)}` : dayLabel(date, now)
+}
+
+function clockTime(date: Date): string {
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }

@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 
+import type { BoardRunView } from '../../ops/runs'
 import type { IssueFieldChange } from '../../sqlite/schema'
+import type { ServeCommentView } from '../views'
 import { activityFixture, cardFixture, statusFixture } from './fixtures'
 import type { CardDetail } from './panel'
 import { renderPanel } from './panel'
@@ -61,6 +63,30 @@ describe('renderPanel', () => {
     expect(panel.querySelector('script')).toBeNull()
     expect(panel.querySelector('.history-text-block[data-side="before"]')?.textContent).toBe('Before<script>alert(1)</script>')
     expect(panel.querySelector('.history-text-block[data-side="after"]')?.textContent).toBe('After<b>new</b>')
+  })
+
+  it('shows comment and run times short, as History does, with the full time on hover', () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date(2026, 10, 3, 12, 0))
+    try {
+      const at = (date: Date) => Math.floor(date.getTime() / 1000)
+      const older = new Date(2026, 9, 31, 17, 20)
+      const comments = [
+        { id: 'c1', content: 'hi', createdAt: at(new Date(2026, 10, 3, 11, 55)), author: { kind: 'user', id: '__self__', displayName: 'You', avatarUrl: null, label: null } },
+        { id: 'c2', content: 'older', createdAt: at(older), author: { kind: 'agent', id: 'claude', displayName: 'claude', avatarUrl: null, label: null } },
+      ] as ServeCommentView[]
+      const runs = [{ id: 'r1', attempt: 1, agentName: 'claude', state: 'failed', branch: null, startedAt: at(older) }] as BoardRunView[]
+      const panel = renderPanel(detailFixture({ comments, runs }), actions, null)
+      const times = [...panel.querySelectorAll<HTMLTimeElement>('.entries time')]
+      const day = older.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+      const clock = older.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+      expect(times.map(time => time.textContent)).toEqual(['5 min ago', `${day} ${clock}`, `${day} ${clock}`])
+      expect(times[1].title).toBe(older.toLocaleString())
+      expect(times[1].dateTime).toBe(older.toISOString())
+    }
+    finally {
+      vi.useRealTimers()
+    }
   })
 
   it('keeps comments out of History and says so when it is empty', () => {

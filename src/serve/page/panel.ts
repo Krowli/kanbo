@@ -42,7 +42,8 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
 
   panel.append(el('h2', 'panel-title', cardDisplayTitle(card)))
   const history = toHistory(detail.activity, detail.fieldChanges)
-  panel.append(renderFacts(card, status, history, new Date()))
+  const now = new Date()
+  panel.append(renderFacts(card, status, history, now))
   if (card.statusLine?.trim()) {
     const line = el('p', 'status-line', card.statusLine.trim())
     line.dataset.category = status?.category ?? 'unstarted'
@@ -60,10 +61,19 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
     : el('p', 'empty', 'No description.')))
 
   panel.append(renderDecision(card, actions))
-  panel.append(section('Comments', ...renderComments(detail.comments), renderCommentForm(actions)))
-  panel.append(renderHistory(history, new Date()))
-  panel.append(section('Runs', renderList(detail.runs, run => [describeRun(run), run.startedAt, run.state], 'No runs.')))
+  panel.append(section('Comments', ...renderComments(detail.comments, now), renderCommentForm(actions)))
+  panel.append(renderHistory(history, now))
+  panel.append(section('Runs', renderList(detail.runs, run => [describeRun(run), run.startedAt, run.state], 'No runs.', now)))
   return panel
+}
+
+/** A board timestamp (Unix seconds) as a `<time>`: `text` on the page, the reader's full date and time on hover. */
+function timeElement(seconds: number, text: string): HTMLElement {
+  const date = new Date(seconds * 1000)
+  const time = el('time', 'history-time', text)
+  time.dateTime = date.toISOString()
+  time.title = date.toLocaleString()
+  return time
 }
 
 /** Column, who made the card, who works it, priority and labels: the answers a person opens a card for. */
@@ -136,11 +146,7 @@ function renderHistoryEntry(entry: HistoryEntry, now: Date): HTMLElement {
   if (entry.field) {
     what.append(' ', el('span', 'history-field', entry.field))
   }
-  const date = new Date(entry.at * 1000)
-  const time = el('time', 'history-time', relativeTime(entry.at, now))
-  time.dateTime = date.toISOString()
-  time.title = date.toLocaleString()
-  item.append(what, time)
+  item.append(what, timeElement(entry.at, relativeTime(entry.at, now)))
   if (entry.from !== null || entry.to !== null) {
     const change = el('span', 'history-change')
     if (entry.from !== null) {
@@ -200,7 +206,7 @@ function renderDecision(card: ServeCardView, actions: PanelActions): HTMLElement
   return decision
 }
 
-function renderComments(comments: ServeCommentView[]): HTMLElement[] {
+function renderComments(comments: ServeCommentView[], now: Date): HTMLElement[] {
   if (comments.length === 0) {
     return [el('p', 'empty', 'No comments.')]
   }
@@ -208,7 +214,10 @@ function renderComments(comments: ServeCommentView[]): HTMLElement[] {
   for (const comment of comments) {
     const item = el('li')
     const meta = el('div', 'entry-meta')
-    meta.append(actorChip({ kind: comment.author.kind, name: comment.author.displayName, label: null }), el('span', undefined, formatTime(comment.createdAt)))
+    meta.append(
+      actorChip({ kind: comment.author.kind, name: comment.author.displayName, label: null }),
+      timeElement(comment.createdAt, relativeDay(comment.createdAt, now, { withClock: true })),
+    )
     item.append(meta, el('div', 'entry-text', comment.content))
     list.append(item)
   }
@@ -230,7 +239,7 @@ function renderCommentForm(actions: PanelActions): HTMLElement {
   return form
 }
 
-function renderList<T>(items: T[], describe: (item: T) => [text: string, time: number, runState: string], empty: string): HTMLElement {
+function renderList<T>(items: T[], describe: (item: T) => [text: string, time: number, runState: string], empty: string, now: Date): HTMLElement {
   if (items.length === 0) {
     return el('p', 'empty', empty)
   }
@@ -239,7 +248,9 @@ function renderList<T>(items: T[], describe: (item: T) => [text: string, time: n
     const [text, time, runState] = describe(item)
     const row = el('li')
     row.dataset.runState = runState
-    row.append(el('div', 'entry-text', text), el('div', 'entry-meta', formatTime(time)))
+    const meta = el('div', 'entry-meta')
+    meta.append(timeElement(time, relativeDay(time, now, { withClock: true })))
+    row.append(el('div', 'entry-text', text), meta)
     list.append(row)
   }
   return list
@@ -247,9 +258,4 @@ function renderList<T>(items: T[], describe: (item: T) => [text: string, time: n
 
 function describeRun(run: BoardRunView): string {
   return [`Attempt ${run.attempt}`, run.agentName, run.state, run.branch].filter(Boolean).join(' · ')
-}
-
-/** A board timestamp (Unix seconds) as the reader's clock says it. */
-function formatTime(seconds: number): string {
-  return new Date(seconds * 1000).toLocaleString()
 }

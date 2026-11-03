@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { IssueFieldChange } from '../../sqlite/schema'
 import { activityFixture } from './fixtures'
 import type { HistoryEntry } from './history'
-import { groupByDay, relativeDay, relativeTime, toHistory } from './history'
+import { describeValue, groupByDay, relativeDay, relativeTime, toHistory } from './history'
 
 const text = (value: string) => ({ kind: 'text' as const, text: value })
 
@@ -46,6 +46,24 @@ describe('toHistory', () => {
       activityFixture({ id: 'm', fieldChange: { action: 'changed-field', field: 'metadata', fromValue: text('secret'), toValue: text('secret2') } }),
     ], [])
     expect(entry).toMatchObject({ verb: 'changed metadata', from: null, to: null })
+  })
+})
+
+describe('describeValue', () => {
+  it('names a priority by its level alone, as the filter bar does', () => {
+    expect(describeValue({ kind: 'token', token: 'priority-none' })).toBe('None')
+    expect(describeValue({ kind: 'token', token: 'priority-high' })).toBe('High')
+    expect(describeValue({ kind: 'token', token: 'priority-urgent' })).toBe('Urgent')
+    const [entry] = toHistory([
+      activityFixture({ id: 'p', fieldChange: { action: 'changed-field', field: 'priority', fromValue: { kind: 'token', token: 'priority-none' }, toValue: { kind: 'token', token: 'priority-high' } } }),
+    ], [])
+    expect(entry).toMatchObject({ field: 'Priority', from: 'None', to: 'High' })
+  })
+
+  it('reads the other tokens as words', () => {
+    expect(describeValue({ kind: 'token', token: 'no-labels' })).toBe('no labels')
+    expect(describeValue({ kind: 'token', token: 'current-user' })).toBe('you')
+    expect(describeValue(null)).toBe('nothing')
   })
 })
 
@@ -107,5 +125,14 @@ describe('relativeDay', () => {
     expect(relativeDay(at(new Date(2026, 10, 3, 11, 30)), now)).toBe('30 min ago')
     expect(relativeDay(at(new Date(2026, 10, 2, 14, 2)), now)).toBe('Yesterday')
     expect(relativeDay(at(new Date(2026, 9, 31, 17, 20)), now)).toBe(new Date(2026, 9, 31).toLocaleDateString(undefined, { day: 'numeric', month: 'short' }))
+  })
+
+  it('adds the clock time to the day when asked, never to today', () => {
+    const older = new Date(2026, 9, 31, 17, 20)
+    const clock = older.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    const day = older.toLocaleDateString(undefined, { day: 'numeric', month: 'short' })
+    expect(relativeDay(at(older), now, { withClock: true })).toBe(`${day} ${clock}`)
+    expect(relativeDay(at(new Date(2026, 10, 2, 14, 5)), now, { withClock: true })).toMatch(/^Yesterday \S/)
+    expect(relativeDay(at(new Date(2026, 10, 3, 11, 30)), now, { withClock: true })).toBe('30 min ago')
   })
 })
