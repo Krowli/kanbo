@@ -8,6 +8,7 @@ import type { BoardColumn } from './grouping'
 import { groupBoard } from './grouping'
 import type { CardDetail } from './panel'
 import { renderPanel } from './panel'
+import { startPresence } from './presence'
 import { renderProjectSwitcher, renderWhere } from './project-switcher'
 import { adoptTokenFromLocation, readStoredToken, storeToken } from './token'
 
@@ -39,6 +40,8 @@ let cards: ServeCardView[] = []
 let seq: number | null = null
 /** The token was refused or is missing: stop polling until the person gives one. */
 let needsToken = false
+/** The server did not answer at all: it has stopped, so polling it only repeats the failure. */
+let serverGone = false
 let refreshing = false
 
 /** The column a new card is being written in, and the form it is written in. */
@@ -99,6 +102,11 @@ function showNotice(text: string | null, kind: 'info' | 'error' = 'info'): void 
 
 /** What a failed request says to the person, asking for the token when that is what is missing. */
 function describeFailure(error: unknown): string {
+  if (error instanceof TypeError) {
+    // `fetch` throws a TypeError when it cannot reach the server at all.
+    serverGone = true
+    return 'The board server has stopped. Run kanbo serve to open it again.'
+  }
   if (error instanceof ApiError) {
     if (error.status === 401) {
       needsToken = true
@@ -192,7 +200,7 @@ function chooseProject(id: string | null): void {
 }
 
 async function poll(): Promise<void> {
-  if (document.visibilityState !== 'visible' || needsToken || refreshing) {
+  if (document.visibilityState !== 'visible' || needsToken || serverGone || refreshing) {
     return
   }
   try {
@@ -480,5 +488,6 @@ document.addEventListener('keydown', (event) => {
 document.addEventListener('visibilitychange', () => void poll())
 
 mountShell()
+startPresence(() => token)
 void refresh()
 setInterval(() => void poll(), POLL_INTERVAL_MS)

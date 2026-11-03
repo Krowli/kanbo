@@ -17,7 +17,7 @@ On start it prints two lines on stderr: the address, the workspace and that a be
 - In a person's terminal, `kanbo serve: board page http://127.0.0.1:4318/#token=<token>` for a generated token, and the link is opened in the default browser (`open` on macOS, `rundll32 url.dll,FileProtocolHandler` on Windows, `wslview` or else `cmd.exe /c start` under WSL, `xdg-open` on a Linux desktop) unless `--no-open` is given. On Linux without `DISPLAY` or `WAYLAND_DISPLAY` (over SSH, say) no browser is tried; the printed link is it. The token is in the fragment, so the browser never sends it to the server and it never appears in a request log. A token you gave yourself is not printed: the link is just `http://127.0.0.1:4318/`.
 - In an agent's shell (`KANBO_ACTOR_KIND=agent`), or when stdout is not a terminal, the token is never printed and no browser is opened; a generated token is announced as `a token was generated for this run and is not shown here; set KANBO_SERVE_TOKEN to choose your own`.
 
-Stop it with Ctrl-C.
+When `kanbo serve` opened the browser itself it also stops about 5 seconds after the last board tab closes (a reload does not stop it), or 2 minutes after the last sign of life from a tab that disappeared without saying goodbye, and prints `kanbo serve: the last board tab was closed — stopped.`. With `--no-open`, from an agent's shell, or when stdout is not a terminal it runs until Ctrl-C.
 
 ## The board page
 
@@ -71,6 +71,7 @@ All routes are under `/issues`. A card is addressed by its key (`API-001`). A `w
 | Method and path | Does |
 | --- | --- |
 | `GET /projects` | The projects this server offers: `{ id, name, folder, storage, isDefault }` each, `storage` being `{ kind: "file", path }` or `{ kind: "postgres", where }` (the host; never a connection string). |
+| `POST /page/presence` | What the board page tells the server about its tab: `{ "tabId": "<letters, numbers, dashes, up to 64>", "state": "open" \| "closed" }`, answered `{ "ok": true }`. The page sends `open` every 20 seconds and `closed` when it goes. Needs the token like every route; `404` on a server that does not stop by itself (see above). Not a board route: it reads and writes no card. |
 | `GET /issues/workspace` | The served workspace: `{ id, identifier, name }`. |
 | `/projects/:id/issues/...` | Every route below, for another project; same rules and checks. `404 project_not_found` for an id the server does not offer, `503 project_unavailable` when that project's board will not open. That project's board is opened on the first request and stays open until the server stops. |
 | `GET /issues` | List cards. Query: `workspaceId`, `workspaceIds`, `milestoneId`, `parentIssueId`, `priority`, `labels`, `statusId`. |

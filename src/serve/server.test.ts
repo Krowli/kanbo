@@ -3,7 +3,7 @@ import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { BoardSession } from '../cli/command'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
@@ -499,6 +499,36 @@ describe('kanbo serve at the door', () => {
     const otherPort = await rawCall(client, 'GET', '/issues', { host: `localhost:${client.server.port + 1}` })
     expect(otherPort.status).toBe(403)
     expect((await rawCall(client, 'GET', '/issues', { host: `localhost:${client.server.port}` })).status).toBe(200)
+  })
+
+  it('takes the board page\'s presence only with the token, and only when it is listening', async () => {
+    const presence = { seen: vi.fn(), closed: vi.fn(), stop: vi.fn() }
+    const client = await start({ token: TOKEN, presence })
+    const body = { tabId: 'tab-1', state: 'open' }
+
+    expect((await call({ server: client.server }, 'POST', '/page/presence', { body })).status).toBe(401)
+    expect(presence.seen).not.toHaveBeenCalled()
+
+    const bare = await start({ token: TOKEN })
+    expect((await call(bare, 'POST', '/page/presence', { body })).status).toBe(404)
+  })
+
+  it('refuses a presence body that is not a tab id and a state', async () => {
+    const presence = { seen: vi.fn(), closed: vi.fn(), stop: vi.fn() }
+    const client = await start({ presence })
+    const invalid = await call(client, 'POST', '/page/presence', { body: { tabId: '../x', state: 'open' } })
+    expect(invalid.status).toBe(400)
+    expect(invalid.json).toMatchObject({ code: 'validation_error', details: { source: 'body' } })
+    expect(presence.seen).not.toHaveBeenCalled()
+  })
+
+  it('tells presence which tab opened and which closed', async () => {
+    const presence = { seen: vi.fn(), closed: vi.fn(), stop: vi.fn() }
+    const client = await start({ presence })
+    expect((await call(client, 'POST', '/page/presence', { body: { tabId: 'tab-1', state: 'open' } })).json).toEqual({ ok: true })
+    expect(presence.seen).toHaveBeenCalledWith('tab-1')
+    await call(client, 'POST', '/page/presence', { body: { tabId: 'tab-1', state: 'closed' } })
+    expect(presence.closed).toHaveBeenCalledWith('tab-1')
   })
 
   it('lets in only a request carrying the token', async () => {

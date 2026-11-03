@@ -13,7 +13,7 @@ import { describePersonOverride, isAgentShell, requireHumanActor } from './actor
 import { openBoardSession } from './command'
 import { checkAgent } from './commands/connect'
 import type { RunningServe } from './commands/serve'
-import { DEFAULT_SERVE_OPTIONS, startServe, waitForInterrupt } from './commands/serve'
+import { DEFAULT_SERVE_OPTIONS, startServe, waitForStop } from './commands/serve'
 import type { BoardTarget } from './db-target'
 import { BoardFileMissingError, BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE, resolveDbTarget } from './db-target'
 import { findKanboProject } from './doctor'
@@ -71,12 +71,12 @@ export interface HomeUpdate {
 /** Serving the board page from the menu: start it, then wait for the person to stop it. */
 export interface BoardPageRunner {
   start: () => Promise<RunningServe>
-  waitForStop: () => Promise<void>
+  waitForStop: (running: RunningServe) => Promise<unknown>
 }
 
 const SERVE_FROM_MENU: BoardPageRunner = {
   start: () => startServe(DEFAULT_SERVE_OPTIONS, { status: line => console.error(line), page: () => {} }),
-  waitForStop: waitForInterrupt,
+  waitForStop: running => waitForStop(running.idle),
 }
 
 /** What the home screen shows about the board. */
@@ -265,7 +265,7 @@ async function serveUntilStopped(context: BareKanboContext): Promise<void> {
   const running = await start()
   try {
     say(context.ui, `Board open at ${running.link} — press Ctrl-C to stop and return to the menu`)
-    await waitForStop()
+    await waitForStop(running)
   }
   finally {
     await running.close()

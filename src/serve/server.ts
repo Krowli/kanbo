@@ -3,6 +3,8 @@ import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import { createServer } from 'node:http'
 import type { AddressInfo } from 'node:net'
 
+import { z } from 'zod'
+
 import type { BoardSession } from '../cli/command'
 import { describeFailure } from '../cli/failure'
 import { CliError } from '../cli/output'
@@ -10,7 +12,8 @@ import type { ServeActors } from './actors'
 import { ACTOR_HEADER, resolveRequestActors } from './actors'
 import { isBoardPagePath, readBoardPageAssets, resolveBoardPageDirectory, sendBoardPage } from './board-page'
 import type { ServeErrorBody } from './errors'
-import { readErrorResponse, ServeError } from './errors'
+import { readErrorResponse, ServeError, validationError } from './errors'
+import type { PagePresence } from './page-presence'
 import type { ServeProjects } from './projects'
 import type { Route } from './router'
 import { matchRoute } from './router'
@@ -50,6 +53,8 @@ export interface KanboServeOptions {
   session: BoardSession
   /** The other projects this server offers under `/projects`. Without it the server serves only `session`, as before. */
   projects?: ServeProjects
+  /** Who has the board page open. Without it `POST /page/presence` is not a route. */
+  presence?: PagePresence
   actors: ServeActors
   host: string
   /** `0` asks the system for a free port. */
@@ -145,6 +150,12 @@ async function closeServer(server: Server): Promise<void> {
 /** Methods that change nothing, and so need no JSON content type to prove a script sent them. */
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
+/** What the board page tells the server about itself. */
+const PRESENCE_BODY = z.object({
+  tabId: z.string().min(1).max(64).regex(/^[A-Za-z0-9-]+$/),
+  state: z.enum(['open', 'closed']),
+})
+
 function createRequestHandler(routes: readonly Route[], options: KanboServeOptions, boundPort: () => number) {
   const token = options.token || null
   const corsOrigins = new Set(options.corsOrigins ?? [])
@@ -227,6 +238,23 @@ function createRequestHandler(routes: readonly Route[], options: KanboServeOptio
       // a JSON content type does not. Every write therefore has to say it.
       if (!SAFE_METHODS.has(request.method ?? 'GET') && !isJsonContentType(request.headers['content-type'])) {
         throw new ServeError(415, 'unsupported_media_type', 'Send the request as content-type: application/json')
+      }
+      if (url.pathname === '/page/presence' && request.method === 'POST') {
+        if (!options.presence) {
+          throw new ServeError(404, 'not_found', 'Not Found')
+        }
+        const parsed = PRESENCE_BODY.safeParse(await readJsonBody(request))
+        if (!parsed.success) {
+          throw validationError('body', parsed.error)
+        }
+        if (parsed.data.state === 'open') {
+          options.presence.seen(parsed.data.tabId)
+        }
+        else {
+          options.presence.closed(parsed.data.tabId)
+        }
+        sendJson(response, 200, { ok: true })
+        return
       }
       const projectPath = readProjectPath(url.pathname)
       if (url.pathname === '/projects' && request.method === 'GET' && options.projects) {

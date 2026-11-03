@@ -2,6 +2,8 @@ import type { Command } from 'commander'
 
 import { openInBrowser, presentServePage, resolveServeAccess } from '../../serve/access'
 import type { ServeActors } from '../../serve/actors'
+import { createPagePresence } from '../../serve/page-presence'
+import type { PagePresence } from '../../serve/page-presence'
 import { createServeProjects } from '../../serve/projects'
 import {
   DEFAULT_SERVE_HOST,
@@ -54,7 +56,10 @@ export function registerServeCommand(program: Command): void {
     .option('--no-open', 'print the board page link without opening it in the browser')
     .action(async (options: ServeCommandOptions) => {
       const running = await startServe(options, { status: line => console.error(line), page: line => console.log(line) })
-      await waitForInterrupt()
+      const why = await waitForStop(running.idle)
+      if (why === 'idle') {
+        console.error('kanbo serve: the last board tab was closed — stopped.')
+      }
       try {
         await running.close()
         process.exit(0)
@@ -70,6 +75,8 @@ export function registerServeCommand(program: Command): void {
 export interface RunningServe {
   /** The board page's link — with this run's token in it, when the token was made up for the run. */
   link: string
+  /** Settles when the last board tab has closed; never, when this run does not stop by itself. */
+  idle: Promise<void>
   /** Stop listening, then close the board. */
   close: () => Promise<void>
 }
@@ -82,8 +89,8 @@ export interface ServeOutput {
 
 /**
  * Open the board and serve it — everything `kanbo serve` does but wait. The
- * command waits for Ctrl-C and ends the process; the home menu waits for
- * Ctrl-C and comes back to its menu.
+ * command waits for Ctrl-C (or the last board tab closing) and ends the
+ * process; the home menu waits the same and comes back to its menu.
  */
 export async function startServe(options: ServeCommandOptions, output: ServeOutput): Promise<RunningServe> {
   const port = parsePort(options.port)
@@ -110,11 +117,19 @@ export async function startServe(options: ServeCommandOptions, output: ServeOutp
   const agentShell = isAgentShell()
   const actors: ServeActors = { writer: createCliActor(), person: agentShell ? null : createPersonActor() }
 
+  // The server stops by itself exactly when this run opens the browser.
+  const opensBrowser = !agentShell && process.stdout.isTTY === true && options.open
+  let presence: PagePresence | undefined
+  const idle = new Promise<void>((resolve) => {
+    presence = opensBrowser ? createPagePresence({ onIdle: resolve }) : undefined
+  })
+
   let server: Awaited<ReturnType<typeof startKanboServer>>
   try {
     server = await startKanboServer({
       session,
       projects,
+      presence,
       actors,
       host: options.host,
       port,
@@ -123,6 +138,7 @@ export async function startServe(options: ServeCommandOptions, output: ServeOutp
     })
   }
   catch (error) {
+    presence?.stop()
     await session.close()
     throw error
   }
@@ -137,7 +153,9 @@ export async function startServe(options: ServeCommandOptions, output: ServeOutp
 
   return {
     link: access.generated ? `${server.url}/#token=${access.token}` : `${server.url}/`,
+    idle,
     close: async () => {
+      presence?.stop()
       try {
         await server.close()
       }
@@ -167,17 +185,27 @@ export const DEFAULT_SERVE_OPTIONS: ServeCommandOptions = {
   open: true,
 }
 
-/** Settles on the first Ctrl-C (SIGINT) or SIGTERM, and stops listening for both. */
-export function waitForInterrupt(): Promise<void> {
+/**
+ * Settles on the first Ctrl-C (SIGINT) or SIGTERM, or when `idle` settles, and
+ * stops listening for both signals whichever it was.
+ */
+export function waitForStop(idle: Promise<void>): Promise<'interrupt' | 'idle'> {
   return new Promise((resolve) => {
-    const stop = (): void => {
-      process.off('SIGINT', stop)
-      process.off('SIGTERM', stop)
-      resolve()
+    const finish = (why: 'interrupt' | 'idle'): void => {
+      process.off('SIGINT', onSignal)
+      process.off('SIGTERM', onSignal)
+      resolve(why)
     }
-    process.on('SIGINT', stop)
-    process.on('SIGTERM', stop)
+    const onSignal = (): void => finish('interrupt')
+    process.on('SIGINT', onSignal)
+    process.on('SIGTERM', onSignal)
+    void idle.then(() => finish('idle'))
   })
+}
+
+/** Settles on the first Ctrl-C (SIGINT) or SIGTERM, and stops listening for both. */
+export async function waitForInterrupt(): Promise<void> {
+  await waitForStop(new Promise(() => {}))
 }
 
 function collect(value: string, previous: string[]): string[] {
