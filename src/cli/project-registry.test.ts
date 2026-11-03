@@ -104,6 +104,7 @@ describe('the project registry', () => {
   it('finds the file in KANBO_HOME, else in ~/.kanbo', () => {
     expect(projectRegistryPath({ KANBO_HOME: '/x' })).toBe(join('/x', 'projects.json'))
     expect(projectRegistryPath({})).toMatch(/\.kanbo[\\/]projects\.json$/)
+    expect(projectRegistryPath({ KANBO_HOME: '  ' })).toMatch(/\.kanbo[\\/]projects\.json$/)
   })
 
   it('notes the project when a board command opens its board', async () => {

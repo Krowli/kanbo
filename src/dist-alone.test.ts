@@ -42,7 +42,8 @@ afterAll(() => {
  */
 function copiedEnvironment(): NodeJS.ProcessEnv {
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith('KANBO_')))
-  return { ...env, NODE_PATH: join(packageRoot, 'node_modules') }
+  // KANBO_HOME stays: the vitest setup points it at a temp dir, and the copied CLI must not note projects in the real home.
+  return { ...env, KANBO_HOME: process.env.KANBO_HOME, NODE_PATH: join(packageRoot, 'node_modules') }
 }
 
 function runCopied(args: string[], cwd?: string): string {

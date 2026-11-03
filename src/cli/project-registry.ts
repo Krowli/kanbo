@@ -52,8 +52,8 @@ export interface RegisteredProject {
 
 /** `$KANBO_HOME/projects.json`, else `~/.kanbo/projects.json`. */
 export function projectRegistryPath(env: NodeJS.ProcessEnv = process.env): string {
-  const home = env.KANBO_HOME
-  return join(home && home.length > 0 ? home : join(homedir(), '.kanbo'), REGISTRY_FILE_NAME)
+  const home = env.KANBO_HOME?.trim()
+  return join(home || join(homedir(), '.kanbo'), REGISTRY_FILE_NAME)
 }
 
 /** The projects, most recently seen first; `[]` when the file is missing or does not parse. */
