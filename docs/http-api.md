@@ -1,6 +1,6 @@
 # HTTP API — `kanbo serve`
 
-`kanbo serve` serves one board and one workspace over HTTP: a board page for a browser at `/`, and a JSON API under `/issues`. The board and workspace are resolved like every other command (`--db`, `--database-url`, `--workspace`, the environment, the project's binding).
+`kanbo serve` serves one board and one workspace over HTTP: a board page for a browser at `/`, and a JSON API under `/issues`. The board and workspace are resolved like every other command (`--db`, `--database-url`, `--workspace`, the environment, the project's binding). It also offers the other projects kanbo has opened (`~/.kanbo/projects.json`) under `/projects`; started in a folder that belongs to no project, with no board named by a flag or the environment, it opens the most recently used one.
 
 ```bash
 kanbo serve                                           # generates a token and opens the board in your browser
@@ -27,6 +27,7 @@ Open `http://127.0.0.1:4318/`. It shows the workspace's columns in board order w
 - **+ New** at the top of a column creates a card from a description.
 - Click a card for its panel: description (plain text), comments and a box to add one, the activity feed, its runs, and **Approve** / **Return** while it waits for a person. Esc closes the panel.
 - Opened by the link `kanbo serve` printed, the page takes the token from `#token=…`, keeps it and removes it from the address bar; otherwise type the server token into the **Token** field in the header. It is sent as `Authorization: Bearer …` and kept in the tab's `sessionStorage` only.
+- A **Project** dropdown lists every project from `~/.kanbo/projects.json` (when there is more than one), and the header says where the board lives: card prefix, folder, and `board file ~/code/app/.kanbo/board.db` or `Postgres at db.example.com`. The choice is kept in the address (`?project=<id>`). A project that left the list while the page was open is replaced by the default one, with a notice.
 - The page polls `GET /issues/version` every two seconds while its tab is visible and reloads when the board changed.
 
 The page, `/assets/board.js` and `/assets/board.css` are served without the token (they hold no data), with `content-security-policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `x-content-type-options: nosniff`, `referrer-policy: no-referrer` and `cache-control: no-cache`. Card content is inserted as text, never as HTML. If the package was not built, `/` answers `404` with `The board page is not built. Run: npm run build`.
@@ -69,6 +70,9 @@ All routes are under `/issues`. A card is addressed by its key (`API-001`). A `w
 
 | Method and path | Does |
 | --- | --- |
+| `GET /projects` | The projects this server offers: `{ id, name, folder, storage, isDefault }` each, `storage` being `{ kind: "file", path }` or `{ kind: "postgres", where }` (the host; never a connection string). |
+| `GET /issues/workspace` | The served workspace: `{ id, identifier, name }`. |
+| `/projects/:id/issues/...` | Every route below, for another project; same rules and checks. `404 project_not_found` for an id the server does not offer, `503 project_unavailable` when that project's board will not open. That project's board is opened on the first request and stays open until the server stops. |
 | `GET /issues` | List cards. Query: `workspaceId`, `workspaceIds`, `milestoneId`, `parentIssueId`, `priority`, `labels`, `statusId`. |
 | `POST /issues` | Create a card. |
 | `GET /issues/:id` | Read a card. |
