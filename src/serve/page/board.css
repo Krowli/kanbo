@@ -147,6 +147,18 @@ button {
   color: var(--muted-foreground);
 }
 
+.project-switcher {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.project-where {
+  font-family: var(--font-mono);
+}
+
 .token-form {
   margin-left: auto;
   display: flex;

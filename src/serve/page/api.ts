@@ -1,6 +1,7 @@
 import type { IssueActivityItemView } from '../../domain/activity-types'
 import type { BoardRunView } from '../../ops/runs'
 import type { ServeErrorBody } from '../errors'
+import type { ServeProjectView } from '../projects'
 import type { ServeCardView, ServeCommentView, ServeStatusView } from '../views'
 
 /**
@@ -16,6 +17,10 @@ export class ApiError extends Error {
 }
 
 export interface BoardApi {
+  /** Every project the server offers; never prefixed. */
+  projects: () => Promise<ServeProjectView[]>
+  /** The workspace of the project the page is showing. */
+  workspace: () => Promise<{ id: string, identifier: string, name: string }>
   version: () => Promise<number>
   statuses: () => Promise<ServeStatusView[]>
   cards: () => Promise<ServeCardView[]>
@@ -29,7 +34,11 @@ export interface BoardApi {
   returnCard: (cardId: string, comment: string) => Promise<ServeCardView>
 }
 
-export function createBoardApi(readToken: () => string | null): BoardApi {
+/**
+ * `readBase` is the path the current project's `/issues` routes sit under:
+ * `''` for the project the server was started in, `/projects/<id>` for another.
+ */
+export function createBoardApi(readToken: () => string | null, readBase: () => string = () => ''): BoardApi {
   async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
     const headers: Record<string, string> = {}
     const token = readToken()
@@ -53,13 +62,16 @@ export function createBoardApi(readToken: () => string | null): BoardApi {
     return JSON.parse(text) as T
   }
 
-  const card = (id: string): string => `/issues/${encodeURIComponent(id)}`
+  const board = (path: string): string => `${readBase()}${path}`
+  const card = (id: string): string => board(`/issues/${encodeURIComponent(id)}`)
 
   return {
-    version: async () => (await request<{ seq: number }>('GET', '/issues/version')).seq,
-    statuses: async () => await request('GET', '/issues/statuses'),
-    cards: async () => await request('GET', '/issues'),
-    createCard: async input => await request('POST', '/issues', input),
+    projects: async () => await request('GET', '/projects'),
+    workspace: async () => await request('GET', board('/issues/workspace')),
+    version: async () => (await request<{ seq: number }>('GET', board('/issues/version'))).seq,
+    statuses: async () => await request('GET', board('/issues/statuses')),
+    cards: async () => await request('GET', board('/issues')),
+    createCard: async input => await request('POST', board('/issues'), input),
     moveCard: async (cardId, statusId) => await request('PATCH', `${card(cardId)}/status/${encodeURIComponent(statusId)}`),
     comments: async cardId => await request('GET', `${card(cardId)}/comments`),
     addComment: async (cardId, content) => await request('POST', `${card(cardId)}/comments`, { content }),

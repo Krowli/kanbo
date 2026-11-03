@@ -1,3 +1,4 @@
+import type { ServeProjectView } from '../projects'
 import type { ServeCardView, ServeStatusView } from '../views'
 import type { BoardApi } from './api'
 import { ApiError, createBoardApi } from './api'
@@ -7,6 +8,7 @@ import type { BoardColumn } from './grouping'
 import { groupBoard } from './grouping'
 import type { CardDetail } from './panel'
 import { renderPanel } from './panel'
+import { renderProjectSwitcher, renderWhere } from './project-switcher'
 import { adoptTokenFromLocation, readStoredToken, storeToken } from './token'
 
 /**
@@ -24,7 +26,13 @@ const POLL_INTERVAL_MS = 2000
 
 adoptTokenFromLocation()
 let token = readStoredToken()
-const api: BoardApi = createBoardApi(() => token)
+/** The project the page shows: the `?project=` in its address, or the one the server was started in. */
+let projectId: string | null = new URLSearchParams(location.search).get('project')
+let projects: ServeProjectView[] = []
+let workspaceInfo: { id: string, identifier: string, name: string } | null = null
+/** What the top bar was last built from, so a poll that changed nothing leaves an open dropdown alone. */
+let identityKey = ''
+const api: BoardApi = createBoardApi(() => token, () => projectId === null ? '' : `/projects/${encodeURIComponent(projectId)}`)
 
 let statuses: ServeStatusView[] = []
 let cards: ServeCardView[] = []
@@ -45,12 +53,14 @@ const tokenInput = el('input', 'field token-input')
 const notice = el('p', 'notice')
 const boardElement = el('main', 'board')
 const panelHost = el('div', 'panel-host')
+const projectSlot = el('span', 'project-slot')
 
 function mountShell(): void {
   const header = el('header', 'topbar')
   const title = el('h1', 'topbar-title', 'Kanbo')
   const workspace = el('span', 'workspace')
   workspace.id = 'workspace'
+  projectSlot.id = 'project-switcher'
 
   const tokenForm = el('form', 'token-form')
   tokenInput.type = 'password'
@@ -71,7 +81,7 @@ function mountShell(): void {
     void refresh()
   })
 
-  header.append(title, workspace, tokenForm)
+  header.append(title, projectSlot, workspace, tokenForm)
   notice.setAttribute('role', 'status')
   notice.hidden = true
   root.replaceChildren(header, notice, boardElement, panelHost)
@@ -120,10 +130,12 @@ async function refresh(): Promise<void> {
   try {
     // The version first: a change landing while the rest loads is seen by the next poll.
     const version = await api.version()
-    const [nextStatuses, nextCards] = await Promise.all([api.statuses(), api.cards()])
+    const [nextStatuses, nextCards, nextProjects, nextWorkspace] = await Promise.all([api.statuses(), api.cards(), api.projects(), api.workspace()])
     seq = version
     statuses = nextStatuses
     cards = nextCards
+    projects = nextProjects
+    workspaceInfo = nextWorkspace
     renderBoard()
     clearLoadFailure()
     if (openCardId) {
@@ -131,11 +143,52 @@ async function refresh(): Promise<void> {
     }
   }
   catch (error) {
-    showLoadFailure(error)
+    if (!fallBackToDefaultProject(error)) {
+      showLoadFailure(error)
+    }
   }
   finally {
     refreshing = false
   }
+  if (fellBack) {
+    fellBack = false
+    await refresh()
+  }
+}
+
+let fellBack = false
+
+/** The project in the address left the computer's list while the page was open: show the default one and say so. */
+function fallBackToDefaultProject(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.code !== 'project_not_found' || projectId === null) {
+    return false
+  }
+  const fallback = projects.find(project => project.isDefault) ?? projects[0]
+  chooseProject(null)
+  showNotice(`That project is no longer on this computer's list; showing ${fallback?.name ?? 'the default project'}.`)
+  fellBack = true
+  return true
+}
+
+/** Show another project (`null`: the one the server was started in) from a clean slate. */
+function chooseProject(id: string | null): void {
+  projectId = id
+  const url = new URL(location.href)
+  if (id === null) {
+    url.searchParams.delete('project')
+  }
+  else {
+    url.searchParams.set('project', id)
+  }
+  history.replaceState(null, '', url)
+  seq = null
+  draft = null
+  closePanel()
+  statuses = []
+  cards = []
+  workspaceInfo = null
+  identityKey = ''
+  showNotice(null)
 }
 
 async function poll(): Promise<void> {
@@ -151,15 +204,40 @@ async function poll(): Promise<void> {
     }
   }
   catch (error) {
-    showLoadFailure(error)
+    if (fallBackToDefaultProject(error)) {
+      await refresh()
+    }
+    else {
+      showLoadFailure(error)
+    }
+  }
+}
+
+/** The top bar's project switcher and the line saying where this board lives. */
+function renderIdentity(): void {
+  const current = projects.find(project => project.id === projectId) ?? projects.find(project => project.isDefault) ?? projects[0] ?? null
+  const key = JSON.stringify([projects, current?.id, workspaceInfo])
+  if (key === identityKey) {
+    return
+  }
+  identityKey = key
+  const workspace = document.querySelector('#workspace')
+  projectSlot.replaceChildren(...(projects.length > 1
+    ? [renderProjectSwitcher(projects, current?.id ?? null, (id) => {
+        chooseProject(id)
+        void refresh()
+      })]
+    : []))
+  if (workspace) {
+    workspace.replaceChildren(...(current && workspaceInfo ? [renderWhere(current, workspaceInfo)] : []))
+    if (!current) {
+      workspace.textContent = workspaceInfo?.identifier ?? ''
+    }
   }
 }
 
 function renderBoard(): void {
-  const workspace = document.querySelector('#workspace')
-  if (workspace) {
-    workspace.textContent = statuses[0]?.workspaceId ?? ''
-  }
+  renderIdentity()
   const draftHadFocus = draft !== null && document.activeElement === draft.input
   const focusedCardId = document.activeElement?.closest<HTMLElement>('.card')?.dataset.cardId ?? null
 
