@@ -1,8 +1,12 @@
-import type { IssueActivityItemView, IssueActivityValueView } from '../../domain/activity-types'
+import type { IssueActivityItemView } from '../../domain/activity-types'
 import { cardDisplayTitle } from '../../domain/card-display-title'
 import type { BoardRunView } from '../../ops/runs'
+import type { IssueFieldChange } from '../../sqlite/schema'
 import type { ServeCardView, ServeCommentView, ServeStatusView } from '../views'
 import { button, el } from './dom'
+import { cardWorker } from './filters'
+import type { HistoryEntry } from './history'
+import { groupByDay, relativeTime, toHistory } from './history'
 
 /**
  * The side panel a card opens into: everything the board holds about it, read
@@ -16,6 +20,7 @@ export interface CardDetail {
   status: ServeStatusView | null
   comments: ServeCommentView[]
   activity: IssueActivityItemView[]
+  fieldChanges: IssueFieldChange[]
   runs: BoardRunView[]
 }
 
@@ -36,11 +41,8 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
   panel.append(head)
 
   panel.append(el('h2', 'panel-title', cardDisplayTitle(card)))
-  const facts = el('p', 'panel-facts', status ? status.name : 'No column')
-  if (card.waitingFor === 'human') {
-    facts.append(' ', el('span', 'waiting-badge', 'Waiting for you'))
-  }
-  panel.append(facts)
+  const history = toHistory(detail.activity, detail.fieldChanges)
+  panel.append(renderFacts(card, status, history, new Date()))
   if (card.statusLine?.trim()) {
     const line = el('p', 'status-line', card.statusLine.trim())
     line.dataset.category = status?.category ?? 'unstarted'
@@ -59,9 +61,109 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
 
   panel.append(renderDecision(card, actions))
   panel.append(section('Comments', ...renderComments(detail.comments), renderCommentForm(actions)))
-  panel.append(section('Activity', renderList(detail.activity, item => [describeActivity(item), item.createdAt], 'No activity.')))
+  panel.append(renderHistory(history, new Date()))
   panel.append(section('Runs', renderList(detail.runs, run => [describeRun(run), run.startedAt], 'No runs.')))
   return panel
+}
+
+/** Column, who made the card, who works it, priority and labels: the answers a person opens a card for. */
+function renderFacts(card: ServeCardView, status: ServeStatusView | null, history: HistoryEntry[], now: Date): HTMLElement {
+  const facts = el('dl', 'facts')
+  const row = (term: string, ...value: (HTMLElement | string)[]): void => {
+    const detail = el('dd')
+    detail.append(...value)
+    facts.append(el('dt', undefined, term), detail)
+  }
+
+  const column = el('span', undefined, status ? status.name : 'No column')
+  row('Column', column, ...(card.waitingFor === 'human' ? [' ', el('span', 'waiting-badge', 'Waiting for you')] : []))
+
+  const created = history.find(entry => entry.verb === 'created the card')
+  const creator = created
+    ? { kind: created.actor.kind, name: created.actor.name, label: created.actor.label }
+    : { kind: card.createdByKind, name: card.createdByKind === 'user' ? 'You' : card.createdById ?? card.createdByKind, label: null }
+  row('Created by', actorChip(creator), ' ', el('span', 'muted', `· ${relativeTime(created?.at ?? card.createdAt, now)}`))
+
+  const worker = cardWorker(card)
+  row('Worked by', worker ? el('span', 'actor-chip', worker.label) : 'Nobody', ...(card.activeRun?.state === 'running' ? [' ', el('span', 'muted', '· running')] : []))
+
+  if (card.priority !== 'none') {
+    const priority = el('span', 'priority', card.priority)
+    priority.dataset.priority = card.priority
+    row('Priority', priority)
+  }
+  if (card.labels.length > 0) {
+    row('Labels', ...card.labels.map(label => el('span', 'label', label)))
+  }
+  return facts
+}
+
+function actorChip(actor: HistoryEntry['actor']): HTMLElement {
+  const chip = el('span', 'actor-chip', actor.name)
+  chip.dataset.kind = actor.kind === 'provider-target' ? 'agent' : actor.kind
+  if (actor.label) {
+    chip.append(el('small', 'actor-label', ` ${actor.label}`))
+  }
+  return chip
+}
+
+/** Who changed what and when, a section per day, newest first. */
+function renderHistory(history: HistoryEntry[], now: Date): HTMLElement {
+  const wrapper = section('History')
+  if (history.length === 0) {
+    wrapper.append(el('p', 'empty', 'No history yet.'))
+    return wrapper
+  }
+  for (const group of groupByDay(history, now)) {
+    const day = el('section', 'history-day')
+    day.append(el('h4', undefined, group.day))
+    const list = el('ol', 'history-list')
+    for (const entry of group.entries) {
+      list.append(renderHistoryEntry(entry, now))
+    }
+    day.append(list)
+    wrapper.append(day)
+  }
+  return wrapper
+}
+
+function renderHistoryEntry(entry: HistoryEntry, now: Date): HTMLElement {
+  const item = el('li', 'history-entry')
+  item.dataset.kind = entry.actor.kind === 'provider-target' ? 'agent' : entry.actor.kind
+  const what = el('span', 'history-what')
+  what.append(actorChip(entry.actor), ` ${entry.verb}`)
+  if (entry.field) {
+    what.append(' ', el('span', 'history-field', entry.field))
+  }
+  const date = new Date(entry.at * 1000)
+  const time = el('time', 'history-time', relativeTime(entry.at, now))
+  time.dateTime = date.toISOString()
+  time.title = date.toLocaleString()
+  item.append(what, time)
+  if (entry.from !== null || entry.to !== null) {
+    const change = el('span', 'history-change')
+    if (entry.from !== null) {
+      change.append(el('del', 'value-from', entry.from))
+    }
+    if (entry.to !== null) {
+      change.append(el('ins', 'value-to', entry.to))
+    }
+    item.append(change)
+  }
+  if (entry.text) {
+    const details = el('details', 'history-text')
+    details.append(el('summary', undefined, 'Show before / after'))
+    const pair = el('div', 'history-text-pair')
+    for (const [side, label, value] of [['before', 'Before', entry.text.before], ['after', 'After', entry.text.after]] as const) {
+      const block = el('p', 'history-text-block')
+      block.dataset.side = side
+      block.append(el('b', undefined, label), value ?? '')
+      pair.append(block)
+    }
+    details.append(pair)
+    item.append(details)
+  }
+  return item
 }
 
 function section(title: string, ...children: HTMLElement[]): HTMLElement {
@@ -135,48 +237,6 @@ function renderList<T>(items: T[], describe: (item: T) => [string, number], empt
     list.append(row)
   }
   return list
-}
-
-/** One line of the Activity feed, in words. */
-function describeActivity(item: IssueActivityItemView): string {
-  const who = item.actor.displayName
-  if (item.kind === 'created') {
-    return `${who} created the card`
-  }
-  if (item.kind === 'comment') {
-    return `${who}: ${item.comment?.content ?? ''}`
-  }
-  const change = item.fieldChange
-  if (!change) {
-    return `${who} changed the card`
-  }
-  switch (change.action) {
-    case 'added-description':
-      return `${who} added the description`
-    case 'updated-description':
-      return `${who} updated the description`
-    case 'cleared-description':
-      return `${who} cleared the description`
-    case 'renamed-issue':
-      return `${who} renamed the card to ${describeValue(change.toValue)}`
-    case 'changed-field': {
-      const from = change.fromValue ? ` from ${describeValue(change.fromValue)}` : ''
-      return `${who} changed ${change.field ?? 'a field'}${from} to ${describeValue(change.toValue)}`
-    }
-  }
-}
-
-function describeValue(value: IssueActivityValueView | null): string {
-  if (!value) {
-    return 'nothing'
-  }
-  if (value.kind === 'text') {
-    return value.text
-  }
-  if (value.kind === 'date') {
-    return new Date(value.timestamp * 1000).toLocaleDateString()
-  }
-  return value.token === 'current-user' ? 'you' : value.token.replaceAll('-', ' ')
 }
 
 function describeRun(run: BoardRunView): string {

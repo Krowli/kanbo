@@ -25,7 +25,7 @@ Open `http://127.0.0.1:4318/`. It shows the workspace's columns in board order w
 
 - Drag a card to another column to move it; a refusal by the column's entry rules is shown as the server says it.
 - **+ New** at the top of a column creates a card from a description.
-- Click a card for its panel: description (plain text), comments and a box to add one, the activity feed, its runs, and **Approve** / **Return** while it waits for a person. Esc closes the panel.
+- Click a card for its panel: description (plain text), comments and a box to add one, who made it and who works it, and its history (before → after, who, when), its runs, and **Approve** / **Return** while it waits for a person. Esc closes the panel.
 - Opened by the link `kanbo serve` printed, the page takes the token from `#token=…`, keeps it and removes it from the address bar; otherwise type the server token into the **Token** field in the header. It is sent as `Authorization: Bearer …` and kept in the tab's `sessionStorage` only.
 - A **Project** dropdown lists every project from `~/.kanbo/projects.json` (when there is more than one), and the header says where the board lives: card prefix, folder, and `board file ~/code/app/.kanbo/board.db` or `Postgres at db.example.com`. The choice is kept in the address (`?project=<id>`). A project that left the list while the page was open is replaced by the default one, with a notice.
 - The page polls `GET /issues/version` every two seconds while its tab is visible and reloads when the board changed.

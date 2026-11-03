@@ -1,5 +1,6 @@
 import type { IssueActivityItemView } from '../../domain/activity-types'
 import type { BoardRunView } from '../../ops/runs'
+import type { IssueFieldChange } from '../../sqlite/schema'
 import type { ServeErrorBody } from '../errors'
 import type { ServeProjectView } from '../projects'
 import type { ServeCardView, ServeCommentView, ServeStatusView } from '../views'
@@ -30,6 +31,8 @@ export interface BoardApi {
   addComment: (cardId: string, content: string) => Promise<ServeCommentView>
   activity: (cardId: string) => Promise<IssueActivityItemView[]>
   runs: (cardId: string) => Promise<BoardRunView[]>
+  /** The raw field changes, for the texts of a description change. */
+  fieldChanges: (cardId: string) => Promise<IssueFieldChange[]>
   approve: (cardId: string, comment: string | null) => Promise<ServeCardView>
   returnCard: (cardId: string, comment: string) => Promise<ServeCardView>
 }
@@ -84,6 +87,7 @@ export function createBoardApi(readToken: () => string | null, readBase: () => s
     addComment: async (cardId, content) => await request('POST', `${card(cardId)}/comments`, { content }),
     activity: async cardId => await request('GET', `${card(cardId)}/activity`),
     runs: async cardId => await request('GET', `${card(cardId)}/runs`),
+    fieldChanges: async cardId => await request('GET', `${card(cardId)}/field-changes`),
     approve: async (cardId, comment) => await request('POST', `${card(cardId)}/approve`, { comment }),
     returnCard: async (cardId, comment) => await request('POST', `${card(cardId)}/return`, { comment }),
   }

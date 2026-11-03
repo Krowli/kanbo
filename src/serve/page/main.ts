@@ -449,8 +449,8 @@ async function loadDetail(): Promise<void> {
     return
   }
   try {
-    const [comments, activity, runs] = await Promise.all([api.comments(cardId), api.activity(cardId), api.runs(cardId)])
-    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs }
+    const [comments, activity, runs, fieldChanges] = await Promise.all([api.comments(cardId), api.activity(cardId), api.runs(cardId), api.fieldChanges(cardId)])
+    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs, fieldChanges }
   }
   catch (error) {
     panelNotice = describeFailure(error)

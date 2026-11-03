@@ -419,6 +419,88 @@ button {
   color: var(--muted-foreground);
 }
 
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+
+.facts dt {
+  color: var(--muted-foreground);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.muted {
+  color: var(--muted-foreground);
+}
+
+.actor-chip {
+  font-weight: 500;
+}
+
+.actor-label {
+  font-weight: 400;
+  color: var(--muted-foreground);
+}
+
+.label {
+  margin-right: 4px;
+}
+
+.history-day h4 {
+  margin: 10px 0 4px;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.history-entry {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.history-time {
+  margin-left: 8px;
+  color: var(--muted-foreground);
+}
+
+.history-change {
+  display: block;
+}
+
+.history-change del {
+  color: var(--muted-foreground);
+  margin-right: 6px;
+}
+
+.history-change ins {
+  text-decoration: none;
+}
+
+.history-text-block {
+  margin: 4px 0;
+  white-space: pre-wrap;
+}
+
+.history-text-block b {
+  display: block;
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
 .panel .status-line {
   white-space: normal;
 }
