@@ -4,6 +4,8 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-11-04
+
 ### Added
 
 - The board page shows sub-cards: a sub-card names its parent (click opens it), a parent shows how many of its sub-cards are done, and its panel lists them with their column, waiting or running state and who works them.
@@ -18,7 +20,7 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 ### Changed
 
 - A card on the board page opens in a large dialog instead of the narrow side panel: title and state on top, description, sub-cards and Comments / History / Runs tabs on the left, the decision and details on the right. Esc, ✕ or a click outside closes it; a board change an agent makes no longer resets your tab or scroll.
-- The board page has a new look (`src/serve/page/DIRECTION.md`): a strip board of paper and ink, light and dark. Each card carries a coloured edge for its state — orange only for "Waiting for you", blue while an agent runs it ("Running · claude"), green when done — and reads top to bottom as state, title, key and who works it, status line, priority and labels. The board fills the window under the bars and each column scrolls on its own; from 900 px wide the panel sits beside the board instead of over it. Only what changed moves: a card that is new or changed column fades in once, a badge calls once when a card starts waiting, the panel slides in when it opens — never on an ordinary refresh, and nothing at all with reduced motion. On a narrow screen the token field folds into a "Token" button once a token works. History entries from before today show their clock time under their day.
+- The board page has a new look (`src/serve/page/DIRECTION.md`): a strip board of paper and ink, light and dark. Each card carries a coloured edge for its state — orange only for "Waiting for you", blue while an agent runs it ("Running · claude"), green when done — and reads top to bottom as state, title, key and who works it, status line, priority and labels. The board fills the window under the bars and each column scrolls on its own. Only what changed moves: a card that is new or changed column fades in once, a badge calls once when a card starts waiting, a card's window fades in when it opens — never on an ordinary refresh, and nothing at all with reduced motion. On a narrow screen the token field folds into a "Token" button once a token works. History entries from before today show their clock time under their day.
 - The MCP tools that write a card — `kanbo_card_create`, `kanbo_card_update`, `kanbo_card_move`, `kanbo_status_line`, `kanbo_wait_approval` — answer with the card compact, on one line, as `kanbo_card_list` prints it (`id`, `title`, `column` slug, `statusLine`, `waitingFor`, `parentId`, `attempt`, `activeRun`, `updatedAt`), instead of every field pretty-printed: an orchestrator writing its card 20–40 times a session got 5–19k characters back each time — 19k for a one-sentence status line — and read them again on every later turn. Each takes `detail: "full"` for the whole card, as before. The CLI prints what it printed. For applications that read these tools' answers: they are compact now; pass `detail: "full"` for the old answer.
 - A write from an agent's shell is filed under the agent's name (`claude`, `codex`, `cursor`, `gemini`), and one through `kanbo mcp` under that, else the MCP client's own name, instead of the operating-system user; `KANBO_ACTOR_ID` still wins. The board page shows the writes of the person who started `kanbo serve` as **You** and every other writer by name. Rows written before this keep the OS user name, so on an existing board an agent's old writes now read as **You**.
 - A comment written from the board page is the person's (`authorKind: user`), and the page writes under the person at the machine (`KANBO_ACTOR_ID` in a person's shell, else the OS user) even when `kanbo serve` was started from an agent's shell, where it used to sign them with the agent's name. A request without the token, or sending `x-kanbo-actor: agent`, still writes as the server's writer. Rows written before keep what they were written with.
@@ -190,6 +192,7 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
+[0.4.0]: https://github.com/Krowli/kanbo/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Krowli/kanbo/releases/tag/v0.3.0
 [0.2.1]: https://github.com/Krowli/kanbo/releases/tag/v0.2.1
 [0.2.0]: https://github.com/Krowli/kanbo/releases/tag/v0.2.0
