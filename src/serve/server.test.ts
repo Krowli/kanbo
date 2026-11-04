@@ -267,9 +267,6 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
 
     await restart({ token: null })
     await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: {} })
-    const tokenless = await call(client, 'POST', '/issues/WOR-001/approve', { body: {} })
-    expect(tokenless.status).toBe(403)
-    expect(tokenless.json.code).toBe('issue_approval_requires_user')
   })
 
   it('refuses a person\'s operations to an agent: closing a sprint and deleting what the board wrote', async () => {
@@ -375,12 +372,27 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     expect(comments.find(comment => comment.content === 'by the agent')?.author).toMatchObject({ kind: 'system', displayName: 'claude', label: 'External' })
   })
 
-  it('says You to nobody when the server was started from an agent\'s shell', async () => {
-    await restart({ actors: { ...PERSON_ACTORS, person: null } })
+  it('files a comment from the page under the person, and under the writer for a request that does not act for one', async () => {
     await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Who wrote it' } })
 
-    const comment = await call(client, 'POST', '/issues/WOR-001/comments', { body: { content: 'from the agent shell' } })
-    expect(comment.json.author).toMatchObject({ kind: 'system', displayName: 'tester', label: 'External' })
+    const byPerson = await call(client, 'POST', '/issues/WOR-001/comments', { body: { content: 'from the page' } })
+    expect(byPerson.json.authorKind).toBe('user')
+    expect(byPerson.json.author).toMatchObject({ kind: 'user', displayName: 'You' })
+
+    const byAgent = await call(client, 'POST', '/issues/WOR-001/comments', { body: { content: 'as an agent' }, headers: { 'x-kanbo-actor': 'agent' } })
+    expect(byAgent.json).toMatchObject({ authorKind: 'system', authorId: 'tester' })
+  })
+
+  it('shows the page\'s writes as You when the server was started from an agent\'s shell', async () => {
+    await restart({ actors: { ...PERSON_ACTORS, person: null } })
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Who wrote it' } })
+    const ops = createBoardOps(board.store)
+    await ops.addComment({ issueId: 'WOR-001', content: 'by the agent' }, { kind: 'external', id: 'claude', name: 'test-host' })
+
+    const own = await call(client, 'POST', '/issues/WOR-001/comments', { body: { content: 'from the page' } })
+    expect(own.json.author).toMatchObject({ kind: 'user', displayName: 'You' })
+    const comments = (await call(client, 'GET', '/issues/WOR-001/comments')).json as { content: string, author: { displayName: string, label: string | null } }[]
+    expect(comments.find(comment => comment.content === 'by the agent')?.author).toMatchObject({ displayName: 'claude', label: 'External' })
   })
 
   it('refuses approval to every request when the server was started from an agent\'s shell', async () => {

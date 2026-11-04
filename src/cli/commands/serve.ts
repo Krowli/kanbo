@@ -11,7 +11,7 @@ import {
   describePersonRights,
   startKanboServer,
 } from '../../serve/server'
-import { createCliActor, createPersonActor, isAgentShell } from '../actor'
+import { createPersonActor, createServeWriter, isAgentShell } from '../actor'
 import { findBinding, readProjectBinding } from '../binding'
 import { openBoardSession } from '../command'
 import { describeFailure } from '../failure'
@@ -109,13 +109,13 @@ export async function startServe(options: ServeCommandOptions, output: ServeOutp
     mostRecent?.path,
   )
   const agentShell = isAgentShell()
-  const actors: ServeActors = { writer: createCliActor(), person: agentShell ? null : createPersonActor() }
+  const actors: ServeActors = { writer: createServeWriter(), person: agentShell ? null : createPersonActor() }
   const projects = createServeProjects({
     defaultProject: defaultDir === null ? null : { dir: defaultDir, session },
     readRegistry: () => readProjectRegistry(),
     readBinding: dir => readProjectBinding(dir),
     openSession: async dir => await openBoardSession({}, 'read', dir),
-    personWriterId: actors.person ? actors.writer.id : null,
+    personWriterId: actors.writer.id,
   })
 
   // The server stops by itself exactly when this run opens the browser.

@@ -592,7 +592,7 @@ export function createIssueRoutes(session: BoardSession, options: { personWriter
       write: true,
       handle: async ({ params, body, actors }) => {
         await requireCard(params.id)
-        return toCommentView(await ops.addComment({ issueId: params.id, content: body.content }, actors.writer), personWriterId)
+        return toCommentView(await ops.addComment({ issueId: params.id, content: body.content }, actors.person), personWriterId)
       },
     }),
     route({

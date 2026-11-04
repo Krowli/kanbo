@@ -152,6 +152,15 @@ export function createPlacementActor(): BoardActor {
   return isAgentShell() ? createCliActor() : { ...createCliActor(), placesForPerson: true }
 }
 
+/** Who the board page writes as: the person at this machine — `KANBO_ACTOR_ID` in a person's shell, else the OS user; never an agent tool, since the page is read and typed in by a person. */
+export function createServeWriter(): BoardActor {
+  return {
+    kind: 'external',
+    id: (isAgentShell() ? '' : process.env.KANBO_ACTOR_ID?.trim() ?? '') || safeUsername(),
+    name: hostname(),
+  }
+}
+
 /**
  * The person who owns this shell, as the board files a person. Only for a
  * caller that has already asked `isAgentShell` — `requireHumanActor` for a
