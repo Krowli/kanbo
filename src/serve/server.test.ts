@@ -404,6 +404,37 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     expect(approved.json.code).toBe('issue_approval_requires_user')
   })
 
+  it('reads an approval and a return as the person, and the board\'s own lines as kanbo', async () => {
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Needs a person', statusName: 'in_review' } })
+    await call(client, 'POST', '/issues/WOR-001/runs', { body: { agentName: 'claude' } })
+    await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: { statusLine: 'look at this' } })
+    await call(client, 'POST', '/issues/WOR-001/return', { body: { comment: 'not yet' } })
+    await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: { statusLine: 'again' } })
+    await call(client, 'POST', '/issues/WOR-001/approve', { body: { comment: 'fine' } })
+
+    const comments = (await call(client, 'GET', '/issues/WOR-001/comments')).json as { authorKind: string, author: { kind: string, displayName: string } }[]
+    expect(comments.find(comment => comment.authorKind === 'system.approved')?.author).toMatchObject({ kind: 'user', displayName: 'You' })
+    expect(comments.find(comment => comment.authorKind === 'system.returned')?.author).toMatchObject({ kind: 'user', displayName: 'You' })
+    expect(comments.find(comment => comment.authorKind === 'system.run')?.author).toMatchObject({ kind: 'system', displayName: 'kanbo' })
+  })
+
+  it('hands a card the person returns to the next agent session', async () => {
+    const created = await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Count lines', statusName: 'in_review' } })
+    expect(created.status).toBe(200)
+    expect((await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: { statusLine: 'look at this' } })).status).toBe(200)
+
+    const returned = await call(client, 'POST', '/issues/WOR-001/return', { body: { comment: 'An empty file must print 0' } })
+    expect(returned.status).toBe(200)
+    expect(returned.json).toMatchObject({ waitingFor: null, statusLine: 'returned by a person: An empty file must print 0' })
+    expect(returned.json.statusId).not.toBe(created.json.statusId)
+
+    const ops = createBoardOps(board.store)
+    const listed = await ops.queryCards({ workspaceId: WORKSPACE.id, returned: true })
+    expect(listed.cards.map(card => card.id)).toEqual(['WOR-001'])
+    const [attention] = await ops.readCardAttention(listed.cards, [false])
+    expect(attention).toMatchObject({ returned: true, lastComment: { author: 'user', text: 'An empty file must print 0' } })
+  })
+
   it('reaches no workspace but its own', async () => {
     const ops = createBoardOps(board.store)
     const foreign = await ops.createCard({ workspace: OTHER_WORKSPACE, title: 'Not yours' }, PERSON_ACTORS.writer)

@@ -66,6 +66,9 @@ export function toStatusView(status: IssueStatus): ServeStatusView {
 }
 
 export function toCommentView(comment: IssueComment, personWriterId: string | null = null): ServeCommentView {
+  if (comment.authorKind === 'system.approved' || comment.authorKind === 'system.returned') {
+    return { ...comment, author: { kind: 'user', id: comment.authorId ?? '__self__', displayName: 'You', avatarUrl: null, label: null } }
+  }
   return { ...comment, author: resolveActor(commentAuthorReference(comment), personWriterId) }
 }
 
