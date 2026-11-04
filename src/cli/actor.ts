@@ -3,7 +3,7 @@ import { hostname, userInfo } from 'node:os'
 import type { Command } from 'commander'
 
 import type { BoardActor } from '../ops/types'
-import { readAgentShellMarker } from './agent-shell'
+import { readAgentShellMarker, readAgentTool } from './agent-shell'
 import { CliError, EXIT_HUMAN_ONLY } from './output'
 
 /**
@@ -104,11 +104,15 @@ const HUMAN_ONLY_MESSAGES: Record<HumanOnlyAction, (marker: string, words: reado
   'run attach-session --replace': describeRunSessionRefRefusal,
 }
 
-/** The actor every board write from this tool is filed under. */
+/**
+ * The actor every board write from this tool is filed under: `KANBO_ACTOR_ID`,
+ * else the agent tool of an agent's shell (`claude`, `codex`, ...), else the
+ * operating system's user.
+ */
 export function createCliActor(): BoardActor {
   return {
     kind: 'external',
-    id: process.env.KANBO_ACTOR_ID?.trim() || safeUsername(),
+    id: process.env.KANBO_ACTOR_ID?.trim() || readAgentTool() || safeUsername(),
     name: hostname(),
   }
 }
@@ -146,6 +150,15 @@ export function requireHumanActor(action: HumanOnlyAction, words: readonly strin
  */
 export function createPlacementActor(): BoardActor {
   return isAgentShell() ? createCliActor() : { ...createCliActor(), placesForPerson: true }
+}
+
+/** Who the board page writes as: the person at this machine — `KANBO_ACTOR_ID` in a person's shell, else the OS user; never an agent tool, since the page is read and typed in by a person. */
+export function createServeWriter(): BoardActor {
+  return {
+    kind: 'external',
+    id: (isAgentShell() ? '' : process.env.KANBO_ACTOR_ID?.trim() ?? '') || safeUsername(),
+    name: hostname(),
+  }
 }
 
 /**

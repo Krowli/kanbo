@@ -1,12 +1,21 @@
+import type { ServeProjectView } from '../projects'
 import type { ServeCardView, ServeStatusView } from '../views'
 import type { BoardApi } from './api'
 import { ApiError, createBoardApi } from './api'
 import { renderCard } from './card-element'
 import { button, el } from './dom'
+import type { Placement } from './enter'
+import { enterOf, placementsOf, startsWaiting } from './enter'
+import { renderFilterBar, updateFilterCount } from './filter-bar'
+import type { CardFilters } from './filters'
+import { filterOptions, matchesFilters, readFilters, writeFilters } from './filters'
 import type { BoardColumn } from './grouping'
 import { groupBoard } from './grouping'
-import type { CardDetail } from './panel'
-import { renderPanel } from './panel'
+import type { CardDetail, PanelTab } from './panel'
+import { readScroll, renderPanel } from './panel'
+import { childrenOf, parentOf, subcardSummary } from './subcards'
+import { startPresence } from './presence'
+import { renderProjectSwitcher, renderWhere } from './project-switcher'
 import { adoptTokenFromLocation, readStoredToken, storeToken } from './token'
 
 /**
@@ -24,13 +33,26 @@ const POLL_INTERVAL_MS = 2000
 
 adoptTokenFromLocation()
 let token = readStoredToken()
-const api: BoardApi = createBoardApi(() => token)
+/** The project the page shows: the `?project=` in its address, or the one the server was started in. */
+let projectId: string | null = new URLSearchParams(location.search).get('project')
+let projects: ServeProjectView[] = []
+let workspaceInfo: { id: string, identifier: string, name: string } | null = null
+/** What the top bar was last built from, so a poll that changed nothing leaves an open dropdown alone. */
+let identityKey = ''
+const api: BoardApi = createBoardApi(() => token, () => projectId === null ? '' : `/projects/${encodeURIComponent(projectId)}`)
+
+/** What the bar above the board narrows the cards to; kept in the address so a reload shows the same. */
+let filters: CardFilters = readFilters(location.search)
+/** What the filter bar was last built from. */
+let filterBarKey = ''
 
 let statuses: ServeStatusView[] = []
 let cards: ServeCardView[] = []
 let seq: number | null = null
 /** The token was refused or is missing: stop polling until the person gives one. */
 let needsToken = false
+/** The server did not answer at all: it has stopped, so polling it only repeats the failure. */
+let serverGone = false
 let refreshing = false
 
 /** The column a new card is being written in, and the form it is written in. */
@@ -40,19 +62,56 @@ let detail: CardDetail | null = null
 let panelNotice: string | null = null
 let draggedCardId: string | null = null
 
+/** The last render's card placements, so only a card that is new or changed column moves; `null` before the first render. */
+let lastPlacement: ReadonlyMap<string, Placement> | null = null
+
 const root = document.querySelector<HTMLElement>('#app') ?? document.body
+const header = el('header', 'topbar')
 const tokenInput = el('input', 'field token-input')
+const tokenToggle = button('Token', 'ghost token-toggle', () => {
+  tokenUnfolded = !tokenUnfolded
+  updateTokenFold()
+  if (tokenUnfolded) {
+    tokenInput.focus()
+  }
+})
 const notice = el('p', 'notice')
 const boardElement = el('main', 'board')
 const panelHost = el('div', 'panel-host')
+const projectSlot = el('span', 'project-slot')
+const filterSlot = el('div', 'filter-slot')
+
+/** The last load of the board worked. */
+let loadWorked = false
+/** The person opened the folded token form with its button. */
+let tokenUnfolded = false
+
+/**
+ * Once a kept token has loaded the board, the token form may fold into its
+ * "Token" button (only a narrow screen does, by CSS); a refused token, a
+ * missing one or a failed load unfolds it again.
+ */
+function updateTokenFold(): void {
+  if (token === null || needsToken || !loadWorked) {
+    tokenUnfolded = false
+    delete header.dataset.token
+  }
+  else {
+    header.dataset.token = tokenUnfolded ? 'unfolded' : 'folded'
+  }
+  tokenToggle.setAttribute('aria-expanded', String(header.dataset.token !== 'folded'))
+}
 
 function mountShell(): void {
-  const header = el('header', 'topbar')
+  root.classList.add('app')
   const title = el('h1', 'topbar-title', 'Kanbo')
   const workspace = el('span', 'workspace')
   workspace.id = 'workspace'
+  projectSlot.id = 'project-switcher'
 
   const tokenForm = el('form', 'token-form')
+  tokenForm.id = 'token-form'
+  tokenToggle.setAttribute('aria-controls', tokenForm.id)
   tokenInput.type = 'password'
   tokenInput.autocomplete = 'off'
   tokenInput.placeholder = 'Server token'
@@ -67,14 +126,16 @@ function mountShell(): void {
     token = tokenInput.value.trim() || null
     storeToken(token)
     needsToken = false
+    tokenUnfolded = false
     showNotice(null)
     void refresh()
   })
 
-  header.append(title, workspace, tokenForm)
+  header.append(title, projectSlot, tokenToggle, workspace, tokenForm)
+  updateTokenFold()
   notice.setAttribute('role', 'status')
   notice.hidden = true
-  root.replaceChildren(header, notice, boardElement, panelHost)
+  root.replaceChildren(header, notice, filterSlot, boardElement, panelHost)
 }
 
 /** Whether the notice on screen says the board could not be loaded, so that the next good load takes it away. */
@@ -90,8 +151,14 @@ function showNotice(text: string | null, kind: 'info' | 'error' = 'info'): void 
 /** What a failed request says to the person, asking for the token when that is what is missing. */
 function describeFailure(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.code === 'server_unreachable') {
+      serverGone = true
+      return error.message
+    }
     if (error.status === 401) {
       needsToken = true
+      // Unfolded first: a folded field cannot take the focus.
+      updateTokenFold()
       tokenInput.focus()
       return 'This server needs its token. Enter it in the Token field above.'
     }
@@ -103,9 +170,14 @@ function describeFailure(error: unknown): string {
 function showLoadFailure(error: unknown): void {
   showNotice(describeFailure(error), 'error')
   loadFailed = true
+  loadWorked = false
+  updateTokenFold()
 }
 
+/** A load worked: take away the notice that said it had not. */
 function clearLoadFailure(): void {
+  loadWorked = true
+  updateTokenFold()
   if (loadFailed) {
     loadFailed = false
     showNotice(null)
@@ -120,10 +192,12 @@ async function refresh(): Promise<void> {
   try {
     // The version first: a change landing while the rest loads is seen by the next poll.
     const version = await api.version()
-    const [nextStatuses, nextCards] = await Promise.all([api.statuses(), api.cards()])
+    const [nextStatuses, nextCards, nextProjects, nextWorkspace] = await Promise.all([api.statuses(), api.cards(), api.projects(), api.workspace()])
     seq = version
     statuses = nextStatuses
     cards = nextCards
+    projects = nextProjects
+    workspaceInfo = nextWorkspace
     renderBoard()
     clearLoadFailure()
     if (openCardId) {
@@ -131,15 +205,60 @@ async function refresh(): Promise<void> {
     }
   }
   catch (error) {
-    showLoadFailure(error)
+    if (!fallBackToDefaultProject(error)) {
+      showLoadFailure(error)
+    }
   }
   finally {
     refreshing = false
   }
+  if (fellBack) {
+    fellBack = false
+    await refresh()
+  }
+}
+
+let fellBack = false
+
+/** The project in the address left the computer's list while the page was open: show the default one and say so. */
+function fallBackToDefaultProject(error: unknown): boolean {
+  if (!(error instanceof ApiError) || error.code !== 'project_not_found' || projectId === null) {
+    return false
+  }
+  const fallback = projects.find(project => project.isDefault)
+  chooseProject(null)
+  showNotice(`That project is no longer on this computer's list; showing ${fallback?.name ?? 'the board this server was started on'}.`)
+  fellBack = true
+  return true
+}
+
+/** Show another project (`null`: the one the server was started in) from a clean slate. */
+function chooseProject(id: string | null): void {
+  projectId = id
+  const url = new URL(location.href)
+  if (id === null) {
+    url.searchParams.delete('project')
+  }
+  else {
+    url.searchParams.set('project', id)
+  }
+  // Who works a card and which labels exist belong to a project; the rest of the filters carry over.
+  filters = { ...filters, worker: null, labels: [] }
+  writeFiltersToAddress(url)
+  seq = null
+  draft = null
+  closePanel()
+  statuses = []
+  cards = []
+  // Another project's first render moves nothing, like the page's first.
+  lastPlacement = null
+  workspaceInfo = null
+  identityKey = ''
+  showNotice(null)
 }
 
 async function poll(): Promise<void> {
-  if (document.visibilityState !== 'visible' || needsToken || refreshing) {
+  if (document.visibilityState !== 'visible' || needsToken || serverGone || refreshing) {
     return
   }
   try {
@@ -151,25 +270,95 @@ async function poll(): Promise<void> {
     }
   }
   catch (error) {
-    showLoadFailure(error)
+    if (fallBackToDefaultProject(error)) {
+      await refresh()
+    }
+    else {
+      showLoadFailure(error)
+    }
   }
 }
 
-function renderBoard(): void {
-  const workspace = document.querySelector('#workspace')
-  if (workspace) {
-    workspace.textContent = statuses[0]?.workspaceId ?? ''
+/** The top bar's project switcher and the line saying where this board lives. */
+function renderIdentity(): void {
+  // Never a guess: with no project named and none the server's own, nothing is "current".
+  const current = projectId === null
+    ? projects.find(project => project.isDefault) ?? null
+    : projects.find(project => project.id === projectId) ?? null
+  const key = JSON.stringify([projects, projectId, current?.id, workspaceInfo])
+  if (key === identityKey) {
+    return
   }
+  identityKey = key
+  const hasDefault = projects.some(project => project.isDefault)
+  const choose = (id: string): void => {
+    chooseProject(id === '' ? null : id)
+    void refresh()
+  }
+  projectSlot.replaceChildren(...(projects.length > (hasDefault ? 1 : 0)
+    ? [renderProjectSwitcher(projects, current?.id ?? null, choose, hasDefault ? null : { name: projectId === null ? workspaceInfo?.name ?? null : null })]
+    : []))
+  const where = document.querySelector('#workspace')
+  if (where) {
+    where.replaceChildren(...(workspaceInfo ? [renderWhere(current, workspaceInfo)] : []))
+  }
+}
+
+/** Put the filters into the address (keeping `project` and whatever else is there) without adding a history entry. */
+function writeFiltersToAddress(url: URL = new URL(location.href)): void {
+  history.replaceState(null, '', `${url.pathname}${writeFilters(filters, url.search)}${url.hash}`)
+}
+
+function changeFilters(next: CardFilters): void {
+  filters = next
+  writeFiltersToAddress()
+  renderBoard()
+}
+
+function renderBoard(): void {
+  renderIdentity()
   const draftHadFocus = draft !== null && document.activeElement === draft.input
   const focusedCardId = document.activeElement?.closest<HTMLElement>('.card')?.dataset.cardId ?? null
+  const searchInput = filterSlot.querySelector<HTMLInputElement>('.filter-search')
+  const searchHadFocus = searchInput !== null && document.activeElement === searchInput
+  const caret = searchInput ? [searchInput.selectionStart, searchInput.selectionEnd, searchInput.selectionDirection] as const : null
 
-  boardElement.replaceChildren(...groupBoard(statuses, cards).map(renderColumn))
+  const shown = cards.filter(card => matchesFilters(card, filters))
+  const counts = { shown: shown.length, total: cards.length }
+  const options = filterOptions(cards)
+  // Rebuilt only when what it is built from changed: a poll that only moved a status line leaves an open dropdown alone.
+  const barKey = JSON.stringify([filters, options])
+  if (barKey !== filterBarKey || !filterSlot.firstElementChild) {
+    filterBarKey = barKey
+    filterSlot.replaceChildren(renderFilterBar(filters, options, counts, changeFilters))
+  }
+  else {
+    updateFilterCount(filterSlot.firstElementChild as HTMLElement, counts)
+  }
+  boardElement.replaceChildren(...groupBoard(statuses, shown).map(renderColumn))
+  // Every card, shown or not: a filter that brings a card into view does not make it new.
+  lastPlacement = placementsOf(cards)
+  markOpenCard()
 
-  if (draftHadFocus) {
+  if (searchHadFocus) {
+    const next = filterSlot.querySelector<HTMLInputElement>('.filter-search')
+    next?.focus()
+    if (next && caret) {
+      next.setSelectionRange(caret[0], caret[1], caret[2] ?? undefined)
+    }
+  }
+  else if (draftHadFocus) {
     draft?.input.focus()
   }
   else if (focusedCardId) {
     focusCard(focusedCardId)
+  }
+}
+
+/** The card whose panel is open carries `data-open`, so it reads as open on the board. */
+function markOpenCard(): void {
+  for (const card of boardElement.querySelectorAll<HTMLElement>('.card')) {
+    card.toggleAttribute('data-open', card.dataset.cardId === openCardId)
   }
 }
 
@@ -197,7 +386,18 @@ function renderColumn(column: BoardColumn): HTMLElement {
     list.append(draft.form)
   }
   for (const card of column.cards) {
-    const cardElement = renderCard(card, status?.category ?? null, opened => void openCard(opened.id))
+    const cardElement = renderCard(card, status?.category ?? null, opened => void openCard(opened.id), {
+      parent: parentOf(cards, card),
+      summary: subcardSummary(cards, statuses, card.id),
+      onOpenCard: id => void openCard(id),
+    })
+    const enter = enterOf(lastPlacement, card)
+    if (enter) {
+      cardElement.dataset.enter = enter
+    }
+    if (startsWaiting(lastPlacement, card)) {
+      cardElement.querySelector<HTMLElement>('.waiting-badge')?.setAttribute('data-enter', 'waiting')
+    }
     cardElement.addEventListener('dragstart', (event) => {
       draggedCardId = card.id
       event.dataTransfer?.setData('text/plain', card.id)
@@ -300,9 +500,13 @@ function openDraft(status: ServeStatusView): void {
   input.focus()
 }
 
+/** The tab the dialog is on; kept from card to card, so reading History card after card stays on History. */
+let panelTab: PanelTab = 'comments'
+
 async function openCard(cardId: string): Promise<void> {
   openCardId = cardId
   panelNotice = null
+  markOpenCard()
   await loadDetail()
 }
 
@@ -318,8 +522,8 @@ async function loadDetail(): Promise<void> {
     return
   }
   try {
-    const [comments, activity, runs] = await Promise.all([api.comments(cardId), api.activity(cardId), api.runs(cardId)])
-    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs }
+    const [comments, activity, runs, fieldChanges] = await Promise.all([api.comments(cardId), api.activity(cardId), api.runs(cardId), api.fieldChanges(cardId)])
+    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs, fieldChanges, parent: parentOf(cards, card), children: childrenOf(cards, statuses, cardId), statuses, tab: panelTab }
   }
   catch (error) {
     panelNotice = describeFailure(error)
@@ -334,6 +538,7 @@ function hasUnsentText(container: HTMLElement): boolean {
 function renderPanelHost(): void {
   if (!detail || detail.card.id !== openCardId) {
     panelHost.replaceChildren()
+    setBackgroundInert(false)
     return
   }
   const cardId = detail.card.id
@@ -348,10 +553,25 @@ function renderPanelHost(): void {
     returnCard: comment => void act(async () => {
       await api.returnCard(cardId, comment)
     }),
+    openCard: id => void openCard(id),
+    selectTab: (tab) => {
+      panelTab = tab
+      if (detail) {
+        detail = { ...detail, tab }
+      }
+    },
   }, panelNotice)
   const opening = !panelHost.firstChild
+  const previousTop = readScroll(panelHost, cardId)
   panelHost.replaceChildren(panel)
+  const scroller = panel.querySelector<HTMLElement>('.panel-scroll')
+  if (scroller) {
+    scroller.scrollTop = previousTop
+  }
   if (opening) {
+    setBackgroundInert(true)
+    // Fades in this once; the rebuilds on later polls stay still.
+    panel.classList.add('panel--opening')
     panel.querySelector<HTMLElement>('button')?.focus()
   }
 }
@@ -381,12 +601,27 @@ async function act(action: () => Promise<void>): Promise<void> {
   await refresh()
 }
 
+/** While the dialog is open the board behind it can't be reached by Tab or a screen reader. */
+function setBackgroundInert(inert: boolean): void {
+  for (const region of [header, notice, filterSlot, boardElement]) {
+    region.inert = inert
+  }
+}
+
+panelHost.addEventListener('click', (event) => {
+  if (event.target === panelHost) {
+    closePanel()
+  }
+})
+
 function closePanel(): void {
   const cardId = openCardId
   openCardId = null
   detail = null
   panelNotice = null
   panelHost.replaceChildren()
+  setBackgroundInert(false)
+  markOpenCard()
   if (cardId) {
     focusCard(cardId)
   }
@@ -396,9 +631,19 @@ document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && openCardId) {
     closePanel()
   }
+  else if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey && !isTyping(event.target)) {
+    event.preventDefault()
+    filterSlot.querySelector<HTMLInputElement>('.filter-search')?.focus()
+  }
 })
+
+function isTyping(target: EventTarget | null): boolean {
+  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
+}
 document.addEventListener('visibilitychange', () => void poll())
 
 mountShell()
 void refresh()
 setInterval(() => void poll(), POLL_INTERVAL_MS)
+// Last, so nothing presence does can keep the board from loading.
+startPresence(() => token)

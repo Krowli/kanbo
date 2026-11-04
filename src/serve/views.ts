@@ -65,8 +65,11 @@ export function toStatusView(status: IssueStatus): ServeStatusView {
   return { ...status, entryRules: readEntryRules(status) }
 }
 
-export function toCommentView(comment: IssueComment): ServeCommentView {
-  return { ...comment, author: resolveActor(commentAuthorReference(comment)) }
+export function toCommentView(comment: IssueComment, personWriterId: string | null = null): ServeCommentView {
+  if (comment.authorKind === 'system.approved' || comment.authorKind === 'system.returned') {
+    return { ...comment, author: { kind: 'user', id: comment.authorId ?? '__self__', displayName: 'You', avatarUrl: null, label: null } }
+  }
+  return { ...comment, author: resolveActor(commentAuthorReference(comment), personWriterId) }
 }
 
 /**
@@ -74,14 +77,19 @@ export function toCommentView(comment: IssueComment): ServeCommentView {
  *
  * For the kinds that need nobody else's tables: an outside writer is shown
  * under the name it gave, the board writing for itself is `kanbo`, and a person
- * is `You`. An agent and a provider target are rows of whatever app launched
+ * is `You`. So is an outside writer that is the person who started this
+ * server (`personWriterId`): their own writes carry the name their shell files
+ * them under. An agent and a provider target are rows of whatever app launched
  * them, which this server cannot read, so they are shown by the id the board
  * holds for them.
  */
-function resolveActor(actor: IssueActorReference): IssueCommentAuthorView {
+function resolveActor(actor: IssueActorReference, personWriterId: string | null): IssueCommentAuthorView {
   if (actor.kind === 'system') {
     const provenance = { authorId: actor.id, sourceChatSessionId: actor.sourceChatSessionId }
     if (isOutsideWriter(provenance)) {
+      if (personWriterId !== null && provenance.authorId === personWriterId) {
+        return { kind: 'user', id: provenance.authorId, displayName: 'You', avatarUrl: null, label: null }
+      }
       return { kind: 'system', id: provenance.authorId, displayName: provenance.authorId, avatarUrl: null, label: 'External' }
     }
     return { kind: 'system', id: null, displayName: 'kanbo', avatarUrl: null, label: 'System' }
@@ -100,10 +108,10 @@ function resolveActor(actor: IssueActorReference): IssueCommentAuthorView {
  * serves, named by its identity; actors as `resolveActor` reads them; and an
  * agent assignee by its id.
  */
-export function createActivityResolver(workspace: BoardWorkspaceIdentity): IssueActivityResolver {
+export function createActivityResolver(workspace: BoardWorkspaceIdentity, personWriterId: string | null = null): IssueActivityResolver {
   return {
     workspaceById: new Map([[workspace.id, { id: workspace.id, name: workspace.name }]]),
-    resolveActor: async actor => resolveActor(actor),
+    resolveActor: async actor => resolveActor(actor, personWriterId),
     resolveAgentName: async agentId => agentId,
   }
 }

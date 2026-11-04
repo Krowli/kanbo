@@ -538,7 +538,7 @@ describe('the board\'s tools over a real board', () => {
    * `kanbo serve` does — and filtering on no more than it does: one column and
    * one parent. Whatever else a query names, the transport has to apply itself.
    */
-  function overHttpFromBoard() {
+  function overHttpFromBoard(commentRows?: unknown[]) {
     const ops = boardOps()
     const store = createSqliteBoardStore({ database: () => board.database })
     return createHttpTransport({
@@ -560,7 +560,7 @@ describe('the board\'s tools over a real board', () => {
         }
         const [, , id, part] = route.split('/')
         if (part === 'comments') {
-          return await ops.listComments(id!)
+          return commentRows ?? await ops.listComments(id!)
         }
         if (part === 'runs') {
           return await ops.listRuns(id!)
@@ -883,7 +883,7 @@ describe('the board\'s tools over a real board', () => {
     expect(byDefault.commentCount).toBe(12)
     expect(byDefault.comments.map((comment: { content: string }) => comment.content))
       .toEqual(Array.from({ length: 10 }, (_, index) => `Comment ${index + 3}`))
-    expect(byDefault.comments[0]).toEqual({ id: expect.any(String), author: 'system', content: 'Comment 3', createdAt: expect.any(Number) })
+    expect(byDefault.comments[0]).toEqual({ id: expect.any(String), author: 'system', by: 'tester', content: 'Comment 3', createdAt: expect.any(Number) })
     expect(byDefault).not.toHaveProperty('runs')
     expect(readJson(await tools.kanbo_card_get!.run(overHttp, { card: parent.id }))).toEqual(byDefault)
 
@@ -902,5 +902,28 @@ describe('the board\'s tools over a real board', () => {
     const alone = readJson(await tools.kanbo_card_get!.run(transport, { card: parent.id, include: [] }))
     expect(Object.keys(alone as object)).not.toContain('subCards')
     expect(Object.keys(alone as object)).not.toContain('comments')
+  })
+
+  it('reads a person\'s approval as the person, by name, the same over HTTP', async () => {
+    const ops = boardOps()
+    const card = await ops.createCard({ workspace: WORKSPACE, title: 'Approve me', statusName: 'In Review' }, EXTERNAL)
+    await ops.waitApproval(card.id, {}, EXTERNAL)
+    await ops.approve(card.id, { comment: 'Looks right' }, { kind: 'user', id: 'ann' })
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+
+    const read = readJson(await tools.kanbo_card_get!.run(transport, { card: card.id })) as Record<string, any>
+    expect(read.comments.at(-1)).toMatchObject({ author: 'user', by: 'ann', content: expect.stringContaining('Looks right') })
+    expect(readJson(await tools.kanbo_card_get!.run(overHttpFromBoard(), { card: card.id }))).toEqual(read)
+  })
+
+  it('reads comments from a host server that sends no author id', async () => {
+    const card = await createCard('Bare rows')
+    const bare = overHttpFromBoard([
+      { id: 'c1', authorKind: 'system', content: 'a note', createdAt: 1 },
+      { id: 'c2', authorKind: 'user', content: 'a word', createdAt: 2 },
+    ])
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+    const read = readJson(await tools.kanbo_card_get!.run(bare, { card: card.id })) as Record<string, any>
+    expect(read.comments.map((comment: { by: string }) => comment.by)).toEqual(['kanbo', 'user'])
   })
 })

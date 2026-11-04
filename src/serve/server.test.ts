@@ -3,7 +3,7 @@ import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { BoardSession } from '../cli/command'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
@@ -11,6 +11,7 @@ import { createBoardOps } from '../ops'
 import type { TestBoardStore } from '../testing/board-stores'
 import { BOARD_STORE_FACTORIES } from '../testing/board-stores'
 import type { ServeActors } from './actors'
+import { createServeProjects } from './projects'
 import type { KanboServeOptions, RunningKanboServer } from './server'
 import { SERVE_BODY_LIMIT_BYTES, SERVE_TOKEN_REQUIRED_MESSAGE, startKanboServer } from './server'
 import type { ServeCardView } from './views'
@@ -170,6 +171,12 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     expect((await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: { statusLine: 'look at this' } })).status).toBe(200)
   }
 
+  it('names the workspace it serves', async () => {
+    const answer = await call(client, 'GET', '/issues/workspace')
+    expect(answer.status).toBe(200)
+    expect(answer.json).toEqual({ id: 'workspace', identifier: 'WOR', name: 'Workspace' })
+  })
+
   it('lists a card it created with every field a card view carries', async () => {
     const created = await call(client, 'POST', '/issues/', {
       body: { workspaceId: WORKSPACE.id, title: 'Ship the server', statusName: 'in_progress', executionMode: 'main' },
@@ -211,7 +218,7 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     expect(beforeComment).toBeGreaterThan(beforeLine)
 
     const comment = await call(client, 'POST', '/issues/WOR-001/comments', { body: { content: 'halfway' } })
-    expect(comment.json).toMatchObject({ content: 'halfway', author: { kind: 'system', displayName: 'tester', label: 'External' } })
+    expect(comment.json).toMatchObject({ content: 'halfway', author: { kind: 'user', displayName: 'You', label: null } })
     expect(await version()).toBeGreaterThan(beforeComment)
   })
 
@@ -357,6 +364,40 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     })
   })
 
+  it('shows the person\'s own writes as You and everyone else by name', async () => {
+    const card = (await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Who wrote it' } })).json
+    const ops = createBoardOps(board.store)
+    await ops.addComment({ issueId: card.id, content: 'by the agent' }, { kind: 'external', id: 'claude', name: 'test-host' })
+    await ops.addComment({ issueId: card.id, content: 'by the person' }, PERSON_ACTORS.writer)
+
+    const comments = (await call(client, 'GET', '/issues/WOR-001/comments')).json as { content: string, author: { displayName: string, kind: string, label: string | null } }[]
+    expect(comments.find(comment => comment.content === 'by the person')?.author).toMatchObject({ kind: 'user', displayName: 'You', label: null })
+    expect(comments.find(comment => comment.content === 'by the agent')?.author).toMatchObject({ kind: 'system', displayName: 'claude', label: 'External' })
+  })
+
+  it('files a comment from the page under the person, and under the writer for a request that does not act for one', async () => {
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Who wrote it' } })
+
+    const byPerson = await call(client, 'POST', '/issues/WOR-001/comments', { body: { content: 'from the page' } })
+    expect(byPerson.json.authorKind).toBe('user')
+    expect(byPerson.json.author).toMatchObject({ kind: 'user', displayName: 'You' })
+
+    const byAgent = await call(client, 'POST', '/issues/WOR-001/comments', { body: { content: 'as an agent' }, headers: { 'x-kanbo-actor': 'agent' } })
+    expect(byAgent.json).toMatchObject({ authorKind: 'system', authorId: 'tester' })
+  })
+
+  it('shows the page\'s writes as You when the server was started from an agent\'s shell', async () => {
+    await restart({ actors: { ...PERSON_ACTORS, person: null } })
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Who wrote it' } })
+    const ops = createBoardOps(board.store)
+    await ops.addComment({ issueId: 'WOR-001', content: 'by the agent' }, { kind: 'external', id: 'claude', name: 'test-host' })
+
+    const own = await call(client, 'POST', '/issues/WOR-001/comments', { body: { content: 'from the page' } })
+    expect(own.json.author).toMatchObject({ kind: 'user', displayName: 'You' })
+    const comments = (await call(client, 'GET', '/issues/WOR-001/comments')).json as { content: string, author: { displayName: string, label: string | null } }[]
+    expect(comments.find(comment => comment.content === 'by the agent')?.author).toMatchObject({ displayName: 'claude', label: 'External' })
+  })
+
   it('refuses approval to every request when the server was started from an agent\'s shell', async () => {
     await restart({ actors: { ...PERSON_ACTORS, person: null } })
     await waitingCard()
@@ -364,6 +405,37 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     const approved = await call(client, 'POST', '/issues/WOR-001/approve', { body: {} })
     expect(approved.status).toBe(403)
     expect(approved.json.code).toBe('issue_approval_requires_user')
+  })
+
+  it('reads an approval and a return as the person, and the board\'s own lines as kanbo', async () => {
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Needs a person', statusName: 'in_review' } })
+    await call(client, 'POST', '/issues/WOR-001/runs', { body: { agentName: 'claude' } })
+    await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: { statusLine: 'look at this' } })
+    await call(client, 'POST', '/issues/WOR-001/return', { body: { comment: 'not yet' } })
+    await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: { statusLine: 'again' } })
+    await call(client, 'POST', '/issues/WOR-001/approve', { body: { comment: 'fine' } })
+
+    const comments = (await call(client, 'GET', '/issues/WOR-001/comments')).json as { authorKind: string, author: { kind: string, displayName: string } }[]
+    expect(comments.find(comment => comment.authorKind === 'system.approved')?.author).toMatchObject({ kind: 'user', displayName: 'You' })
+    expect(comments.find(comment => comment.authorKind === 'system.returned')?.author).toMatchObject({ kind: 'user', displayName: 'You' })
+    expect(comments.find(comment => comment.authorKind === 'system.run')?.author).toMatchObject({ kind: 'system', displayName: 'kanbo' })
+  })
+
+  it('hands a card the person returns to the next agent session', async () => {
+    const created = await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Count lines', statusName: 'in_review' } })
+    expect(created.status).toBe(200)
+    expect((await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: { statusLine: 'look at this' } })).status).toBe(200)
+
+    const returned = await call(client, 'POST', '/issues/WOR-001/return', { body: { comment: 'An empty file must print 0' } })
+    expect(returned.status).toBe(200)
+    expect(returned.json).toMatchObject({ waitingFor: null, statusLine: 'returned by a person: An empty file must print 0' })
+    expect(returned.json.statusId).not.toBe(created.json.statusId)
+
+    const ops = createBoardOps(board.store)
+    const listed = await ops.queryCards({ workspaceId: WORKSPACE.id, returned: true })
+    expect(listed.cards.map(card => card.id)).toEqual(['WOR-001'])
+    const [attention] = await ops.readCardAttention(listed.cards, [false])
+    expect(attention).toMatchObject({ returned: true, lastComment: { author: 'user', text: 'An empty file must print 0' } })
   })
 
   it('reaches no workspace but its own', async () => {
@@ -492,6 +564,36 @@ describe('kanbo serve at the door', () => {
     const otherPort = await rawCall(client, 'GET', '/issues', { host: `localhost:${client.server.port + 1}` })
     expect(otherPort.status).toBe(403)
     expect((await rawCall(client, 'GET', '/issues', { host: `localhost:${client.server.port}` })).status).toBe(200)
+  })
+
+  it('takes the board page\'s presence only with the token, and only when it is listening', async () => {
+    const presence = { seen: vi.fn(), closed: vi.fn(), stop: vi.fn() }
+    const client = await start({ token: TOKEN, presence })
+    const body = { tabId: 'tab-1', state: 'open' }
+
+    expect((await call({ server: client.server }, 'POST', '/page/presence', { body })).status).toBe(401)
+    expect(presence.seen).not.toHaveBeenCalled()
+
+    const bare = await start({ token: TOKEN })
+    expect((await call(bare, 'POST', '/page/presence', { body })).status).toBe(204)
+  })
+
+  it('refuses a presence body that is not a tab id and a state', async () => {
+    const presence = { seen: vi.fn(), closed: vi.fn(), stop: vi.fn() }
+    const client = await start({ presence })
+    const invalid = await call(client, 'POST', '/page/presence', { body: { tabId: '../x', state: 'open' } })
+    expect(invalid.status).toBe(400)
+    expect(invalid.json).toMatchObject({ code: 'validation_error', details: { source: 'body' } })
+    expect(presence.seen).not.toHaveBeenCalled()
+  })
+
+  it('tells presence which tab opened and which closed', async () => {
+    const presence = { seen: vi.fn(), closed: vi.fn(), stop: vi.fn() }
+    const client = await start({ presence })
+    expect((await call(client, 'POST', '/page/presence', { body: { tabId: 'tab-1', state: 'open' } })).json).toEqual({ ok: true })
+    expect(presence.seen).toHaveBeenCalledWith('tab-1')
+    await call(client, 'POST', '/page/presence', { body: { tabId: 'tab-1', state: 'closed' } })
+    expect(presence.closed).toHaveBeenCalledWith('tab-1')
   })
 
   it('lets in only a request carrying the token', async () => {
@@ -650,6 +752,79 @@ describe('kanbo serve\'s board page', () => {
     const tokenless = await call({ server: client.server }, 'POST', '/issues', { body, headers: { origin: `http://127.0.0.1:${port}` } })
     expect(tokenless.status).toBe(401)
     expect(await board.store.issues.listByWorkspace(WORKSPACE.id)).toHaveLength(1)
+  })
+})
+
+describe('serving several projects', () => {
+  const DIR_A = '/work/app-a'
+  const DIR_B = '/work/app-b'
+  const WORKSPACE_B: BoardWorkspaceIdentity = { id: 'beta', identifier: 'BET', name: 'Beta' }
+  let boardA: TestBoardStore
+  let boardB: TestBoardStore
+  let client: Client
+  let idA: string
+  let idB: string
+
+  beforeEach(async () => {
+    boardA = await BOARD_STORE_FACTORIES[0].open([{ id: WORKSPACE.id, identifier: WORKSPACE.identifier }])
+    boardB = await BOARD_STORE_FACTORIES[0].open([{ id: WORKSPACE_B.id, identifier: WORKSPACE_B.identifier }])
+    const sessionA = sessionOn(boardA.store)
+    const sessionB = { ...sessionOn(boardB.store), workspace: WORKSPACE_B, close: async () => {} }
+    const projects = createServeProjects({
+      defaultProject: { dir: DIR_A, session: sessionA },
+      readRegistry: () => [DIR_A, DIR_B].map(path => ({ path, lastSeenAt: 1 })),
+      readBinding: () => ({ schemaVersion: 1, workspaceId: 'x' }),
+      openSession: async () => sessionB,
+    })
+    ;[idA, idB] = projects.list().map(project => project.id)
+    const server = await startKanboServer({ session: sessionA, projects, actors: PERSON_ACTORS, host: '127.0.0.1', port: 0, token: TOKEN })
+    client = { server, token: TOKEN }
+  })
+
+  afterEach(async () => {
+    await client.server.close()
+    await boardA.dispose()
+    await boardB.dispose()
+  })
+
+  it('lists projects only for a caller with the token', async () => {
+    expect((await call({ server: client.server }, 'GET', '/projects')).status).toBe(401)
+    const listed = await call(client, 'GET', '/projects')
+    expect(listed.status).toBe(200)
+    expect(listed.json.map((project: { id: string }) => project.id)).toEqual([idA, idB])
+  })
+
+  it('answers the bare routes for the default project and the prefixed ones for another', async () => {
+    await call(client, 'POST', `/projects/${idB}/issues`, { body: { workspaceId: WORKSPACE_B.id, title: 'In beta' } })
+    const inB = await call(client, 'GET', `/projects/${idB}/issues`)
+    expect(inB.json.map((card: { title: string }) => card.title)).toEqual(['In beta'])
+    expect((await call(client, 'GET', '/issues')).json).toEqual([])
+    expect(await boardB.store.issues.listByWorkspace(WORKSPACE_B.id)).toHaveLength(1)
+    expect(await boardA.store.issues.listByWorkspace(WORKSPACE.id)).toHaveLength(0)
+  })
+
+  it('does not find a card of one project under another', async () => {
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'In alpha' } })
+    const missing = await call(client, 'GET', `/projects/${idB}/issues/WOR-001`)
+    expect(missing.status).toBe(404)
+    expect(missing.json.code).toBe('issue_not_found')
+  })
+
+  it('answers project_not_found for an id nobody offers', async () => {
+    const answer = await call(client, 'GET', '/projects/unknown/issues')
+    expect(answer.status).toBe(404)
+    expect(answer.json.code).toBe('project_not_found')
+  })
+
+  it('has no /projects on a server started without projects', async () => {
+    const alone = await startKanboServer({ session: sessionOn(boardA.store), actors: PERSON_ACTORS, host: '127.0.0.1', port: 0, token: TOKEN })
+    try {
+      expect((await call({ server: alone, token: TOKEN }, 'GET', '/projects')).status).toBe(404)
+      expect((await call({ server: alone, token: TOKEN }, 'GET', `/projects/${idB}/issues`)).status).toBe(404)
+    }
+    finally {
+      await alone.close()
+    }
   })
 })
 

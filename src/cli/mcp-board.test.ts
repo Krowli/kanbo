@@ -10,6 +10,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { KANBO_MCP_INSTRUCTIONS } from '../mcp/instructions'
 import { createKanboMcpServer } from '../mcp/server'
 import { registerInitCommand } from './commands/init'
+import { createMcpActor, nameActorAfterClient } from './commands/mcp'
+import { openBoardSession } from './command'
 import { NO_BOARD_FOR_AGENT_MESSAGE, openMcpBoard } from './mcp-board'
 
 /** `kanbo mcp` in a folder that has no board — the case of a person's own, every-folder registration. */
@@ -93,5 +95,75 @@ describe('kanbo mcp in a folder with no board', () => {
     finally {
       await close()
     }
+  })
+})
+
+describe('whom kanbo mcp files a client\'s writes under', () => {
+  let projectDir: string
+
+  beforeEach(() => {
+    projectDir = mkdtempSync(join(tmpdir(), 'kanbo-mcp-actor-'))
+    vi.spyOn(process, 'cwd').mockReturnValue(projectDir)
+    for (const name of ['KANBO_DB_PATH', 'KANBO_WORKSPACE_ID', 'KANBO_DATABASE_URL', 'KANBO_ACTOR_KIND', 'KANBO_ACTOR_ID', 'CI', 'TERM']) {
+      vi.stubEnv(name, undefined)
+    }
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+    rmSync(projectDir, { force: true, recursive: true })
+  })
+
+  async function commentAuthor(clientName: string): Promise<string | undefined> {
+    const program = new Command().exitOverride()
+    registerInitCommand(program)
+    await program.parseAsync(['init', '--yes'], { from: 'user' })
+    const { actor, namedByShell } = createMcpActor()
+    const board = await openMcpBoard({ actor })
+    const server = createKanboMcpServer(board, { includeRunTools: true })
+    if (!namedByShell) {
+      nameActorAfterClient(server, actor)
+    }
+    const [clientChannel, serverChannel] = InMemoryTransport.createLinkedPair()
+    const client = new Client({ name: clientName, version: '0.0.0' })
+    await Promise.all([client.connect(clientChannel), server.connect(serverChannel)])
+    try {
+      const created = await client.callTool({ name: 'kanbo_card_create', arguments: { title: 'Card', column: 'to_do' } })
+      const text = (created.content as { text: string }[]).map(part => part.text).join('\n')
+      const ref = /\b[A-Z]+-\d+\b/.exec(text)?.[0]
+      await client.callTool({ name: 'kanbo_card_comment', arguments: { card: ref, content: 'Hello' } })
+      const session = await openBoardSession({}, 'read')
+      try {
+        const [card] = await session.ops.searchCards('Card', 5)
+        const comments = await session.ops.listComments(card!.id)
+        return comments.find(comment => comment.content === 'Hello')?.authorId ?? undefined
+      }
+      finally {
+        await session.close()
+      }
+    }
+    finally {
+      await client.close()
+      await board.close()
+    }
+  }
+
+  it('uses the client\'s name when nothing else names the agent', async () => {
+    expect(await commentAuthor('Test Client')).toBe('test-client')
+  })
+
+  it('lets KANBO_ACTOR_ID win over the client\'s name', async () => {
+    vi.stubEnv('KANBO_ACTOR_ID', 'reviewer')
+
+    expect(await commentAuthor('Test Client')).toBe('reviewer')
+  })
+
+  it('uses the agent tool over the client\'s name', async () => {
+    vi.stubEnv('CODEX_THREAD_ID', 'thread')
+
+    expect(await commentAuthor('Test Client')).toBe('codex')
   })
 })

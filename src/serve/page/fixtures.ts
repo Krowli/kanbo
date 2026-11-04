@@ -1,4 +1,19 @@
+import type { IssueActivityItemView } from '../../domain/activity-types'
 import type { ServeCardView, ServeStatusView } from '../views'
+
+/** An activity row as `GET /issues/:id/activity` answers it, with only what a test names changed. */
+export function activityFixture(fields: Partial<IssueActivityItemView> & Pick<IssueActivityItemView, 'id'>): IssueActivityItemView {
+  return {
+    issueId: 'card',
+    kind: 'field-change',
+    actor: { kind: 'agent', id: 'claude', displayName: 'claude', avatarUrl: null, label: null },
+    comment: null,
+    fieldChange: null,
+    sourceChatSessionId: null,
+    createdAt: 0,
+    ...fields,
+  }
+}
 
 /** A column as `GET /issues/statuses` answers it, with only what a test names changed. */
 export function statusFixture(fields: Partial<ServeStatusView> & Pick<ServeStatusView, 'id' | 'name'>): ServeStatusView {

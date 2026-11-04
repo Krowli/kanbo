@@ -396,7 +396,7 @@ describe('kanbo with no words', () => {
     await createBoard()
     let stop = (): void => {}
     const close = vi.fn(async () => {})
-    const start = vi.fn(async () => ({ link: 'http://127.0.0.1:4318/#token=t', close }))
+    const start = vi.fn(async () => ({ link: 'http://127.0.0.1:4318/#token=t', idle: new Promise<void>(() => {}), close }))
     const waitForStop = vi.fn(() => new Promise<void>((resolve) => {
       stop = resolve
     }))

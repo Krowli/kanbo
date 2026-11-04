@@ -28,11 +28,11 @@ export const AGENT_KIND_MARKER = 'KANBO_ACTOR_KIND=agent'
  *   for it. A person whose terminal inherits it (Codex started a shell for
  *   them) says `KANBO_ACTOR_KIND=person`.
  */
-export const AGENT_SHELL_MARKERS: readonly { variable: string, matches: (value: string) => boolean, label: string }[] = [
-  { variable: 'CLAUDECODE', matches: value => value === '1', label: 'CLAUDECODE=1' },
-  { variable: 'GEMINI_CLI', matches: value => value === '1', label: 'GEMINI_CLI=1' },
-  { variable: 'CURSOR_AGENT', matches: value => value !== '', label: 'CURSOR_AGENT' },
-  { variable: 'CODEX_THREAD_ID', matches: value => value !== '', label: 'CODEX_THREAD_ID' },
+export const AGENT_SHELL_MARKERS: readonly { variable: string, matches: (value: string) => boolean, label: string, tool: string }[] = [
+  { variable: 'CLAUDECODE', matches: value => value === '1', label: 'CLAUDECODE=1', tool: 'claude' },
+  { variable: 'GEMINI_CLI', matches: value => value === '1', label: 'GEMINI_CLI=1', tool: 'gemini' },
+  { variable: 'CURSOR_AGENT', matches: value => value !== '', label: 'CURSOR_AGENT', tool: 'cursor' },
+  { variable: 'CODEX_THREAD_ID', matches: value => value !== '', label: 'CODEX_THREAD_ID', tool: 'codex' },
 ]
 
 /**
@@ -53,4 +53,17 @@ export function readAgentShellMarker(env: NodeJS.ProcessEnv = process.env): stri
   }
   const marker = AGENT_SHELL_MARKERS.find(candidate => candidate.matches(env[candidate.variable]?.trim() ?? ''))
   return marker?.label ?? null
+}
+
+/**
+ * The name of the agent tool this shell belongs to (`claude`, `gemini`,
+ * `cursor`, `codex`), `agent` when only `KANBO_ACTOR_KIND=agent` says so, or
+ * `null` for a person's shell. Same precedence as `readAgentShellMarker`.
+ */
+export function readAgentTool(env: NodeJS.ProcessEnv = process.env): string | null {
+  if (readAgentShellMarker(env) === null) {
+    return null
+  }
+  const marker = AGENT_SHELL_MARKERS.find(candidate => candidate.matches(env[candidate.variable]?.trim() ?? ''))
+  return marker?.tool ?? 'agent'
 }

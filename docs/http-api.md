@@ -1,6 +1,6 @@
 # HTTP API — `kanbo serve`
 
-`kanbo serve` serves one board and one workspace over HTTP: a board page for a browser at `/`, and a JSON API under `/issues`. The board and workspace are resolved like every other command (`--db`, `--database-url`, `--workspace`, the environment, the project's binding).
+`kanbo serve` serves one board and one workspace over HTTP: a board page for a browser at `/`, and a JSON API under `/issues`. The board and workspace are resolved like every other command (`--db`, `--database-url`, `--workspace`, the environment, the project's binding). It also offers the other projects kanbo has opened (`~/.kanbo/projects.json`) under `/projects`; started in a folder that belongs to no project, with no board named by a flag or the environment, it opens the most recently used one.
 
 ```bash
 kanbo serve                                           # generates a token and opens the board in your browser
@@ -17,7 +17,7 @@ On start it prints two lines on stderr: the address, the workspace and that a be
 - In a person's terminal, `kanbo serve: board page http://127.0.0.1:4318/#token=<token>` for a generated token, and the link is opened in the default browser (`open` on macOS, `rundll32 url.dll,FileProtocolHandler` on Windows, `wslview` or else `cmd.exe /c start` under WSL, `xdg-open` on a Linux desktop) unless `--no-open` is given. On Linux without `DISPLAY` or `WAYLAND_DISPLAY` (over SSH, say) no browser is tried; the printed link is it. The token is in the fragment, so the browser never sends it to the server and it never appears in a request log. A token you gave yourself is not printed: the link is just `http://127.0.0.1:4318/`.
 - In an agent's shell (`KANBO_ACTOR_KIND=agent`), or when stdout is not a terminal, the token is never printed and no browser is opened; a generated token is announced as `a token was generated for this run and is not shown here; set KANBO_SERVE_TOKEN to choose your own`.
 
-Stop it with Ctrl-C.
+When `kanbo serve` opened the browser itself it also stops about 5 seconds after the last board tab closes (a reload does not stop it), or 2 minutes after the last sign of life from a tab that disappeared without saying goodbye, and prints `kanbo serve: the last board tab was closed — stopped.`. With `--no-open`, from an agent's shell, or when stdout is not a terminal it runs until Ctrl-C.
 
 ## The board page
 
@@ -25,9 +25,12 @@ Open `http://127.0.0.1:4318/`. It shows the workspace's columns in board order w
 
 - Drag a card to another column to move it; a refusal by the column's entry rules is shown as the server says it.
 - **+ New** at the top of a column creates a card from a description.
-- Click a card for its panel: description (plain text), comments and a box to add one, the activity feed, its runs, and **Approve** / **Return** while it waits for a person. Esc closes the panel.
+- Sub-cards (`parentIssueId`) stay in their own columns. A sub-card shows `↳ <parent key> <title>` that opens the parent; a parent shows `2/3 sub-cards` (canceled ones not counted); the parent's panel has a **Sub-cards** section (column, waiting or running, who works it; click opens it) and a sub-card's panel a **Parent** row. All of it is computed in the browser from `GET /issues`.
+- Click a card and it opens in a large window over the board. The title and state are on top. On the left: the description (plain text), sub-cards and the **Comments** / **History** / **Runs** tabs (a box to add a comment comes first, newest comment on top; history shows before → after, who, when). On the right: **Approve** / **Return** while it waits for a person, and who made it and who works it. Esc, ✕ or a click outside closes it.
 - Opened by the link `kanbo serve` printed, the page takes the token from `#token=…`, keeps it and removes it from the address bar; otherwise type the server token into the **Token** field in the header. It is sent as `Authorization: Bearer …` and kept in the tab's `sessionStorage` only.
+- A **Project** dropdown lists every project from `~/.kanbo/projects.json` (when there is more than one), and the header says where the board lives: card prefix, folder, and `board file ~/code/app/.kanbo/board.db` or `Postgres at db.example.com`. The choice is kept in the address (`?project=<id>`). A project that left the list while the page was open is replaced by the default one, with a notice.
 - The page polls `GET /issues/version` every two seconds while its tab is visible and reloads when the board changed.
+- A filter bar above the columns narrows the cards in the browser, with no extra request: a text search (key, title, description, status line, label; `/` focuses it, Escape clears it), "Worked by" (anyone, nobody, or an agent or you), "Waiting for you", "Running now", priority and label. The filters are in the address (`q`, `who`, `waiting=1`, `running=1`, `priority=high,urgent`, `label=a,b`) next to `project`, so a reload or a shared link shows the same cards. Switching project keeps all but `who` and `label`.
 
 The page, `/assets/board.js` and `/assets/board.css` are served without the token (they hold no data), with `content-security-policy: default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`, `x-content-type-options: nosniff`, `referrer-policy: no-referrer` and `cache-control: no-cache`. Card content is inserted as text, never as HTML. If the package was not built, `/` answers `404` with `The board page is not built. Run: npm run build`.
 
@@ -47,7 +50,7 @@ Nothing secret is logged: never a token, a header or a connection string.
 
 ## Who a request writes as
 
-Every write is filed as `external`, under `KANBO_ACTOR_ID` or the user who started the server — the same actor the `kanbo` command writes as.
+Every write is filed as `external`, under `KANBO_ACTOR_ID` or the user who started the server, with one exception: a comment from a request that acts for a person (see below) is the person's (`authorKind: user`). The page's writes are filed under the person at the machine — `KANBO_ACTOR_ID` in a person's shell, else the OS user, never an agent tool — even on a server started from an agent's shell. The board page shows those writes, approvals and returns as **You**, the board's own lines as **kanbo**, and every other writer by name with the agent look.
 
 Approving, returning, closing a sprint, changing the columns (creating, renaming, deleting, reordering, adding the standard ones), setting a column's entry rules, deleting a comment the board wrote, removing a pull request link somebody else made and deleting a card are a person's. A request acts for the person who started the server only when **all** of these hold:
 
@@ -69,6 +72,10 @@ All routes are under `/issues`. A card is addressed by its key (`API-001`). A `w
 
 | Method and path | Does |
 | --- | --- |
+| `GET /projects` | The projects this server offers: `{ id, name, folder, storage, isDefault }` each, `storage` being `{ kind: "file", path }` or `{ kind: "postgres", where }` (the host; never a connection string). |
+| `POST /page/presence` | What the board page tells the server about its tab: `{ "tabId": "<letters, numbers, dashes, up to 64>", "state": "open" \| "closed" }`, answered `{ "ok": true }`. The page sends `open` every 20 seconds and `closed` when it goes. Needs the token like every route; `204` with no body on a server that does not stop by itself (see above), and the page stops sending. Not a board route: it reads and writes no card. |
+| `GET /issues/workspace` | The served workspace: `{ id, identifier, name }`. |
+| `/projects/:id/issues/...` | Every route below, for another project; same rules and checks. `404 project_not_found` for an id the server does not offer, `503 project_unavailable` when that project's board will not open. That project's board is opened on the first request and stays open until the server stops. |
 | `GET /issues` | List cards. Query: `workspaceId`, `workspaceIds`, `milestoneId`, `parentIssueId`, `priority`, `labels`, `statusId`. |
 | `POST /issues` | Create a card. |
 | `GET /issues/:id` | Read a card. |

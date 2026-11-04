@@ -9,11 +9,13 @@ import { createPostgresBoardStore } from '../postgres/board-store.postgres'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import { openBoardDatabase } from '../sqlite/open-database'
 import type { Issue, IssueRun } from '../sqlite/schema'
+import { findBinding } from './binding'
 import type { BoardTarget } from './db-target'
 import { resolveDbTarget } from './db-target'
 import type { CliOutputOptions, CliResult } from './output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from './output'
 import { openPostgresBoard } from './postgres-board'
+import { rememberProjectQuietly } from './project-registry'
 import { assertInstalledBoard, assertWritableBoard } from './schema-guard'
 import { resolveWorkspace } from './workspace'
 
@@ -96,17 +98,22 @@ export function withBoardOptions(command: Command): Command {
 export async function openBoardSession(
   options: BoardCommandOptions,
   mode: BoardCommandMode,
+  cwd: string = process.cwd(),
 ): Promise<OpenBoardSession> {
-  const cwd = process.cwd()
   const target = resolveDbTarget({
     explicitPath: options.db,
     explicitUrl: options.databaseUrl,
     asAgent: options.asAgent,
     cwd,
   })
-  return target.kind === 'postgres'
+  const session = target.kind === 'postgres'
     ? await openExternalSession(target, options, cwd)
     : await openFileSession(target, options, mode, cwd)
+  const found = findBinding(cwd)
+  if (found) {
+    rememberProjectQuietly(found.projectDir)
+  }
+  return session
 }
 
 async function openFileSession(

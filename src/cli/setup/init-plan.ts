@@ -17,6 +17,7 @@ import { BINDING_FILE_PATH, ignoreBoardFile, writeBinding } from '../binding'
 import type { BoardTarget } from '../db-target'
 import { CliError } from '../output'
 import { openPostgresBoard } from '../postgres-board'
+import { rememberProjectQuietly } from '../project-registry'
 import type { ConnectOutcome, ConnectPlan } from './connect-plan'
 import { applyConnectPlan, displayPath, explainItem, itemPath, pendingItems } from './connect-plan'
 import type { FileChange, FileOutcome } from './file-change'
@@ -148,6 +149,7 @@ export async function applyInitPlan(plan: InitPlan): Promise<AppliedInitPlan> {
     columns = await migrateSharedBoard(plan.target.url, plan.workspace.id, plan.columns)
   }
   const bindingPath = writeBinding(plan.projectDir, plan.binding)
+  rememberProjectQuietly(plan.projectDir)
   const files = plan.fileChanges.map(({ kind, change }) => ({ kind, ...applyFileChange(change) }))
   const connect = plan.connect ? applyConnectPlan(plan.connect) : []
   const firstCard = plan.firstCard ? await addFirstCard(plan, plan.firstCard) : null
