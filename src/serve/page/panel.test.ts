@@ -50,6 +50,17 @@ describe('renderPanel', () => {
     expect(panel.querySelector('.facts')?.textContent).toContain('Nobody')
   })
 
+  it('names the agent of the latest run once its run is over', () => {
+    const runs = [
+      { id: 'r1', attempt: 1, agentName: 'codex', state: 'failed', branch: null, startedAt: 10 },
+      { id: 'r2', attempt: 2, agentName: 'claude', state: 'finished', branch: null, startedAt: 20 },
+    ] as BoardRunView[]
+    const panel = renderPanel(detailFixture({ runs }), actions, null)
+    const worked = [...panel.querySelectorAll('.facts dt')].find(term => term.textContent === 'Worked by')?.nextElementSibling
+    expect(worked?.textContent).toBe('claude · finished')
+    expect(worked?.querySelector<HTMLElement>('.actor-chip')?.dataset.kind).toBe('agent')
+  })
+
   it('shows a column move as the old column struck through and the new one inserted', () => {
     const activity = [activityFixture({ id: 's', createdAt: nowSeconds, fieldChange: { action: 'changed-field', field: 'status', fromValue: text('To Do'), toValue: text('In Progress') } })]
     const entry = renderPanel(detailFixture({ activity }), actions, null).querySelector('.history-entry')
@@ -157,5 +168,13 @@ describe('an outside writer in the panel', () => {
     expect(chip?.textContent).toBe('claude')
     expect(chip?.textContent).not.toContain('External')
     expect(chip?.title).toBe('External')
+  })
+
+  it('is shown with the agent look in the comments too', () => {
+    const author = { kind: 'system' as const, id: 'claude', displayName: 'claude', avatarUrl: null, label: 'External' }
+    const comments = [{ id: 'c1', issueId: 'WOR-001', authorKind: 'system', authorId: 'claude', sourceChatSessionId: null, content: 'done', createdAt: nowSeconds, author }] as unknown as ServeCommentView[]
+    const chip = renderPanel(detailFixture({ comments }), actions, null).querySelector<HTMLElement>('.entries .actor-chip')
+    expect(chip?.dataset.kind).toBe('agent')
+    expect(chip?.textContent).toBe('claude')
   })
 })

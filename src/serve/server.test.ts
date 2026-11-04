@@ -572,7 +572,7 @@ describe('kanbo serve at the door', () => {
     expect(presence.seen).not.toHaveBeenCalled()
 
     const bare = await start({ token: TOKEN })
-    expect((await call(bare, 'POST', '/page/presence', { body })).status).toBe(404)
+    expect((await call(bare, 'POST', '/page/presence', { body })).status).toBe(204)
   })
 
   it('refuses a presence body that is not a tab id and a state', async () => {

@@ -241,7 +241,9 @@ function createRequestHandler(routes: readonly Route[], options: KanboServeOptio
       }
       if (url.pathname === '/page/presence' && request.method === 'POST') {
         if (!options.presence) {
-          throw new ServeError(404, 'not_found', 'Not Found')
+          // Nothing here stops by itself; the page hears it and stops sending.
+          response.writeHead(204).end()
+          return
         }
         const parsed = PRESENCE_BODY.safeParse(await readJsonBody(request))
         if (!parsed.success) {

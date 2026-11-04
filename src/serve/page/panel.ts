@@ -47,7 +47,7 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
   panel.append(el('h2', 'panel-title', cardDisplayTitle(card)))
   const history = toHistory(detail.activity, detail.fieldChanges)
   const now = new Date()
-  panel.append(renderFacts(card, status, detail.parent, actions, history, now))
+  panel.append(renderFacts(card, status, detail.parent, detail.runs, actions, history, now))
   if (card.statusLine?.trim()) {
     const line = el('p', 'status-line', card.statusLine.trim())
     line.dataset.category = status?.category ?? 'unstarted'
@@ -85,7 +85,7 @@ function timeElement(seconds: number, text: string): HTMLElement {
 }
 
 /** Column, who made the card, who works it, priority and labels: the answers a person opens a card for. */
-function renderFacts(card: ServeCardView, status: ServeStatusView | null, parent: ServeCardView | null, actions: PanelActions, history: HistoryEntry[], now: Date): HTMLElement {
+function renderFacts(card: ServeCardView, status: ServeStatusView | null, parent: ServeCardView | null, runs: BoardRunView[], actions: PanelActions, history: HistoryEntry[], now: Date): HTMLElement {
   const facts = el('dl', 'facts')
   const row = (term: string, ...value: (HTMLElement | string)[]): void => {
     const detail = el('dd')
@@ -116,8 +116,14 @@ function renderFacts(card: ServeCardView, status: ServeStatusView | null, parent
   row('Created by', actorChip(creator), ' ', el('span', 'muted', `· ${relativeDay(created?.at ?? card.createdAt, now)}`))
 
   const worker = cardWorker(card)
-  const workerChip = worker ? actorChip({ kind: worker.key === 'user' ? 'user' : 'agent', name: worker.label, label: null }) : 'Nobody'
-  row('Worked by', workerChip, ...(card.activeRun?.state === 'running' ? [' ', el('span', 'muted', '· running')] : []))
+  const lastRun = worker ? null : runs.reduce<BoardRunView | null>((latest, run) => (latest === null || run.startedAt > latest.startedAt ? run : latest), null)
+  if (lastRun) {
+    row('Worked by', actorChip({ kind: 'agent', name: lastRun.agentName, label: null }), ' ', el('span', 'muted', `· ${lastRun.state}`))
+  }
+  else {
+    const workerChip = worker ? actorChip({ kind: worker.key === 'user' ? 'user' : 'agent', name: worker.label, label: null }) : 'Nobody'
+    row('Worked by', workerChip, ...(card.activeRun?.state === 'running' ? [' ', el('span', 'muted', '· running')] : []))
+  }
 
   if (card.priority !== 'none') {
     const priority = el('span', 'priority', card.priority)
@@ -275,7 +281,7 @@ function renderComments(comments: ServeCommentView[], now: Date): HTMLElement[] 
     const item = el('li')
     const meta = el('div', 'entry-meta')
     meta.append(
-      actorChip({ kind: comment.author.kind, name: comment.author.displayName, label: null }),
+      actorChip({ kind: comment.author.kind, name: comment.author.displayName, label: comment.author.label }),
       timeElement(comment.createdAt, relativeDay(comment.createdAt, now, { withClock: true })),
     )
     item.append(meta, el('div', 'entry-text', comment.content))

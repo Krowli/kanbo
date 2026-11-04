@@ -32,7 +32,7 @@ export function startPresence(readToken: () => string | null): void {
       headers,
       body: JSON.stringify({ tabId, state }),
     }).then((response) => {
-      if (response.status === 404 && timer !== null) {
+      if ((response.status === 404 || response.status === 204) && timer !== null) {
         clearInterval(timer)
         timer = null
       }

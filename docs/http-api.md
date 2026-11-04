@@ -73,7 +73,7 @@ All routes are under `/issues`. A card is addressed by its key (`API-001`). A `w
 | Method and path | Does |
 | --- | --- |
 | `GET /projects` | The projects this server offers: `{ id, name, folder, storage, isDefault }` each, `storage` being `{ kind: "file", path }` or `{ kind: "postgres", where }` (the host; never a connection string). |
-| `POST /page/presence` | What the board page tells the server about its tab: `{ "tabId": "<letters, numbers, dashes, up to 64>", "state": "open" \| "closed" }`, answered `{ "ok": true }`. The page sends `open` every 20 seconds and `closed` when it goes. Needs the token like every route; `404` on a server that does not stop by itself (see above). Not a board route: it reads and writes no card. |
+| `POST /page/presence` | What the board page tells the server about its tab: `{ "tabId": "<letters, numbers, dashes, up to 64>", "state": "open" \| "closed" }`, answered `{ "ok": true }`. The page sends `open` every 20 seconds and `closed` when it goes. Needs the token like every route; `204` with no body on a server that does not stop by itself (see above), and the page stops sending. Not a board route: it reads and writes no card. |
 | `GET /issues/workspace` | The served workspace: `{ id, identifier, name }`. |
 | `/projects/:id/issues/...` | Every route below, for another project; same rules and checks. `404 project_not_found` for an id the server does not offer, `503 project_unavailable` when that project's board will not open. That project's board is opened on the first request and stays open until the server stops. |
 | `GET /issues` | List cards. Query: `workspaceId`, `workspaceIds`, `milestoneId`, `parentIssueId`, `priority`, `labels`, `statusId`. |
