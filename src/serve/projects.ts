@@ -44,7 +44,10 @@ export function createServeProjects(input: {
   readRegistry: () => RegisteredProject[]
   readBinding: (dir: string) => KanboBinding | null
   openSession: (dir: string) => Promise<OpenBoardSession>
+  /** The id the person who started the server is filed under, when there is one — their writes read as `You`. */
+  personWriterId?: string | null
 }): ServeProjects {
+  const routesOptions = { personWriterId: input.personWriterId ?? null }
   const opened = new Map<string, { session: OpenBoardSession, routes: Route[] }>()
   let defaultOpened: { session: BoardSession, routes: Route[] } | null = null
 
@@ -74,7 +77,7 @@ export function createServeProjects(input: {
         throw new ServeError(404, 'project_not_found', 'No project with that id is on this computer\'s list')
       }
       if (entry.view.isDefault && input.defaultProject) {
-        defaultOpened ??= { session: input.defaultProject.session, routes: createIssueRoutes(input.defaultProject.session) }
+        defaultOpened ??= { session: input.defaultProject.session, routes: createIssueRoutes(input.defaultProject.session, routesOptions) }
         return defaultOpened
       }
       const cached = opened.get(projectId)
@@ -88,7 +91,7 @@ export function createServeProjects(input: {
       catch (error) {
         throw new ServeError(503, 'project_unavailable', describeFailure(error).message)
       }
-      const project = { session, routes: createIssueRoutes(session) }
+      const project = { session, routes: createIssueRoutes(session, routesOptions) }
       opened.set(projectId, project)
       return project
     },

@@ -166,8 +166,13 @@ function renderSubcards(detail: CardDetail, actions: PanelActions): HTMLElement 
 
 function actorChip(actor: HistoryEntry['actor']): HTMLElement {
   const chip = el('span', 'actor-chip', actor.name)
-  chip.dataset.kind = actor.kind === 'provider-target' ? 'agent' : actor.kind
-  if (actor.label) {
+  // An outside writer here is an agent (or a person's tool) writing under its own name: shown as one, the label kept for the tooltip.
+  const outsideWriter = actor.label === 'External'
+  chip.dataset.kind = outsideWriter || actor.kind === 'provider-target' ? 'agent' : actor.kind
+  if (outsideWriter) {
+    chip.title = actor.label ?? ''
+  }
+  else if (actor.label) {
     chip.append(el('small', 'actor-label', ` ${actor.label}`))
   }
   return chip
@@ -195,7 +200,7 @@ function renderHistory(history: HistoryEntry[], now: Date): HTMLElement {
 
 function renderHistoryEntry(entry: HistoryEntry, now: Date): HTMLElement {
   const item = el('li', 'history-entry')
-  item.dataset.kind = entry.actor.kind === 'provider-target' ? 'agent' : entry.actor.kind
+  item.dataset.kind = entry.actor.label === 'External' || entry.actor.kind === 'provider-target' ? 'agent' : entry.actor.kind
   const what = el('span', 'history-what')
   what.append(actorChip(entry.actor), ` ${entry.verb}`)
   if (entry.field) {

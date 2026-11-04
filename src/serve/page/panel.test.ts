@@ -147,3 +147,15 @@ describe('renderPanel', () => {
     })
   })
 })
+
+describe('an outside writer in the panel', () => {
+  it('is shown as an agent by its name, without the External suffix', () => {
+    const actor = { kind: 'system' as const, id: 'claude', displayName: 'claude', avatarUrl: null, label: 'External' }
+    const activity = [activityFixture({ id: 'x', createdAt: nowSeconds, actor, fieldChange: { action: 'changed-field', field: 'status', fromValue: text('To Do'), toValue: text('Done') } })]
+    const chip = renderPanel(detailFixture({ activity }), actions, null).querySelector<HTMLElement>('.history-entry .actor-chip')
+    expect(chip?.dataset.kind).toBe('agent')
+    expect(chip?.textContent).toBe('claude')
+    expect(chip?.textContent).not.toContain('External')
+    expect(chip?.title).toBe('External')
+  })
+})

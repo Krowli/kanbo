@@ -108,14 +108,15 @@ export async function startServe(options: ServeCommandOptions, output: ServeOutp
     'read',
     mostRecent?.path,
   )
+  const agentShell = isAgentShell()
+  const actors: ServeActors = { writer: createCliActor(), person: agentShell ? null : createPersonActor() }
   const projects = createServeProjects({
     defaultProject: defaultDir === null ? null : { dir: defaultDir, session },
     readRegistry: () => readProjectRegistry(),
     readBinding: dir => readProjectBinding(dir),
     openSession: async dir => await openBoardSession({}, 'read', dir),
+    personWriterId: actors.person ? actors.writer.id : null,
   })
-  const agentShell = isAgentShell()
-  const actors: ServeActors = { writer: createCliActor(), person: agentShell ? null : createPersonActor() }
 
   // The server stops by itself exactly when this run opens the browser.
   const opensBrowser = !agentShell && process.stdout.isTTY === true && options.open

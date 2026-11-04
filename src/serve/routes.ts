@@ -66,10 +66,15 @@ const OK = { ok: true as const }
 /** How many cards a search answers with when the caller names no limit. */
 const DEFAULT_SEARCH_LIMIT = 20
 
-export function createIssueRoutes(session: BoardSession): Route[] {
+/**
+ * `personWriterId` is the id the person who started the server is filed under;
+ * their writes read as `You`, everyone else's by name.
+ */
+export function createIssueRoutes(session: BoardSession, options: { personWriterId?: string | null } = {}): Route[] {
+  const personWriterId = options.personWriterId ?? null
   const { ops, store, workspace } = session
   const workspaceId = workspace.id
-  const activityResolver = createActivityResolver(workspace)
+  const activityResolver = createActivityResolver(workspace, personWriterId)
 
   /** The served workspace, when that is the one the caller named — or named none. */
   function requireWorkspace(named: string | undefined): string {
@@ -577,7 +582,7 @@ export function createIssueRoutes(session: BoardSession): Route[] {
       path: '/issues/:id/comments',
       handle: async ({ params }) => {
         await requireCard(params.id)
-        return (await ops.listComments(params.id)).map(toCommentView)
+        return (await ops.listComments(params.id)).map(comment => toCommentView(comment, personWriterId))
       },
     }),
     route({
@@ -587,7 +592,7 @@ export function createIssueRoutes(session: BoardSession): Route[] {
       write: true,
       handle: async ({ params, body, actors }) => {
         await requireCard(params.id)
-        return toCommentView(await ops.addComment({ issueId: params.id, content: body.content }, actors.writer))
+        return toCommentView(await ops.addComment({ issueId: params.id, content: body.content }, actors.writer), personWriterId)
       },
     }),
     route({

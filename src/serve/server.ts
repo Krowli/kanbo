@@ -95,7 +95,7 @@ export function assertServeBinding(host: string, token: string | null | undefine
 
 export async function startKanboServer(options: KanboServeOptions): Promise<RunningKanboServer> {
   assertServeBinding(options.host, options.token)
-  const routes = createIssueRoutes(options.session)
+  const routes = createIssueRoutes(options.session, { personWriterId: options.actors.person ? options.actors.writer.id : null })
   // `[::1]` is how an address is written in a URL; `listen` takes it bare.
   const listenHost = stripBrackets(options.host)
   let boundPort = 0
