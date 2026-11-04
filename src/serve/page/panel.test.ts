@@ -6,9 +6,9 @@ import type { IssueFieldChange } from '../../sqlite/schema'
 import type { ServeCommentView } from '../views'
 import { activityFixture, cardFixture, statusFixture } from './fixtures'
 import type { CardDetail } from './panel'
-import { renderPanel } from './panel'
+import { keepScroll, renderPanel } from './panel'
 
-const actions = { close: () => {}, addComment: () => {}, approve: () => {}, returnCard: () => {}, openCard: () => {} }
+const actions = { close: () => {}, addComment: () => {}, approve: () => {}, returnCard: () => {}, openCard: () => {}, selectTab: () => {} }
 const text = (value: string) => ({ kind: 'text' as const, text: value })
 const nowSeconds = Math.floor(Date.now() / 1000)
 
@@ -23,6 +23,7 @@ function detailFixture(fields: Partial<CardDetail> = {}): CardDetail {
     parent: null,
     children: [],
     statuses: [statusFixture({ id: 'todo', name: 'To Do' })],
+    tab: 'comments',
     ...fields,
   }
 }
@@ -38,7 +39,7 @@ describe('renderPanel', () => {
     const panel = renderPanel(detailFixture({ card }), actions, null)
     const facts = [...panel.querySelectorAll('.facts dt')].map(term => [term.textContent, term.nextElementSibling?.textContent])
     expect(facts).toContainEqual(['Worked by', 'claude · running'])
-    expect(facts).toContainEqual(['Column', 'To Do'])
+    expect(panel.querySelector('.state-row .column-pill')?.textContent).toBe('To Do')
     expect(facts).toContainEqual(['Priority', 'high'])
     expect(facts).toContainEqual(['Labels', 'email'])
   })
@@ -46,7 +47,7 @@ describe('renderPanel', () => {
   it('says Nobody when nobody works the card, and omits priority none and empty labels', () => {
     const panel = renderPanel(detailFixture(), actions, null)
     const terms = [...panel.querySelectorAll('.facts dt')].map(term => term.textContent)
-    expect(terms).toEqual(['Column', 'Created by', 'Worked by'])
+    expect(terms).toEqual(['Created by', 'Worked by'])
     expect(panel.querySelector('.facts')?.textContent).toContain('Nobody')
   })
 
@@ -86,8 +87,8 @@ describe('renderPanel', () => {
       const at = (date: Date) => Math.floor(date.getTime() / 1000)
       const older = new Date(2026, 9, 31, 17, 20)
       const comments = [
-        { id: 'c1', content: 'hi', createdAt: at(new Date(2026, 10, 3, 11, 55)), author: { kind: 'user', id: '__self__', displayName: 'You', avatarUrl: null, label: null } },
         { id: 'c2', content: 'older', createdAt: at(older), author: { kind: 'agent', id: 'claude', displayName: 'claude', avatarUrl: null, label: null } },
+        { id: 'c1', content: 'hi', createdAt: at(new Date(2026, 10, 3, 11, 55)), author: { kind: 'user', id: '__self__', displayName: 'You', avatarUrl: null, label: null } },
       ] as ServeCommentView[]
       const runs = [{ id: 'r1', attempt: 1, agentName: 'claude', state: 'failed', branch: null, startedAt: at(older) }] as BoardRunView[]
       const panel = renderPanel(detailFixture({ comments, runs }), actions, null)
@@ -156,6 +157,79 @@ describe('renderPanel', () => {
       expect(panel.querySelector('.subcards')).toBeNull()
       expect([...panel.querySelectorAll('dt')].map(term => term.textContent)).not.toContain('Parent')
     })
+  })
+})
+
+describe('the dialog', () => {
+  const author = { kind: 'user', id: '__self__', displayName: 'You', avatarUrl: null, label: null }
+  const comments = [
+    { id: 'c1', content: 'first', createdAt: 1, author },
+    { id: 'c2', content: 'second', createdAt: 2, author },
+  ] as ServeCommentView[]
+
+  it('is a modal dialog labelled by the title', () => {
+    const panel = renderPanel(detailFixture(), actions, null)
+    expect(panel.getAttribute('role')).toBe('dialog')
+    expect(panel.getAttribute('aria-modal')).toBe('true')
+    const title = panel.querySelector('.panel-title')
+    expect(title?.id).toBeTruthy()
+    expect(panel.getAttribute('aria-labelledby')).toBe(title?.id)
+  })
+
+  it('shows the column and the waiting badge in the state row, and no Column fact', () => {
+    const card = cardFixture({ id: 'WOR-001', waitingFor: 'human' })
+    const panel = renderPanel(detailFixture({ card }), actions, null)
+    expect(panel.querySelector('.state-row .column-pill')?.textContent).toBe('To Do')
+    expect(panel.querySelector('.state-row .waiting-badge')?.textContent).toBe('Waiting for you')
+    expect([...panel.querySelectorAll('.facts dt')].map(term => term.textContent)).not.toContain('Column')
+  })
+
+  it('counts the tabs and shows only the selected panel', () => {
+    const panel = renderPanel(detailFixture({ comments, tab: 'history' }), actions, null)
+    const tabs = [...panel.querySelectorAll<HTMLElement>('[role=tab]')]
+    expect(tabs.map(tab => tab.textContent)).toEqual(['Comments2', 'History0', 'Runs0'])
+    expect(tabs.map(tab => tab.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false'])
+    expect([...panel.querySelectorAll<HTMLElement>('[role=tabpanel]')].map(body => body.hidden)).toEqual([true, false, true])
+    expect(tabs[1]?.getAttribute('aria-controls')).toBe(panel.querySelectorAll('[role=tabpanel]')[1]?.id)
+  })
+
+  it('selects a tab on click and with the arrow keys', () => {
+    const selectTab = vi.fn()
+    const panel = renderPanel(detailFixture(), { ...actions, selectTab }, null)
+    const tabs = [...panel.querySelectorAll<HTMLElement>('[role=tab]')]
+    tabs[2]?.click()
+    expect(selectTab).toHaveBeenLastCalledWith('runs')
+    tabs[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    expect(selectTab).toHaveBeenLastCalledWith('history')
+    tabs[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true }))
+    expect(selectTab).toHaveBeenLastCalledWith('runs')
+  })
+
+  it('puts the composer before the comments, newest first', () => {
+    const panel = renderPanel(detailFixture({ comments }), actions, null)
+    const form = panel.querySelector('#tab-panel-comments .comment-form')
+    const list = panel.querySelector('#tab-panel-comments .entries')
+    expect(form?.nextElementSibling).toBe(list)
+    expect([...panel.querySelectorAll('#tab-panel-comments .entry-text')].map(text => text.textContent)).toEqual(['second', 'first'])
+  })
+
+  it('closes from the labelled cross', () => {
+    const close = vi.fn()
+    const cross = renderPanel(detailFixture(), { ...actions, close }, null).querySelector<HTMLButtonElement>('.panel-head button')
+    expect(cross?.getAttribute('aria-label')).toBe('Close')
+    cross?.click()
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('keeps the scroll only for the same card', () => {
+    const previous = document.createElement('div')
+    previous.scrollTop = 120
+    const same = document.createElement('div')
+    const other = document.createElement('div')
+    keepScroll(previous, same, true)
+    keepScroll(previous, other, false)
+    expect(same.scrollTop).toBe(120)
+    expect(other.scrollTop).toBe(0)
   })
 })
 

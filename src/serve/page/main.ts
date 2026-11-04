@@ -11,8 +11,8 @@ import type { CardFilters } from './filters'
 import { filterOptions, matchesFilters, readFilters, writeFilters } from './filters'
 import type { BoardColumn } from './grouping'
 import { groupBoard } from './grouping'
-import type { CardDetail } from './panel'
-import { renderPanel } from './panel'
+import type { CardDetail, PanelTab } from './panel'
+import { keepScroll, renderPanel } from './panel'
 import { childrenOf, parentOf, subcardSummary } from './subcards'
 import { startPresence } from './presence'
 import { renderProjectSwitcher, renderWhere } from './project-switcher'
@@ -500,6 +500,9 @@ function openDraft(status: ServeStatusView): void {
   input.focus()
 }
 
+/** The tab the dialog is on; kept from card to card, so reading History card after card stays on History. */
+let panelTab: PanelTab = 'comments'
+
 async function openCard(cardId: string): Promise<void> {
   openCardId = cardId
   panelNotice = null
@@ -520,7 +523,7 @@ async function loadDetail(): Promise<void> {
   }
   try {
     const [comments, activity, runs, fieldChanges] = await Promise.all([api.comments(cardId), api.activity(cardId), api.runs(cardId), api.fieldChanges(cardId)])
-    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs, fieldChanges, parent: parentOf(cards, card), children: childrenOf(cards, statuses, cardId), statuses }
+    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs, fieldChanges, parent: parentOf(cards, card), children: childrenOf(cards, statuses, cardId), statuses, tab: panelTab }
   }
   catch (error) {
     panelNotice = describeFailure(error)
@@ -535,6 +538,7 @@ function hasUnsentText(container: HTMLElement): boolean {
 function renderPanelHost(): void {
   if (!detail || detail.card.id !== openCardId) {
     panelHost.replaceChildren()
+    setBackgroundInert(false)
     return
   }
   const cardId = detail.card.id
@@ -550,11 +554,22 @@ function renderPanelHost(): void {
       await api.returnCard(cardId, comment)
     }),
     openCard: id => void openCard(id),
+    selectTab: (tab) => {
+      panelTab = tab
+      if (detail) {
+        detail = { ...detail, tab }
+      }
+      renderPanelHost()
+    },
   }, panelNotice)
   const opening = !panelHost.firstChild
+  const previousScroll = panelHost.querySelector<HTMLElement>('.panel-scroll')
+  const sameCard = panelHost.querySelector('.panel-head .card-key')?.textContent === cardId
   panelHost.replaceChildren(panel)
+  keepScroll(previousScroll, panel.querySelector<HTMLElement>('.panel-scroll')!, sameCard)
   if (opening) {
-    // Slides in this once; the rebuilds on later polls stay still.
+    setBackgroundInert(true)
+    // Fades in this once; the rebuilds on later polls stay still.
     panel.classList.add('panel--opening')
     panel.querySelector<HTMLElement>('button')?.focus()
   }
@@ -585,12 +600,26 @@ async function act(action: () => Promise<void>): Promise<void> {
   await refresh()
 }
 
+/** While the dialog is open the board behind it can't be reached by Tab or a screen reader. */
+function setBackgroundInert(inert: boolean): void {
+  for (const region of [header, notice, filterSlot, boardElement]) {
+    region.inert = inert
+  }
+}
+
+panelHost.addEventListener('click', (event) => {
+  if (event.target === panelHost) {
+    closePanel()
+  }
+})
+
 function closePanel(): void {
   const cardId = openCardId
   openCardId = null
   detail = null
   panelNotice = null
   panelHost.replaceChildren()
+  setBackgroundInert(false)
   markOpenCard()
   if (cardId) {
     focusCard(cardId)

@@ -9,11 +9,18 @@ import type { HistoryEntry } from './history'
 import { groupByDay, relativeDay, relativeTime, toHistory } from './history'
 
 /**
- * The side panel a card opens into: everything the board holds about it, read
+ * The dialog a card opens into: everything the board holds about it, read
  * only, and the three things a person does from here — comment, approve,
  * return. The description is plain text as it was written; nothing in it is
  * rendered as Markdown or HTML.
  */
+
+export type PanelTab = 'comments' | 'history' | 'runs'
+const TABS: { tab: PanelTab, label: string }[] = [
+  { tab: 'comments', label: 'Comments' },
+  { tab: 'history', label: 'History' },
+  { tab: 'runs', label: 'Runs' },
+]
 
 export interface CardDetail {
   card: ServeCardView
@@ -25,6 +32,7 @@ export interface CardDetail {
   parent: ServeCardView | null
   children: ServeCardView[]
   statuses: ServeStatusView[]
+  tab: PanelTab
 }
 
 export interface PanelActions {
@@ -33,46 +41,125 @@ export interface PanelActions {
   approve: (comment: string | null) => void
   returnCard: (comment: string) => void
   openCard: (cardId: string) => void
+  selectTab: (tab: PanelTab) => void
+}
+
+/** A rebuilt panel for the card already on screen starts where the person was reading; a new card starts at the top. */
+export function keepScroll(previous: HTMLElement | null, next: HTMLElement, sameCard: boolean): void {
+  if (sameCard && previous) {
+    next.scrollTop = previous.scrollTop
+  }
 }
 
 export function renderPanel(detail: CardDetail, actions: PanelActions, notice: string | null): HTMLElement {
   const { card, status } = detail
-  const panel = el('aside', 'panel')
-  panel.setAttribute('aria-label', `Card ${card.id}`)
+  const panel = el('div', 'panel')
+  panel.setAttribute('role', 'dialog')
+  panel.setAttribute('aria-modal', 'true')
+  const titleId = 'panel-title'
+  panel.setAttribute('aria-labelledby', titleId)
 
   const head = el('div', 'panel-head')
-  head.append(el('span', 'card-key', card.id), button('Close', 'ghost', actions.close))
-  panel.append(head)
+  const close = button('✕', 'icon-button', actions.close)
+  close.setAttribute('aria-label', 'Close')
+  close.title = 'Close (Esc)'
+  head.append(el('span', 'card-key', card.id), el('span', 'spacer'), close)
 
-  panel.append(el('h2', 'panel-title', cardDisplayTitle(card)))
+  const scroll = el('div', 'panel-scroll')
+  const top = el('div', 'panel-top')
+  const title = el('h2', 'panel-title', cardDisplayTitle(card))
+  title.id = titleId
+  top.append(title, renderStateRow(card, status))
   const history = toHistory(detail.activity, detail.fieldChanges)
   const now = new Date()
-  panel.append(renderFacts(card, status, detail.parent, detail.runs, actions, history, now))
   if (card.statusLine?.trim()) {
     const line = el('p', 'status-line', card.statusLine.trim())
     line.dataset.category = status?.category ?? 'unstarted'
-    panel.append(line)
+    top.append(line)
   }
   // Always there, so a refusal can be said without rebuilding the panel and
   // losing the note that was being written.
   const message = el('p', 'panel-notice', notice ?? '')
   message.setAttribute('role', 'alert')
   message.hidden = !notice
-  panel.append(message)
+  top.append(message)
 
-  if (detail.children.length > 0) {
-    panel.append(renderSubcards(detail, actions))
-  }
-
-  panel.append(section('Description', card.description?.trim()
+  const main = el('div', 'panel-main')
+  main.append(section('Description', card.description?.trim()
     ? el('div', 'description', card.description)
     : el('p', 'empty', 'No description.')))
+  if (detail.children.length > 0) {
+    main.append(renderSubcards(detail, actions))
+  }
+  const commentsPanel = [...renderCommentsTab(detail.comments, actions, now)]
+  const historyPanel = [renderHistory(history, now)]
+  const runsPanel = [renderList(detail.runs, run => [describeRun(run), run.startedAt, run.state], 'No runs.', now)]
+  const counts: Record<PanelTab, number> = { comments: detail.comments.length, history: history.length, runs: detail.runs.length }
+  const bodies: Record<PanelTab, HTMLElement[]> = { comments: commentsPanel, history: historyPanel, runs: runsPanel }
+  main.append(renderTabs(detail.tab, counts, bodies, actions))
 
-  panel.append(renderDecision(card, actions))
-  panel.append(section('Comments', ...renderComments(detail.comments, now), renderCommentForm(actions)))
-  panel.append(renderHistory(history, now))
-  panel.append(section('Runs', renderList(detail.runs, run => [describeRun(run), run.startedAt, run.state], 'No runs.', now)))
+  const side = el('div', 'panel-side')
+  side.append(renderDecision(card, actions), section('Details', renderFacts(card, detail.parent, detail.runs, actions, history, now)))
+
+  const body = el('div', 'panel-body')
+  body.append(main, side)
+  scroll.append(top, body)
+  panel.append(head, scroll)
   return panel
+}
+
+function renderStateRow(card: ServeCardView, status: ServeStatusView | null): HTMLElement {
+  const row = el('div', 'state-row')
+  row.append(el('span', 'column-pill', status ? status.name : 'No column'))
+  if (card.waitingFor === 'human') {
+    row.append(el('span', 'waiting-badge', 'Waiting for you'))
+  }
+  if (card.activeRun?.state === 'running') {
+    const running = el('span', 'run-state')
+    const dot = el('span', 'run-dot')
+    dot.setAttribute('aria-hidden', 'true')
+    running.append(dot, card.activeRun.agentName ? `Running · ${card.activeRun.agentName}` : 'Running')
+    row.append(running)
+  }
+  return row
+}
+
+function renderTabs(selected: PanelTab, counts: Record<PanelTab, number>, bodies: Record<PanelTab, HTMLElement[]>, actions: PanelActions): HTMLElement {
+  const wrapper = el('div', 'tabs-wrap')
+  const bar = el('div', 'tabs')
+  bar.setAttribute('role', 'tablist')
+  const panels: HTMLElement[] = []
+  TABS.forEach(({ tab, label }, index) => {
+    const button = el('button', 'tab')
+    button.type = 'button'
+    button.id = `tab-${tab}`
+    button.setAttribute('role', 'tab')
+    button.setAttribute('aria-selected', String(tab === selected))
+    button.setAttribute('aria-controls', `tab-panel-${tab}`)
+    button.tabIndex = tab === selected ? 0 : -1
+    button.append(label, el('span', 'count', String(counts[tab])))
+    button.addEventListener('click', () => actions.selectTab(tab))
+    button.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
+        return
+      }
+      event.preventDefault()
+      const next = TABS[(index + (event.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length]!.tab
+      actions.selectTab(next)
+      // The page rebuilds the dialog; the focus follows the new tab once it exists.
+      queueMicrotask(() => document.getElementById(`tab-${next}`)?.focus())
+    })
+    bar.append(button)
+    const body = el('div', 'tab-panel')
+    body.id = `tab-panel-${tab}`
+    body.setAttribute('role', 'tabpanel')
+    body.setAttribute('aria-labelledby', button.id)
+    body.hidden = tab !== selected
+    body.append(...bodies[tab])
+    panels.push(body)
+  })
+  wrapper.append(bar, ...panels)
+  return wrapper
 }
 
 /** A board timestamp (Unix seconds) as a `<time>`: `text` on the page, the reader's full date and time on hover. */
@@ -84,17 +171,14 @@ function timeElement(seconds: number, text: string): HTMLElement {
   return time
 }
 
-/** Column, who made the card, who works it, priority and labels: the answers a person opens a card for. */
-function renderFacts(card: ServeCardView, status: ServeStatusView | null, parent: ServeCardView | null, runs: BoardRunView[], actions: PanelActions, history: HistoryEntry[], now: Date): HTMLElement {
+/** Who made the card, who works it, priority and labels: the answers a person opens a card for. */
+function renderFacts(card: ServeCardView, parent: ServeCardView | null, runs: BoardRunView[], actions: PanelActions, history: HistoryEntry[], now: Date): HTMLElement {
   const facts = el('dl', 'facts')
   const row = (term: string, ...value: (HTMLElement | string)[]): void => {
     const detail = el('dd')
     detail.append(...value)
     facts.append(el('dt', undefined, term), detail)
   }
-
-  const column = el('span', undefined, status ? status.name : 'No column')
-  row('Column', column, ...(card.waitingFor === 'human' ? [' ', el('span', 'waiting-badge', 'Waiting for you')] : []))
 
   if (card.parentIssueId) {
     if (parent) {
@@ -272,12 +356,13 @@ function renderDecision(card: ServeCardView, actions: PanelActions): HTMLElement
   return decision
 }
 
-function renderComments(comments: ServeCommentView[], now: Date): HTMLElement[] {
+/** The composer first, then the comments newest first. */
+function renderCommentsTab(comments: ServeCommentView[], actions: PanelActions, now: Date): HTMLElement[] {
   if (comments.length === 0) {
-    return [el('p', 'empty', 'No comments.')]
+    return [renderCommentForm(actions), el('p', 'empty', 'No comments.')]
   }
   const list = el('ul', 'entries')
-  for (const comment of comments) {
+  for (const comment of [...comments].reverse()) {
     const item = el('li')
     const meta = el('div', 'entry-meta')
     meta.append(
@@ -287,13 +372,13 @@ function renderComments(comments: ServeCommentView[], now: Date): HTMLElement[] 
     item.append(meta, el('div', 'entry-text', comment.content))
     list.append(item)
   }
-  return [list]
+  return [renderCommentForm(actions), list]
 }
 
 function renderCommentForm(actions: PanelActions): HTMLElement {
   const form = el('div', 'comment-form')
   const input = el('textarea', 'field')
-  input.rows = 2
+  input.rows = 4
   input.placeholder = 'Add a comment'
   input.setAttribute('aria-label', 'New comment')
   form.append(input, button('Comment', 'secondary', () => {

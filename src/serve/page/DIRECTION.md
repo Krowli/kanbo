@@ -28,9 +28,9 @@ App-like single screen, one CSS grid on `#app` (no new wrappers):
 | 2 | `.notice` | collapses when hidden |
 | 3 | `.filter-bar` | one row that wraps on desktop; on phone one sideways-scrolling row with search, "Showing N of M" and Clear first |
 | 4 | `.board` | columns side by side, the board scrolls sideways; each column's card list scrolls on its own, the column head stays put. Phone: columns 86 % wide with scroll snap so the next one peeks. |
-| 2–4 | `.panel-host` | ≥ 56.25rem (900 px): a second grid column `--panel-width` (25rem) — the board narrows, nothing is covered. Below: the panel overlays rows 2–4 over a scrim, top bar still in reach; full width on a phone. `:empty` → `display: none`. |
+| 1–4 | `.panel-host` | An overlay over rows 1–4 with the scrim; the board stays dimmed behind and is `inert`. From 56.25rem (900 px) the dialog `.panel` is centred, two columns (`minmax(0, 1fr)` + `--dialog-side-width`), the side (Decision, Details) sticky. Below 56.25rem it is full screen, one column, the side before the main. Inside: `.panel-head` (key, ✕) outside the one scrolling box `.panel-scroll` = `.panel-top` (title, state row, status line) + `.panel-body` (`.panel-main`: description, sub-cards, Comments / History / Runs tabs; `.panel-side`). `:empty` → `display: none`. |
 
-Columns: `flex: 1 0 15rem; max-width: 20rem`. At 1440 px with the panel open four bays fit and the fifth peeks (shows that the board scrolls).
+Columns: `flex: 1 0 15rem; max-width: 20rem`. The open card is a dialog over the board, so the bays keep their full width behind it.
 
 Breakpoints, the only two (mobile first, `min-width`): **40rem** (640 px) and **56.25rem** (900 px). Other `@media` allowed: `prefers-color-scheme`, `prefers-reduced-motion`.
 
@@ -89,7 +89,7 @@ Tightest margins: light muted-on-well 4.89, light quiet-on-surface 3.05, light w
 - **Display** (`--font-display`; used only for the wordmark, column names, panel title, panel section headings) — the owner chooses:
   - **(a) none — recommended.** `--font-display: var(--font-text)`. Hierarchy from weight, size and caps: column names and section headings 0.75rem / 700 / uppercase / 0.06em tracking ("bay labels"), panel title 1.25rem / 650. Cost: 0 bytes, no CSP change.
   - **(b) Big Shoulders** (Patric King, SIL Open Font License — `license: "OFL"` in google/fonts `ofl/bigshoulders/METADATA.pb`), variable (axes `opsz` 10–72, `wght` 100–900). Latin woff2 as Google Fonts serves it: **36 480 bytes** (budget 40 960). A condensed face drawn after Chicago's signage: column names read like bay signs. Needs `font-src 'self'`, one route, the licence file (plan step 4). Preview: `shots/1440x900-light-font-b.png`; sizes under `.font-b` in the mockup CSS (column names and section heads 0.875rem / 750, wordmark 1.25rem / 800).
-- **Scale** (6 steps): `--text-xs` 0.6875rem (keys, times, chips) · `--text-sm` 0.75rem (status line, badges, buttons, labels) · `--text-base` 0.8125rem (body, facts, history) · `--text-md` 0.875rem (card titles, description, fields) · `--text-lg` 1rem (wordmark) · `--text-xl` 1.25rem (panel title). Leading `--leading-tight` 1.3, `--leading-normal` 1.5. Never `px` for `font-size`.
+- **Scale** (6 steps): `--text-xs` 0.6875rem (keys, times, chips) · `--text-sm` 0.75rem (status line, badges, buttons, labels) · `--text-base` 0.8125rem (body, facts, history) · `--text-md` 0.875rem (card titles, description, fields) · `--text-lg` 1rem (wordmark) · `--text-xl` 1.25rem (panel title below 56.25rem) · `--text-2xl` 1.5rem (the dialog title from 56.25rem up) · `--text-reading` 0.9375rem (description and comment text). Leading `--leading-tight` 1.3, `--leading-normal` 1.5. Never `px` for `font-size`.
 - Weights: 400 body, 500 controls, 600 card titles and values, 650–700 headings and badges. Headings `text-wrap: balance`, body `pretty`; `-webkit-font-smoothing: antialiased` on body.
 
 ## 6. Spacing & shape
@@ -97,9 +97,9 @@ Tightest margins: light muted-on-well 4.89, light quiet-on-surface 3.05, light w
 - **Space** (4 px base, 7 steps): `--space-1` 0.25rem · `-2` 0.5rem · `-3` 0.75rem · `-4` 1rem · `-5` 1.5rem · `-6` 2rem · `-7` 3rem.
 - **Radii** (3): `--radius-sm` 0.1875rem (chips, badges) · `--radius-md` 0.375rem (cards, buttons, fields) · `--radius-lg` 0.625rem (bays = md + the bay's 4 px padding, concentric).
 - **Strip edge:** `--edge-width` 3px, drawn as `inset` box-shadow so it follows the card's corner.
-- **Shadows** (3): `--shadow-card` (1 px paper thickness) · `--shadow-lift` (the open card) · `--shadow-panel` (overlay panel only; the docked panel has a hairline instead).
+- **Shadows** (3): `--shadow-card` (1 px paper thickness) · `--shadow-lift` (the open card) · `--shadow-panel` (the dialog, `0 24px 64px`).
 - **Z-layers:** `--z-raised` 1 (sticky panel head) · `--z-panel` 10 · `--z-overlay` 20 · `--z-toast` 30. No numeric `z-index` outside tokens.
-- **Sizes:** `--control-height` 2.5rem below 40rem (touch), 1.875rem above; `--chip-height` 2.5rem / 1.5rem; `--column-width` 15rem; `--column-max` 20rem; `--panel-width` 25rem.
+- **Sizes:** `--control-height` 2.5rem below 40rem (touch), 1.875rem above; `--chip-height` 2.5rem / 1.5rem; `--column-width` 15rem; `--column-max` 20rem; `--dialog-width` 78rem; `--dialog-side-width` 21.5rem.
 - **Card anatomy, top to bottom** (the required reading order): state row (Waiting badge, or run dot + "Running · agent"; attempt `×N` at the right) → title (600, 3 lines max with ellipsis) → key + worker chip (agent: blue square; You: ink circle; Nobody: nothing; not repeated while running) → status line (muted, rule on the left, 2 lines max) → priority + labels (Urgent ink-filled, High ink outline, Medium/Low grey outline, None hidden; labels on a light tint).
 - Focus: `:focus-visible` ring 2 px `--color-focus`, offset 2 px; on a card the ring is drawn by the title's stretched `::after`. The open card has a flush 2 px ink ring + `--shadow-lift`, so "open" and "focused" never look the same.
 
@@ -111,7 +111,7 @@ What moves — only this:
 
 | What | How | Why |
 |---|---|---|
-| Panel, first opening only (`.panel--opening` when `renderPanelHost` sees `opening === true`) | fade + 1.5rem slide from the right, slow, ease-out | shows where the card went |
+| Panel, first opening only (`.panel--opening` when `renderPanelHost` sees `opening === true`) | fade + scale from 0.98, slow, ease-out | shows where the card went |
 | A card new or changed column since the last render (`data-enter="new"` / `"moved"`) | fade + 4 px lift, base, ease-out, once | shows what changed while you looked away |
 | Drop target column (`.drop-target`) | bay lightens, 2 px strong inset ring, fast | confirms where the card will land |
 | Buttons, toggles, chips on press | `scale(0.96)`, fast; colour change fast | confirms the press |
@@ -155,3 +155,5 @@ What today's page code (plus plans 002–005) must add so the CSS can do this �
 ---
 
 Approved by the owner on 2026-11-03. Type: option (a), the system font stack; no web font.
+
+Dialog approved by the owner on 2026-11-04 (mockup `/tmp/kanbo-mockup-modal/`).
