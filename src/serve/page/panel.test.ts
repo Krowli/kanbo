@@ -6,7 +6,7 @@ import type { IssueFieldChange } from '../../sqlite/schema'
 import type { ServeCommentView } from '../views'
 import { activityFixture, cardFixture, statusFixture } from './fixtures'
 import type { CardDetail } from './panel'
-import { keepScroll, renderPanel } from './panel'
+import { readScroll, renderPanel } from './panel'
 
 const actions = { close: () => {}, addComment: () => {}, approve: () => {}, returnCard: () => {}, openCard: () => {}, selectTab: () => {} }
 const text = (value: string) => ({ kind: 'text' as const, text: value })
@@ -221,15 +221,45 @@ describe('the dialog', () => {
     expect(close).toHaveBeenCalled()
   })
 
-  it('keeps the scroll only for the same card', () => {
-    const previous = document.createElement('div')
-    previous.scrollTop = 120
-    const same = document.createElement('div')
-    const other = document.createElement('div')
-    keepScroll(previous, same, true)
-    keepScroll(previous, other, false)
-    expect(same.scrollTop).toBe(120)
-    expect(other.scrollTop).toBe(0)
+  it('reads the scroll of the same card before its dialog leaves the document', () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    host.append(renderPanel(detailFixture(), actions, null))
+    const scroller = host.querySelector<HTMLElement>('.panel-scroll')!
+    scroller.scrollTop = 120
+    const top = readScroll(host, 'WOR-001')
+    expect(readScroll(host, 'WOR-002')).toBe(0)
+    host.replaceChildren()
+    expect(top).toBe(120)
+    host.remove()
+  })
+
+  it('switches tabs in place: the composer node and its text stay', () => {
+    const selectTab = vi.fn()
+    const panel = renderPanel(detailFixture(), { ...actions, selectTab }, null)
+    document.body.append(panel)
+    const composer = panel.querySelector<HTMLTextAreaElement>('.comment-form textarea')!
+    composer.value = 'half-written'
+    const tabs = [...panel.querySelectorAll<HTMLElement>('[role=tab]')]
+    tabs[2]?.click()
+    expect(panel.querySelector<HTMLElement>('#tab-panel-runs')?.hidden).toBe(false)
+    expect(panel.querySelector<HTMLElement>('#tab-panel-comments')?.hidden).toBe(true)
+    tabs[0]?.click()
+    expect(selectTab.mock.calls).toEqual([['runs'], ['comments']])
+    expect(document.body.contains(composer)).toBe(true)
+    expect(panel.querySelector('.comment-form textarea')).toBe(composer)
+    expect(composer.value).toBe('half-written')
+    expect(tabs.map(tab => tab.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false'])
+    panel.remove()
+  })
+
+  it('moves focus to the neighbouring tab on an arrow key', () => {
+    const panel = renderPanel(detailFixture(), actions, null)
+    document.body.append(panel)
+    const tabs = [...panel.querySelectorAll<HTMLElement>('[role=tab]')]
+    tabs[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }))
+    expect(document.activeElement).toBe(tabs[1])
+    panel.remove()
   })
 })
 

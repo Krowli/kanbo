@@ -12,7 +12,7 @@ import { filterOptions, matchesFilters, readFilters, writeFilters } from './filt
 import type { BoardColumn } from './grouping'
 import { groupBoard } from './grouping'
 import type { CardDetail, PanelTab } from './panel'
-import { keepScroll, renderPanel } from './panel'
+import { readScroll, renderPanel } from './panel'
 import { childrenOf, parentOf, subcardSummary } from './subcards'
 import { startPresence } from './presence'
 import { renderProjectSwitcher, renderWhere } from './project-switcher'
@@ -559,14 +559,15 @@ function renderPanelHost(): void {
       if (detail) {
         detail = { ...detail, tab }
       }
-      renderPanelHost()
     },
   }, panelNotice)
   const opening = !panelHost.firstChild
-  const previousScroll = panelHost.querySelector<HTMLElement>('.panel-scroll')
-  const sameCard = panelHost.querySelector('.panel-head .card-key')?.textContent === cardId
+  const previousTop = readScroll(panelHost, cardId)
   panelHost.replaceChildren(panel)
-  keepScroll(previousScroll, panel.querySelector<HTMLElement>('.panel-scroll')!, sameCard)
+  const scroller = panel.querySelector<HTMLElement>('.panel-scroll')
+  if (scroller) {
+    scroller.scrollTop = previousTop
+  }
   if (opening) {
     setBackgroundInert(true)
     // Fades in this once; the rebuilds on later polls stay still.

@@ -44,11 +44,10 @@ export interface PanelActions {
   selectTab: (tab: PanelTab) => void
 }
 
-/** A rebuilt panel for the card already on screen starts where the person was reading; a new card starts at the top. */
-export function keepScroll(previous: HTMLElement | null, next: HTMLElement, sameCard: boolean): void {
-  if (sameCard && previous) {
-    next.scrollTop = previous.scrollTop
-  }
+/** Where the person is reading in `host`'s dialog if it shows `cardId`, else 0. Read before the old dialog leaves the document: a detached element reads 0. */
+export function readScroll(host: HTMLElement, cardId: string): number {
+  const sameCard = host.querySelector('.panel-head .card-key')?.textContent === cardId
+  return sameCard ? host.querySelector<HTMLElement>('.panel-scroll')?.scrollTop ?? 0 : 0
 }
 
 export function renderPanel(detail: CardDetail, actions: PanelActions, notice: string | null): HTMLElement {
@@ -129,6 +128,17 @@ function renderTabs(selected: PanelTab, counts: Record<PanelTab, number>, bodies
   const bar = el('div', 'tabs')
   bar.setAttribute('role', 'tablist')
   const panels: HTMLElement[] = []
+  const buttons = new Map<PanelTab, HTMLButtonElement>()
+  const bodiesByTab = new Map<PanelTab, HTMLElement>()
+  // Switched in place, so a note being written in the composer stays; main only remembers the choice.
+  const select = (tab: PanelTab): void => {
+    for (const [other, tabButton] of buttons) {
+      tabButton.setAttribute('aria-selected', String(other === tab))
+      tabButton.tabIndex = other === tab ? 0 : -1
+      bodiesByTab.get(other)!.hidden = other !== tab
+    }
+    actions.selectTab(tab)
+  }
   TABS.forEach(({ tab, label }, index) => {
     const button = el('button', 'tab')
     button.type = 'button'
@@ -138,17 +148,17 @@ function renderTabs(selected: PanelTab, counts: Record<PanelTab, number>, bodies
     button.setAttribute('aria-controls', `tab-panel-${tab}`)
     button.tabIndex = tab === selected ? 0 : -1
     button.append(label, el('span', 'count', String(counts[tab])))
-    button.addEventListener('click', () => actions.selectTab(tab))
+    button.addEventListener('click', () => select(tab))
     button.addEventListener('keydown', (event) => {
       if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') {
         return
       }
       event.preventDefault()
       const next = TABS[(index + (event.key === 'ArrowRight' ? 1 : TABS.length - 1)) % TABS.length]!.tab
-      actions.selectTab(next)
-      // The page rebuilds the dialog; the focus follows the new tab once it exists.
-      queueMicrotask(() => document.getElementById(`tab-${next}`)?.focus())
+      select(next)
+      buttons.get(next)?.focus()
     })
+    buttons.set(tab, button)
     bar.append(button)
     const body = el('div', 'tab-panel')
     body.id = `tab-panel-${tab}`
@@ -156,6 +166,7 @@ function renderTabs(selected: PanelTab, counts: Record<PanelTab, number>, bodies
     body.setAttribute('aria-labelledby', button.id)
     body.hidden = tab !== selected
     body.append(...bodies[tab])
+    bodiesByTab.set(tab, body)
     panels.push(body)
   })
   wrapper.append(bar, ...panels)
