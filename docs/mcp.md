@@ -1,6 +1,6 @@
 # MCP reference
 
-`kanbo mcp` is an MCP server over stdio. It opens the board the same way every `kanbo` command does (flags, environment, the project's `.kanbo/binding.json`) and treats its client as an agent: on a Postgres board it uses the binding's `agentDatabaseUrl` when there is one, and every write is filed under `KANBO_ACTOR_ID` or the operating-system user.
+`kanbo mcp` is an MCP server over stdio. It opens the board the same way every `kanbo` command does (flags, environment, the project's `.kanbo/binding.json`) and treats its client as an agent: on a Postgres board it uses the binding's `agentDatabaseUrl` when there is one, and every write is filed under `KANBO_ACTOR_ID`, else the agent tool (`claude`, `codex`, `cursor`, `gemini`), else the name the MCP client gives when it connects (`Test Client` becomes `test-client`), else `agent` — never the operating-system user.
 
 ```bash
 kanbo mcp                                   # the board this project is bound to

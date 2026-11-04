@@ -50,7 +50,7 @@ Nothing secret is logged: never a token, a header or a connection string.
 
 ## Who a request writes as
 
-Every write is filed as `external`, under `KANBO_ACTOR_ID` or the user who started the server — the same actor the `kanbo` command writes as.
+Every write is filed as `external`, under `KANBO_ACTOR_ID` or the user who started the server — the same actor the `kanbo` command writes as. The board page shows the writes of that person, when the server was not started from an agent's shell, as **You**, and every other writer by name with the agent look.
 
 Approving, returning, closing a sprint, changing the columns (creating, renaming, deleting, reordering, adding the standard ones), setting a column's entry rules, deleting a comment the board wrote, removing a pull request link somebody else made and deleting a card are a person's. A request acts for the person who started the server only when **all** of these hold:
 
