@@ -2,7 +2,7 @@ import type { EntryRule } from '../domain/entry-rules'
 import { ENTRY_RULES, readEntryRules } from '../domain/entry-rules'
 import { foldCase } from '../domain/fold-case'
 import type { IssueActorKind } from '../domain/issue-view'
-import { normalizeCommentAuthorKind } from '../domain/issue-view'
+import { isOutsideWriter, normalizeCommentAuthorKind } from '../domain/issue-view'
 import { normalizeStatusName } from '../domain/status-name'
 import type { CardLastComment } from '../ops/approval'
 import type { Issue, IssueFieldChange, IssueRun } from '../sqlite/schema'
@@ -82,6 +82,8 @@ export interface KanboCardDetailResult extends KanboCardResult {
 export interface KanboCardCommentResult {
   id: string
   author: IssueActorKind
+  /** The name behind it: a person's or an agent's id, an outside writer's name, `kanbo` for the board's own lines. */
+  by: string
   content: string
   createdAt: number
 }
@@ -498,10 +500,22 @@ export function pageOf(cards: KanboCardResult[], input: { offset?: number, limit
 }
 
 /** A comment as a card read lists it, from the row either transport holds. */
-export function projectKanboCardComment(comment: { id: string, authorKind: string, content: string, createdAt: number }): KanboCardCommentResult {
+export function projectKanboCardComment(comment: {
+  id: string
+  authorKind: string
+  authorId: string | null
+  sourceChatSessionId: string | null
+  content: string
+  createdAt: number
+}): KanboCardCommentResult {
+  const decision = comment.authorKind === 'system.approved' || comment.authorKind === 'system.returned'
+  const author = decision ? 'user' : normalizeCommentAuthorKind(comment.authorKind)
+  const named = author !== 'system' || decision
+  const outside = author === 'system' && isOutsideWriter(comment) && comment.authorKind === 'system'
   return {
     id: comment.id,
-    author: normalizeCommentAuthorKind(comment.authorKind),
+    author,
+    by: named || outside ? comment.authorId ?? author : 'kanbo',
     content: comment.content,
     createdAt: comment.createdAt,
   }

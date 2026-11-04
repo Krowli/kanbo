@@ -70,7 +70,7 @@ export function describeCardExtras(extras: CardExtras): string {
       ? 'Comments:'
       : `Comments (last ${extras.comments.length} of ${extras.commentCount}):`
     sections.push([heading, ...extras.comments.map(comment =>
-      `${formatMoment(comment.createdAt)}  ${comment.author}: ${sanitizeTerminalText(comment.content)}`)].join('\n'))
+      `${formatMoment(comment.createdAt)}  ${sanitizeTerminalText(comment.by)}${comment.author === 'user' ? ' (person)' : ''}: ${sanitizeTerminalText(comment.content)}`)].join('\n'))
   }
   if (extras.runs && extras.runs.length > 0) {
     sections.push(['Runs:', ...extras.runs.map(run =>
