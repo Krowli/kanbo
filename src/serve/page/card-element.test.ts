@@ -78,4 +78,48 @@ describe('renderCard', () => {
     card.querySelector<HTMLButtonElement>('button.card-title')?.click()
     expect(onOpen).toHaveBeenCalledWith(fixture)
   })
+
+  describe('with sub-cards around it', () => {
+    const parent = cardFixture({ id: 'WOR-001', title: 'Ship the thing' })
+    const child = cardFixture({ id: 'WOR-002', parentIssueId: 'WOR-001' })
+
+    it('names the parent on a sub-card, and the parent line opens the parent alone', () => {
+      const onOpen = vi.fn()
+      const onOpenCard = vi.fn()
+      const card = renderCard(child, 'started', onOpen, { parent, summary: null, onOpenCard })
+      const link = card.querySelector<HTMLButtonElement>('button.parent-link')
+      expect(link?.textContent).toBe('↳ WOR-001Ship the thing')
+      link?.click()
+      expect(onOpenCard).toHaveBeenCalledWith('WOR-001')
+      expect(onOpen).not.toHaveBeenCalled()
+      expect(card.firstElementChild).toBe(link)
+    })
+
+    it('shows a parent that is not on the board as its key alone, not clickable', () => {
+      const card = renderCard(child, null, () => {}, { parent: null, summary: null, onOpenCard: () => {} })
+      expect(card.querySelector('button.parent-link')).toBeNull()
+      expect(card.querySelector('.parent-link')?.textContent).toBe('↳ WOR-001')
+    })
+
+    it('shows a parent title written as HTML as its characters', () => {
+      const title = '<img src=x onerror=alert(1)>'
+      const card = renderCard(child, null, () => {}, { parent: { ...parent, title }, summary: null, onOpenCard: () => {} })
+      expect(card.querySelector('img')).toBeNull()
+      expect(card.querySelector('.parent-title')?.textContent).toBe(title)
+    })
+
+    it('says how far the sub-cards are, and when all are done', () => {
+      const two = renderCard(parent, null, () => {}, { parent: null, summary: { total: 3, done: 2 }, onOpenCard: () => {} })
+      expect(two.querySelector('.subcard-chip')?.textContent).toBe('2/3 sub-cards')
+      expect(two.querySelector<HTMLElement>('.subcard-chip')?.title).toBe('2 of 3 sub-cards done')
+      const all = renderCard(parent, null, () => {}, { parent: null, summary: { total: 3, done: 3 }, onOpenCard: () => {} })
+      expect(all.querySelector('.subcard-chip')?.textContent).toBe('All 3 sub-cards done')
+    })
+
+    it('adds nothing without a context', () => {
+      const card = renderCard(child, null, () => {})
+      expect(card.querySelector('.parent-link')).toBeNull()
+      expect(card.querySelector('.subcard-chip')).toBeNull()
+    })
+  })
 })

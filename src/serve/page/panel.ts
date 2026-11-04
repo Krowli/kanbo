@@ -22,6 +22,9 @@ export interface CardDetail {
   activity: IssueActivityItemView[]
   fieldChanges: IssueFieldChange[]
   runs: BoardRunView[]
+  parent: ServeCardView | null
+  children: ServeCardView[]
+  statuses: ServeStatusView[]
 }
 
 export interface PanelActions {
@@ -29,6 +32,7 @@ export interface PanelActions {
   addComment: (content: string) => void
   approve: (comment: string | null) => void
   returnCard: (comment: string) => void
+  openCard: (cardId: string) => void
 }
 
 export function renderPanel(detail: CardDetail, actions: PanelActions, notice: string | null): HTMLElement {
@@ -43,7 +47,7 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
   panel.append(el('h2', 'panel-title', cardDisplayTitle(card)))
   const history = toHistory(detail.activity, detail.fieldChanges)
   const now = new Date()
-  panel.append(renderFacts(card, status, history, now))
+  panel.append(renderFacts(card, status, detail.parent, actions, history, now))
   if (card.statusLine?.trim()) {
     const line = el('p', 'status-line', card.statusLine.trim())
     line.dataset.category = status?.category ?? 'unstarted'
@@ -55,6 +59,10 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
   message.setAttribute('role', 'alert')
   message.hidden = !notice
   panel.append(message)
+
+  if (detail.children.length > 0) {
+    panel.append(renderSubcards(detail, actions))
+  }
 
   panel.append(section('Description', card.description?.trim()
     ? el('div', 'description', card.description)
@@ -77,7 +85,7 @@ function timeElement(seconds: number, text: string): HTMLElement {
 }
 
 /** Column, who made the card, who works it, priority and labels: the answers a person opens a card for. */
-function renderFacts(card: ServeCardView, status: ServeStatusView | null, history: HistoryEntry[], now: Date): HTMLElement {
+function renderFacts(card: ServeCardView, status: ServeStatusView | null, parent: ServeCardView | null, actions: PanelActions, history: HistoryEntry[], now: Date): HTMLElement {
   const facts = el('dl', 'facts')
   const row = (term: string, ...value: (HTMLElement | string)[]): void => {
     const detail = el('dd')
@@ -87,6 +95,19 @@ function renderFacts(card: ServeCardView, status: ServeStatusView | null, histor
 
   const column = el('span', undefined, status ? status.name : 'No column')
   row('Column', column, ...(card.waitingFor === 'human' ? [' ', el('span', 'waiting-badge', 'Waiting for you')] : []))
+
+  if (card.parentIssueId) {
+    if (parent) {
+      const link = el('button', 'link')
+      link.type = 'button'
+      link.append(el('span', 'card-key', parent.id), el('span', 'link-title', cardDisplayTitle(parent)))
+      link.addEventListener('click', () => actions.openCard(parent.id))
+      row('Parent', link)
+    }
+    else {
+      row('Parent', el('span', 'card-key', card.parentIssueId))
+    }
+  }
 
   const created = history.find(entry => entry.verb === 'created the card')
   const creator = created
@@ -107,6 +128,40 @@ function renderFacts(card: ServeCardView, status: ServeStatusView | null, histor
     row('Labels', ...card.labels.map(label => el('span', 'label', label)))
   }
   return facts
+}
+
+/** The parts of this card, each a row that opens it: its column, whether it waits for you or runs, and who works it. */
+function renderSubcards(detail: CardDetail, actions: PanelActions): HTMLElement {
+  const isDone = (child: ServeCardView): boolean => detail.statuses.find(status => status.id === child.statusId)?.category === 'completed'
+  const done = detail.children.filter(isDone).length
+  const wrapper = section(`Sub-cards · ${done} of ${detail.children.length} done`)
+  const list = el('ul', 'subcards')
+  for (const child of detail.children) {
+    const item = el('li')
+    const row = el('button', 'subcard')
+    row.type = 'button'
+    row.dataset.done = String(isDone(child))
+    row.addEventListener('click', () => actions.openCard(child.id))
+    const head = el('span', 'subcard-head')
+    head.append(el('span', 'card-key', child.id), el('span', 'subcard-title', cardDisplayTitle(child)))
+    const meta = el('span', 'subcard-meta')
+    meta.append(el('span', 'subcard-column', detail.statuses.find(status => status.id === child.statusId)?.name ?? 'No column'))
+    if (child.waitingFor === 'human') {
+      meta.append(el('span', 'waiting-badge', 'Waiting for you'))
+    }
+    if (child.activeRun?.state === 'running') {
+      meta.append(el('span', 'muted', child.activeRun.agentName ? `Running · ${child.activeRun.agentName}` : 'Running'))
+    }
+    const worker = cardWorker(child)
+    if (worker) {
+      meta.append(actorChip({ kind: worker.key === 'user' ? 'user' : 'agent', name: worker.label, label: null }))
+    }
+    row.append(head, meta)
+    item.append(row)
+    list.append(item)
+  }
+  wrapper.append(list)
+  return wrapper
 }
 
 function actorChip(actor: HistoryEntry['actor']): HTMLElement {

@@ -8,7 +8,7 @@ import { activityFixture, cardFixture, statusFixture } from './fixtures'
 import type { CardDetail } from './panel'
 import { renderPanel } from './panel'
 
-const actions = { close: () => {}, addComment: () => {}, approve: () => {}, returnCard: () => {} }
+const actions = { close: () => {}, addComment: () => {}, approve: () => {}, returnCard: () => {}, openCard: () => {} }
 const text = (value: string) => ({ kind: 'text' as const, text: value })
 const nowSeconds = Math.floor(Date.now() / 1000)
 
@@ -20,6 +20,9 @@ function detailFixture(fields: Partial<CardDetail> = {}): CardDetail {
     activity: [],
     fieldChanges: [],
     runs: [],
+    parent: null,
+    children: [],
+    statuses: [statusFixture({ id: 'todo', name: 'To Do' })],
     ...fields,
   }
 }
@@ -95,5 +98,52 @@ describe('renderPanel', () => {
     expect(panel.querySelector('.history-entry')).toBeNull()
     expect(panel.textContent).toContain('No history yet.')
     expect(panel.textContent).not.toContain('only a comment')
+  })
+
+  describe('sub-cards', () => {
+    const parent = cardFixture({ id: 'WOR-000', title: 'The whole job' })
+    const statuses = [
+      statusFixture({ id: 'todo', name: 'To Do' }),
+      statusFixture({ id: 'done', name: 'Done', category: 'completed' }),
+    ]
+    const children = [
+      cardFixture({ id: 'WOR-002', statusId: 'todo', parentIssueId: 'WOR-001', waitingFor: 'human' }),
+      cardFixture({ id: 'WOR-003', statusId: 'done', parentIssueId: 'WOR-001', title: '<img src=x onerror=alert(1)>' }),
+    ]
+
+    it('shows a Parent row that opens the parent', () => {
+      const openCard = vi.fn()
+      const card = cardFixture({ id: 'WOR-001', parentIssueId: 'WOR-000' })
+      const panel = renderPanel(detailFixture({ card, parent }), { ...actions, openCard }, null)
+      const link = panel.querySelector<HTMLButtonElement>('.facts button.link')
+      expect(link?.textContent).toContain('The whole job')
+      link?.click()
+      expect(openCard).toHaveBeenCalledWith('WOR-000')
+    })
+
+    it('lists the sub-cards with their columns, a waiting badge, and opens one on click', () => {
+      const openCard = vi.fn()
+      const panel = renderPanel(detailFixture({ children, statuses }), { ...actions, openCard }, null)
+      const section = panel.querySelector('.subcards')?.closest('section')
+      expect(section?.querySelector('h3')?.textContent).toBe('Sub-cards · 1 of 2 done')
+      const rows = [...panel.querySelectorAll<HTMLButtonElement>('.subcards button.subcard')]
+      expect(rows.map(row => row.querySelector('.subcard-column')?.textContent)).toEqual(['To Do', 'Done'])
+      expect(rows[0]?.querySelector('.waiting-badge')?.textContent).toBe('Waiting for you')
+      expect(rows[1]?.querySelector('.waiting-badge')).toBeNull()
+      rows[1]?.click()
+      expect(openCard).toHaveBeenCalledWith('WOR-003')
+    })
+
+    it('shows a sub-card title written as HTML as its characters', () => {
+      const panel = renderPanel(detailFixture({ children, statuses }), actions, null)
+      expect(panel.querySelector('img')).toBeNull()
+      expect(panel.querySelectorAll('.subcard-title')[1]?.textContent).toBe('<img src=x onerror=alert(1)>')
+    })
+
+    it('has no Sub-cards section and no Parent row without them', () => {
+      const panel = renderPanel(detailFixture(), actions, null)
+      expect(panel.querySelector('.subcards')).toBeNull()
+      expect([...panel.querySelectorAll('dt')].map(term => term.textContent)).not.toContain('Parent')
+    })
   })
 })

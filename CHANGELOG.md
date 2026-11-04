@@ -6,6 +6,7 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- The board page shows sub-cards: a sub-card names its parent (click opens it), a parent shows how many of its sub-cards are done, and its panel lists them with their column, waiting or running state and who works them.
 - A card's panel on the board page opens with who made it and who works it, and its History reads as a timeline by day: who, the field, the old value → the new one, when (the exact time on hover), and the before and after text of a description change.
 - The board page filters cards by text, by who works them, by waiting for you, by running, by priority and by label; the filters live in the address and `/` focuses the search.
 - `kanbo serve` stops by itself about 5 seconds after the last board tab closes (2 minutes if a tab vanished without a goodbye) when it opened the browser itself; with `--no-open`, from an agent's shell or without a terminal it still runs until Ctrl-C. The board page tells the server it is open with `POST /page/presence`, and says plainly when the server has stopped.

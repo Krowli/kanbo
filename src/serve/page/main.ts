@@ -13,6 +13,7 @@ import type { BoardColumn } from './grouping'
 import { groupBoard } from './grouping'
 import type { CardDetail } from './panel'
 import { renderPanel } from './panel'
+import { childrenOf, parentOf, subcardSummary } from './subcards'
 import { startPresence } from './presence'
 import { renderProjectSwitcher, renderWhere } from './project-switcher'
 import { adoptTokenFromLocation, readStoredToken, storeToken } from './token'
@@ -385,7 +386,11 @@ function renderColumn(column: BoardColumn): HTMLElement {
     list.append(draft.form)
   }
   for (const card of column.cards) {
-    const cardElement = renderCard(card, status?.category ?? null, opened => void openCard(opened.id))
+    const cardElement = renderCard(card, status?.category ?? null, opened => void openCard(opened.id), {
+      parent: parentOf(cards, card),
+      summary: subcardSummary(cards, statuses, card.id),
+      onOpenCard: id => void openCard(id),
+    })
     const enter = enterOf(lastPlacement, card)
     if (enter) {
       cardElement.dataset.enter = enter
@@ -515,7 +520,7 @@ async function loadDetail(): Promise<void> {
   }
   try {
     const [comments, activity, runs, fieldChanges] = await Promise.all([api.comments(cardId), api.activity(cardId), api.runs(cardId), api.fieldChanges(cardId)])
-    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs, fieldChanges }
+    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs, fieldChanges, parent: parentOf(cards, card), children: childrenOf(cards, statuses, cardId), statuses }
   }
   catch (error) {
     panelNotice = describeFailure(error)
@@ -544,6 +549,7 @@ function renderPanelHost(): void {
     returnCard: comment => void act(async () => {
       await api.returnCard(cardId, comment)
     }),
+    openCard: id => void openCard(id),
   }, panelNotice)
   const opening = !panelHost.firstChild
   panelHost.replaceChildren(panel)
