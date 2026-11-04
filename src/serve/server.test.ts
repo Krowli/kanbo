@@ -267,6 +267,9 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
 
     await restart({ token: null })
     await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: {} })
+    const tokenless = await call(client, 'POST', '/issues/WOR-001/approve', { body: {} })
+    expect(tokenless.status).toBe(403)
+    expect(tokenless.json.code).toBe('issue_approval_requires_user')
   })
 
   it('refuses a person\'s operations to an agent: closing a sprint and deleting what the board wrote', async () => {

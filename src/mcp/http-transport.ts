@@ -135,11 +135,11 @@ const ACTOR_KINDS = ['user', 'agent', 'provider-target', 'system'] as const
 const CardCommentSchema = z.object({
   id: z.string(),
   authorKind: z.string(),
-  authorId: z.string().nullable(),
-  sourceChatSessionId: z.string().nullable(),
+  authorId: z.string().nullish(),
+  sourceChatSessionId: z.string().nullish(),
   content: z.string(),
   createdAt: z.number(),
-})
+}).transform(row => ({ ...row, authorId: row.authorId ?? null, sourceChatSessionId: row.sourceChatSessionId ?? null }))
 
 const FieldChangeSchema = z.object({
   field: z.string(),
