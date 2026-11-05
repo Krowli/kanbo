@@ -35,9 +35,9 @@ describe.each(BOARD_STORE_FACTORIES)('many cards at once on $name', (factory) =>
 
     expect(result).toEqual({ updated: 2 })
     expect((await store.issues.findById(first.id))).toMatchObject({ priority: 'high', labels: '["bug"]' })
-    expect((await store.fieldChanges.listByIssue(first.id)).map(change => change.field).toSorted()).toEqual(['labels', 'priority'])
+    expect((await store.fieldChanges.listByIssue(first.id)).map(change => change.field).toSorted()).toEqual(['labels', 'priority', 'statusId'])
     // A field already at the value is not a change.
-    expect((await store.fieldChanges.listByIssue(second.id)).map(change => change.field)).toEqual(['labels'])
+    expect((await store.fieldChanges.listByIssue(second.id)).map(change => change.field)).toEqual(['statusId', 'labels'])
   })
 
   it('refuses a column or a milestone from another card\'s workspace before writing anything', async () => {
@@ -54,7 +54,7 @@ describe.each(BOARD_STORE_FACTORIES)('many cards at once on $name', (factory) =>
       .toMatchObject({ code: 'issue_milestone_not_found', details: { workspaceId: OTHER.id, milestoneId: myMilestone.id } })
 
     expect((await store.issues.findById(mine.id))).toMatchObject({ priority: 'none', milestoneId: null })
-    expect(await store.fieldChanges.listByIssue(mine.id)).toEqual([])
+    expect((await store.fieldChanges.listByIssue(mine.id)).map(change => change.field)).toEqual(['statusId'])
   })
 
   it('places the named cards in the order named, a gap apart, skipping a card of another workspace or one that is gone', async () => {

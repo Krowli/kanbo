@@ -7,6 +7,7 @@ import { BOARD_STORE_FACTORIES } from '../testing/board-stores'
 import type { IssueActivityResolver } from './activity'
 import { listActivity, listFieldChanges } from './activity'
 import { addComment, approve, createCard, updateCard } from './cards'
+import { requireColumn } from './columns'
 import { createMilestone } from './sprints'
 import type { BoardActor } from './types'
 
@@ -52,7 +53,22 @@ describe.each(BOARD_STORE_FACTORIES)('activity on $name', (factory) => {
     })
     expect(feed[2].comment).toEqual({ content: 'on it', systemKind: null })
     // Hidden from the feed, still in the history.
-    expect((await listFieldChanges(store, card.id)).map(change => change.field).toSorted()).toEqual(['executionMode', 'order', 'priority'])
+    expect((await listFieldChanges(store, card.id)).map(change => change.field).toSorted()).toEqual(['executionMode', 'order', 'priority', 'statusId'])
+  })
+
+  it('keeps the column a card was created in in its history, and leaves it to the created item in the feed', async () => {
+    const card = await createCard(store, { workspace: WORKSPACE, title: 'Card', statusName: 'To Do' }, AGENT)
+    const toDo = await requireColumn(store, WORKSPACE.id, 'To Do')
+
+    expect(await listFieldChanges(store, card.id)).toEqual([expect.objectContaining({
+      field: 'statusId',
+      fromValue: null,
+      toValue: toDo.id,
+      actorKind: 'agent',
+      actorId: 'agent-1',
+      createdAt: card.createdAt,
+    })])
+    expect((await listActivity(store, card.id, RESOLVER)).map(item => item.kind)).toEqual(['created'])
   })
 
   it('names what a change points at through the board and the host, and a board marker under no author', async () => {

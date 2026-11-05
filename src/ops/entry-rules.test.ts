@@ -117,7 +117,7 @@ describe.each(BOARD_STORE_FACTORIES)('column entry rules on $name', (factory) =>
 
     expect(await readChangeSeq(store)).toBe(version)
     expect((await store.issues.findById(card.id))?.statusId).toBe(card.statusId)
-    expect((await store.fieldChanges.listByIssue(card.id)).filter(change => change.field === 'statusId')).toEqual([])
+    expect((await store.fieldChanges.listByIssue(card.id)).filter(change => change.field === 'statusId' && change.fromValue !== null)).toEqual([])
   })
 
   it('lets a person move the card anyway, and hands back what it entered without', async () => {

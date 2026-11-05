@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import type { BoardStore } from '../board-store'
 import type { UnmetEntryRule } from '../domain/entry-rules'
 import { BoardError } from '../domain/errors'
@@ -116,8 +117,9 @@ export async function createCard<TStore extends BoardStore>(
 
     for (let attempt = 1; ; attempt++) {
       const identity = await nextIssueIdentity(input.workspace, tx)
+      let created: Issue
       try {
-        return withUnmetRules(await tx.issues.create({
+        created = await tx.issues.create({
           id: identity.id,
           workspaceId,
           title: input.title?.trim() || identity.id,
@@ -141,7 +143,7 @@ export async function createCard<TStore extends BoardStore>(
           order,
           createdAt: now,
           updatedAt: now,
-        }), unmet)
+        })
       }
       catch (error) {
         // The board, not the driver, says whether this was a numbering
@@ -152,7 +154,24 @@ export async function createCard<TStore extends BoardStore>(
         if (attempt >= NUMBERING_ATTEMPTS || (!numberTaken && !keyTaken)) {
           throw error
         }
+        continue
       }
+      // The column a card starts in is its first column entry: the column-entry
+      // feed reads it as a move from no column, filed under whoever created it.
+      if (statusId !== null) {
+        await tx.fieldChanges.create({
+          id: randomUUID(),
+          issueId: created.id,
+          field: 'statusId',
+          fromValue: null,
+          toValue: statusId,
+          actorKind: toStoredActorKind(actor),
+          actorId: actor.id ?? null,
+          sourceChatSessionId: actor.chatSessionId ?? null,
+          createdAt: now,
+        })
+      }
+      return withUnmetRules(created, unmet)
     }
   }, scope)
 }

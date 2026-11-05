@@ -32,7 +32,7 @@ describe.each(BOARD_STORE_FACTORIES)('context refs on $name', (factory) => {
     const removed = await removeContextRef(store, card.id, 0, AGENT)
 
     expect(removed.contextRefs).toBe('["docs/b.md"]')
-    expect((await store.fieldChanges.listByIssue(card.id)).map(change => [change.fromValue, change.toValue, change.actorId, change.sourceChatSessionId]))
+    expect((await store.fieldChanges.listByIssue(card.id)).filter(change => change.field === 'contextRefs').map(change => [change.fromValue, change.toValue, change.actorId, change.sourceChatSessionId]))
       .toEqual([
         ['[]', '["docs/a.md"]', 'agent-1', 'chat-1'],
         ['["docs/a.md"]', '["docs/a.md","docs/b.md"]', 'agent-1', 'chat-1'],

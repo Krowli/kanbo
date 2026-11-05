@@ -20,7 +20,7 @@ import {
   readSystemCommentKind,
 } from '../domain/issue-activity'
 import type { IssueActorReference } from '../domain/issue-view'
-import type { IssueComment, IssueFieldChange } from '../sqlite/schema'
+import type { Issue, IssueComment, IssueFieldChange } from '../sqlite/schema'
 import { requireCard } from './types'
 
 /**
@@ -53,6 +53,15 @@ const HIDDEN_ACTIVITY_FIELDS = new Set([
   'order',
   'waitingFor',
 ])
+
+/**
+ * The column a card was created in, recorded as a change from no column at the
+ * card's own creation time. The feed's `created` item already stands for it,
+ * and the field history keeps it.
+ */
+function isStartingColumn(change: IssueFieldChange, issue: Issue): boolean {
+  return change.field === 'statusId' && change.fromValue === null && change.createdAt === issue.createdAt
+}
 
 const ACTIVITY_FIELD_BY_RAW_FIELD: Record<string, IssueActivityField> = {
   assigneeId: 'assignee',
@@ -104,7 +113,9 @@ export async function listActivity(
     (await store.comments.listByIssue(issueId)).map(async comment => await toCommentActivityItem(comment, resolver)),
   )
   const fieldChangeItems = (await Promise.all(
-    (await store.fieldChanges.listByIssue(issueId)).map(async change => await toFieldChangeActivityItem(change, lookup, resolver)),
+    (await store.fieldChanges.listByIssue(issueId))
+      .filter(change => !isStartingColumn(change, issue))
+      .map(async change => await toFieldChangeActivityItem(change, lookup, resolver)),
   ))
     .filter((item): item is IssueActivityItemView => item !== null)
   const createdItem: IssueActivityItemView = {
