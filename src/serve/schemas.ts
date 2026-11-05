@@ -162,6 +162,15 @@ export const startRunBody = z.object({
   externalSessionRef: z.string().nullable().optional(),
 })
 
+export const claimBody = z.object({
+  workspaceId: id,
+  issueId: id.optional(),
+  agentName: id.optional(),
+  branch: z.string().nullable().optional(),
+  executionMode: executionMode.optional(),
+  externalSessionRef: z.string().nullable().optional(),
+})
+
 export const finishRunBody = z.object({
   state: z.enum(['finished', 'failed', 'stopped']),
   branch: z.string().nullable().optional(),

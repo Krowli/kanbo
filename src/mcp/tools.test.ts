@@ -29,6 +29,7 @@ const EXTERNAL: BoardActor = { kind: 'external', id: 'tester' }
 const TOOL_OPERATIONS: Record<KanboToolName, { op: keyof KanboToolTransport, input: Record<string, unknown> }> = {
   kanbo_prime: { op: 'prime', input: {} },
   kanbo_ready: { op: 'readyPage', input: {} },
+  kanbo_card_claim: { op: 'cardClaim', input: {} },
   kanbo_columns: { op: 'columns', input: {} },
   kanbo_sprints: { op: 'sprints', input: {} },
   kanbo_card_get: { op: 'cardGet', input: { card: 'WOR-001' } },
@@ -90,6 +91,9 @@ function recordingTransport(): { transport: KanboToolTransport, calls: string[] 
   const card = { id: 'WOR-001', title: 'the board', columnSlug: null, attemptCount: 0, activeRun: null, updatedAt: 0 }
   const transport = Object.fromEntries(Array.from(operations, op => [op, async () => {
     calls.push(op)
+    if (op === 'cardClaim') {
+      return { card, run: { id: 'run-1' }, column: { slug: 'in_progress' } }
+    }
     // A list tool prints a page of cards; one card called "the board" is enough of one.
     return op.endsWith('Page')
       ? { cards: [card], total: 1, offset: 0 }
@@ -288,6 +292,50 @@ describe('the board\'s tools over a real board', () => {
     const written = await createSqliteBoardStore({ database: () => board.database }).issues.findById(card.id)
     expect(written?.statusLine).toBe('reading the board')
     await client.close()
+  })
+
+  it('claims the first ready card over MCP, and refuses a second claim of it naming why', async () => {
+    const card = await createCard('Ready')
+    const client = await connectClient()
+
+    const claimed = readJson(await client.callTool({ name: 'kanbo_card_claim', arguments: {} }) as CallToolResult) as { card: { id: string, column: string }, run: string, column: string, finishWith: string }
+
+    expect(claimed).toEqual({
+      card: expect.objectContaining({ id: card.id, column: 'in_progress' }),
+      run: expect.any(String),
+      column: 'in_progress',
+      finishWith: `kanbo_run_finish {"run":"${claimed.run}","state":"finished"}`,
+    })
+    expect(await boardOps().listRuns(card.id)).toEqual([expect.objectContaining({ id: claimed.run, agentName: 'tester', state: 'running', launchedByKind: 'external' })])
+    const again = await client.callTool({ name: 'kanbo_card_claim', arguments: { issue: card.id } }) as CallToolResult
+    expect(again.isError).toBe(true)
+    expect((again.content[0] as { text: string }).text).toBe(`board_card_not_ready {"issueId":"${card.id}","reason":"run_active"}`)
+  })
+
+  it('claims over HTTP through POST /issues/claim, sending the card and the agent only when named', async () => {
+    const ops = boardOps()
+    const card = await createCard('Ready over HTTP')
+    const claimed = await ops.claimCard({ workspaceId: WORKSPACE.id, run: { agentName: 'Claude' } }, EXTERNAL)
+    const statuses = await ops.listColumns(WORKSPACE.id)
+    const posted: Array<{ path: string, body?: Record<string, unknown> }> = []
+    const overHttp = createHttpTransport({
+      workspaceId: () => WORKSPACE.id,
+      request: async (method, path, body) => {
+        if (method === 'POST') {
+          posted.push({ path, body })
+        }
+        return path.includes('/statuses') ? statuses : { card: serverCardShape(claimed.card, claimed.run), run: claimed.run, column: claimed.column }
+      },
+    })
+
+    const answer = await overHttp.cardClaim({ card: card.id, agent: 'Claude' })
+    await overHttp.cardClaim({})
+
+    expect(posted).toEqual([
+      { path: '/issues/claim', body: { workspaceId: WORKSPACE.id, issueId: card.id, agentName: 'Claude' } },
+      { path: '/issues/claim', body: { workspaceId: WORKSPACE.id } },
+    ])
+    expect(answer).toMatchObject({ card: { id: card.id, columnSlug: 'in_progress' }, run: { id: claimed.run.id, state: 'running' }, column: { slug: 'in_progress' } })
   })
 
   it('prints the same card, and the same run on it, whichever end answered', async () => {

@@ -12,6 +12,7 @@ import { cardPullRequestsTool } from './card-pull-requests'
 import { cardUpdateTool } from './card-update'
 import { columnsTool } from './columns'
 import { primeTool } from './prime'
+import { cardClaimTool } from './card-claim'
 import { readyTool } from './ready'
 import { runFinishTool } from './run-finish'
 import { runStartTool } from './run-start'
@@ -23,13 +24,14 @@ import { waitApprovalTool } from './wait-approval'
 /**
  * Every tool the board has, in the order it declares them.
  *
- * The list is the board's, not a server's: the same sixteen are registered
+ * The list is the board's, not a server's: the same seventeen are registered
  * whether they run against a server or against the board directly, and the
  * only thing a host decides is which of them it publishes.
  */
 export const KANBO_TOOLS: readonly KanboTool[] = [
   primeTool,
   readyTool,
+  cardClaimTool,
   columnsTool,
   sprintsTool,
   cardGetTool,

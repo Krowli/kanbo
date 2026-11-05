@@ -72,6 +72,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo run attach-session <runId> <ref>` | Say which agent session did this work; the first one given stays. |
 | `kanbo run clear-session <runId>` | Remove the session given for this work. **Person only.** |
 | `kanbo run finish <runId>` | Say how the work ended. |
+| `kanbo claim [card]` | Take a card to work on: start your run and move it out of To Do into the first work-in-progress column, in one step. Without a card, the first ready one. |
 | `kanbo sprint list` | List sprints by start date; the current one is marked `*`. |
 | `kanbo sprint create` | Start a sprint with a first and a last day. |
 | `kanbo sprint close <id>` | Close a sprint and move its unfinished cards on to another open sprint. **Person only.** |
@@ -324,6 +325,15 @@ Print the columns of this board and the rules a card travels by, then the comman
 
 Lists To Do cards with no run and nobody's turn but the agent's, in board order. When there are more than it prints, one line on stderr says how many. Cards a person sent back come first, under "Returned to you", each with the person's comment (up to 5); `--json` prints the ready cards alone — `kanbo card list --returned --json` lists the returned ones.
 
+## `kanbo claim`
+
+| Option | Meaning |
+| --- | --- |
+| `--agent <name>` | What to call whoever works the card (default: the name this shell writes as — `KANBO_ACTOR_ID`, the agent tool, or the OS user). |
+| `--session <ref>` | Your own log of this run, `claude:<session id>` or `codex:<session id>`; when left out, the session Claude Code or Codex names in the environment, if exactly one of them does. |
+
+Takes the named card, or the first ready card in To Do (the order `kanbo ready` lists them in): one write starts a run on it and moves it into the board's first `started` column, checking that column's entry and flow rules on the way in. Two claimers never get the same card — on a board file the write holds the file, on Postgres the card's row is locked — and the one that loses is told `board_nothing_ready` or `board_card_not_ready` (exit 1). Prints the run id and the command that finishes it; `--json` prints `{ card, run, column }`. Plus `--db`, `--database-url`, `--workspace` and `--format`.
+
 ## `kanbo board`
 
 The board in the terminal, one column after another in board order (stacked, so it reads the same in a narrow terminal or a Windows console):
@@ -434,7 +444,7 @@ Run `kanbo migrate` before `kanbo roles apply`. See [storage](storage.md#roles).
 | `--database-url <url>` | External Postgres board to serve instead of a board file. |
 | `--workspace <nameOrId>` | Workspace the board tools are about. |
 
-Serves all sixteen tools and the `kanbo://capabilities` resources over stdio. The client is always treated as an agent. See [MCP](mcp.md). In a folder with no board it starts anyway: the client connects and gets the instructions, and every tool answers that this folder has no kanbo board, until one is set up there — the next call then finds it.
+Serves all seventeen tools and the `kanbo://capabilities` resources over stdio. The client is always treated as an agent. See [MCP](mcp.md). In a folder with no board it starts anyway: the client connects and gets the instructions, and every tool answers that this folder has no kanbo board, until one is set up there — the next call then finds it.
 
 ## `kanbo serve`
 

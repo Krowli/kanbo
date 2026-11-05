@@ -45,6 +45,7 @@ const TRANSPORT_METHODS: Record<keyof KanboToolTransport, true> = {
   waitApproval: true,
   runStart: true,
   runFinish: true,
+  cardClaim: true,
 }
 
 export async function openMcpBoard(input: KanboDbTransportInput): Promise<KanboDbTransport> {

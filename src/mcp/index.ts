@@ -44,6 +44,7 @@ export type {
   KanboCardFacts,
   KanboCardInclude,
   KanboCardPage,
+  KanboClaimResult,
   KanboCardQuery,
   KanboCardResult,
   KanboCardUpdateInput,

@@ -5,6 +5,7 @@ import type { UpdateCheck } from '../update-check'
 import { registerApproveCommand } from './approve'
 import { registerBoardCommand } from './board'
 import { registerCapabilitiesCommand } from './capabilities'
+import { registerClaimCommand } from './claim'
 import { registerCardCommands } from './card'
 import { registerColumnsCommands } from './columns'
 import { registerConnectCommand } from './connect'
@@ -56,6 +57,7 @@ export function registerKanboCommands(program: Command, context: KanboProgramCon
 
   program.commandsGroup('For agents and integrations:')
   registerMcpCommand(program)
+  registerClaimCommand(program)
   registerRunCommands(program)
   registerCapabilitiesCommand(program)
 

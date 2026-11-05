@@ -313,6 +313,28 @@ const CASES: MatrixCase[] = [
     },
   },
   {
+    name: 'claim: an agent claims over MCP and in its shell, the terminal and /issues read the run, a second claim is refused, a person claims over HTTP',
+    covers: ['claim', 'kanbo_card_claim'],
+    run: async (b) => {
+      await b.cli(['card', 'create', '--title', 'First', '--column', 'to_do'])
+      await b.cli(['card', 'create', '--title', 'Second', '--column', 'to_do'])
+
+      const claimed = await b.tool('kanbo_card_claim', {})
+      expect(claimed).toMatchObject({ card: { id: 'MAT-001', column: 'in_progress' }, column: 'in_progress' })
+      expect(await b.cliJson(['card', 'get', 'MAT-001', '--json', 'activeRun'])).toMatchObject({ activeRun: { id: claimed.run, state: 'running' } })
+      expect(await b.toolFails('kanbo_card_claim', { card: 'MAT-001' })).toContain('board_card_not_ready')
+
+      const second = await b.cliJson(['claim', '--agent', 'Codex', '--json'], { agent: true })
+      expect(second).toMatchObject({ card: { id: 'MAT-002', columnSlug: 'in_progress' }, run: { agentName: 'Codex', state: 'running' } })
+      expect(await b.toolFails('kanbo_card_claim', {})).toContain('board_nothing_ready')
+
+      await b.cli(['card', 'create', '--title', 'Third', '--column', 'to_do'])
+      const overHttp = await b.http('POST', '/issues/claim', { workspaceId: await b.workspaceId(), agentName: 'Gemini' })
+      expect(overHttp.status).toBe(200)
+      expect(overHttp.json).toMatchObject({ card: { id: 'MAT-003' }, run: { agentName: 'Gemini', state: 'running' }, column: { name: 'In Progress' } })
+    },
+  },
+  {
     name: 'pull request links from either side are listed by the other; a removal reaches /pull-requests',
     covers: ['kanbo_card_link_pr', 'kanbo_card_pull_requests', 'card pr add', 'card pr list', 'card pr remove'],
     run: async (b) => {

@@ -78,6 +78,7 @@ All routes are under `/issues`. A card is addressed by its key (`API-001`). A `w
 | `/projects/:id/issues/...` | Every route below, for another project; same rules and checks. `404 project_not_found` for an id the server does not offer, `503 project_unavailable` when that project's board will not open. That project's board is opened on the first request and stays open until the server stops. |
 | `GET /issues` | List cards. Query: `workspaceId`, `workspaceIds`, `milestoneId`, `parentIssueId`, `priority`, `labels`, `statusId`. |
 | `POST /issues` | Create a card. |
+| `POST /issues/claim` | Claim a card: `{ workspaceId, issueId?, agentName?, branch?, executionMode?, externalSessionRef? }`. One write starts a run on the card — without `issueId`, the first ready card in To Do — and moves it into the board's first `started` column, through that column's entry and flow rules. Answers `{ card, run, column }`. `409 board_nothing_ready`, `409 board_card_not_ready` (`details.reason`: `run_active`, `waiting_for_person` or `not_in_to_do`), `409 issue_column_rules_unmet` for the target. |
 | `GET /issues/:id` | Read a card. |
 | `PATCH /issues/:id` | Update a card. |
 | `DELETE /issues/:id` | Delete a card (person only). |
@@ -96,7 +97,7 @@ All routes are under `/issues`. A card is addressed by its key (`API-001`). A `w
 | `GET /issues/:id/relations` · `POST /issues/relations` · `DELETE /issues/relations/:id` | Relations between cards. |
 | `POST /issues/:id/context-refs` · `DELETE /issues/:id/context-refs/:index` | A card's context references. |
 | `GET /issues/:id/pull-requests` · `POST /issues/:id/pull-requests` · `DELETE /issues/:id/pull-requests/:linkId` | Linked pull requests, with their standing as the card's recorded facts say. Nothing is asked of GitHub. |
-| `GET /issues/:id/runs` · `POST /issues/:id/runs` | List and start runs. |
+| `GET /issues/:id/runs` · `POST /issues/:id/runs` | List and start runs. A card has one run going at a time: `409 board_card_run_active` names the one that is. |
 | `PATCH /issues/runs/:runId` | Finish a run or attach what it ran in. |
 | `GET /issues/statuses` · `POST /issues/statuses` | List and create columns. Each carries `entryRules`, `allowedFrom` (the ids of the columns a card may enter it from; `null` for any) and `wipLimit`. |
 | `PATCH /issues/statuses/:id` | Update a column's name, description, colour or entry rules. A new name follows `kanbo columns rename`: its slug may not be another column's (`400 board_column_name_taken`), and To Do keeps the slug `to_do` (`400 board_column_ready_protected`). |

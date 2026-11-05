@@ -79,6 +79,8 @@ Your board:
 For agents and integrations:
   mcp [options]                        Run the board's MCP server for an agent
                                        (it starts this itself)
+  claim [options] [card]               Take a card to work on: start your run
+                                       and move it out of To Do, in one step
   run                                  Record when an agent starts and finishes
                                        work on a card
   capabilities [options]               List what kanbo offers agents: tools,

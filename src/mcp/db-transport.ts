@@ -233,5 +233,26 @@ export async function createDbTransport(input: KanboDbTransportInput): Promise<K
       const existing = await requireRun(session, run)
       return projectKanboRun(await ops.finishRun(existing.id, { state, errorText }, actor))
     },
+
+    cardClaim: async ({ card, agent }) => {
+      await session.assertWritable()
+      const named = card === undefined ? undefined : (await resolveCard(card)).id
+      // Filed as launched from outside, as `kanbo_run_start` is.
+      const claimed = await ops.claimCard({
+        workspaceId,
+        issueId: named,
+        run: {
+          agentName: agent ?? actor.id ?? 'agent',
+          externalSessionRef: sessionRefFromEnvironment() ?? undefined,
+          launchedByKind: 'external',
+        },
+      }, actor)
+      const columns = await readColumns()
+      return {
+        card: await project(claimed.card, columns),
+        run: projectKanboRun(claimed.run),
+        column: columns.find(column => column.id === claimed.column.id)!,
+      }
+    },
   }
 }

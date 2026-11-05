@@ -39,10 +39,11 @@ All tools take the card as `card`, spelled as the board prints it (`MAN-012`), a
 | Argument | Also accepted as | Tools |
 | --- | --- | --- |
 | `card` | `id`, `cardId`, `key` | every tool that takes `card` |
+| `card` | `issue` | `kanbo_card_claim` |
 | `content` | `text` | `kanbo_card_comment` |
 | `text` | `content` | `kanbo_status_line`, `kanbo_wait_approval` |
 | `run` | `runId`, `id` | `kanbo_run_finish` |
-| `agent` | `agentName` | `kanbo_run_start` |
+| `agent` | `agentName` | `kanbo_run_start`, `kanbo_card_claim` |
 | `column` | `to` | `kanbo_card_move` |
 | `state` `finished` | `completed`, `succeeded`, `success`, `done` | `kanbo_run_finish` (any case) |
 | `state` `failed` | `error`, `errored` | `kanbo_run_finish` |
@@ -59,6 +60,7 @@ kanbo_run_finish `state` must be one of finished, failed, stopped. Example: {"ru
 | --- | --- | --- | --- |
 | `kanbo_prime` | Read what this board is: its columns, what each one means, and the rules a card travels by. Run this first. | — | `kanbo prime` |
 | `kanbo_ready` | The cards to take next: in To Do, nobody working on them, waiting for no one, in board order — take the first. Compact cards, 10 by default, with `total`; on the first page, up to 5 cards a person sent back come first, under `returned`. | `limit` (integer, default 10), `offset`, `detail`, `fields` — all optional | `kanbo ready` |
+| `kanbo_card_claim` | Take a card to work on in one step: starts your run and moves the card from To Do into the board's first work-in-progress column. Without `card`, the first ready card. Two agents never get the same card: the one that loses is told `board_nothing_ready` or `board_card_not_ready`. Answers the card compact, `run` (its id), `column` (its slug) and `finishWith`. | `card`, `agent` — both optional | `kanbo claim [card] [--agent <name>]` |
 | `kanbo_columns` | List the columns in board order, each with its slug, what it means, its `entryRules`, the columns it accepts cards from (`allowedFrom`, slugs; `null` for any, `[]` for none) and the most cards it holds (`wipLimit`). | — | `kanbo columns list` |
 | `kanbo_sprints` | List milestones as sprints by start date — dates in unix seconds, open and done card counts (counted by the database, not by reading the cards) — with `current: true` on the one running now. Read-only. | — | `kanbo sprint list` |
 | `kanbo_card_get` | Read one card in full — including its parent (`parentIssueId`) — with its last 10 comments (`comments`, `commentCount`) and its subtasks (`subCards`), in one call. | `card` (required); `include` (array of `comments`, `subCards`, `runs`, `history`, `prs`; `["comments","subCards"]` when absent, `[]` for the card alone); `commentLimit` (integer, default 10). Each comment is `{ id, author, by, content, createdAt }`: `author` is `user`, `agent`, `provider-target` or `system`, `by` the name behind it (`kanbo` for the board's own lines; a person's approval or return is `user`) | `kanbo card get <id> [--include <parts>] [--comments <count>]` |
@@ -140,3 +142,4 @@ The package also exports the tools for embedding in another MCP server:
 
 - `kanbo/mcp` exports `buildKanboTools`, `createKanboMcpServer`, `registerKanboTools`, `createHttpTransport`, `KANBO_MCP_INSTRUCTIONS` and the `KanboToolTransport` interface. `createHttpTransport` runs the tools against a server of the `/issues` routes (see [HTTP API](http-api.md)).
 - `registerKanboTools(server, transport, { includeRunTools })` adds the tools to an existing server; pass `includeRunTools: false` when your app records runs for the agents it launches itself.
+- `kanbo_card_claim` is published whatever `includeRunTools` says: claiming is how an agent in any terminal takes work. With `createHttpTransport` it calls `POST /issues/claim`, which your server has to answer ([HTTP API](http-api.md#routes)).

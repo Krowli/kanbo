@@ -13,6 +13,7 @@
 export const KANBO_TOOL_NAMES = [
   'kanbo_prime',
   'kanbo_ready',
+  'kanbo_card_claim',
   'kanbo_columns',
   'kanbo_sprints',
   'kanbo_card_get',
@@ -51,6 +52,9 @@ export const KANBO_TOOL_CLI_EQUIVALENTS: Record<KanboToolName, KanboToolCliEquiv
   },
   kanbo_ready: {
     kanbo: 'kanbo ready',
+  },
+  kanbo_card_claim: {
+    kanbo: 'kanbo claim [card] [--agent <name>]',
   },
   kanbo_columns: {
     kanbo: 'kanbo columns list',

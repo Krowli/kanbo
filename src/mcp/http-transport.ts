@@ -368,6 +368,22 @@ export function createHttpTransport(input: KanboHttpTransportInput): KanboToolTr
         ...(errorText !== undefined ? { errorText } : {}),
       }),
     )),
+
+    cardClaim: async ({ card, agent }) => {
+      const answer = z.object({ card: IssueSchema, run: RunSchema, column: StatusSchema }).parse(
+        await request('POST', '/issues/claim', {
+          workspaceId: input.workspaceId(),
+          ...(card !== undefined ? { issueId: card } : {}),
+          ...(agent !== undefined ? { agentName: agent } : {}),
+        }),
+      )
+      const columns = await readColumns()
+      return {
+        card: projectKanboCard(answer.card, columns),
+        run: projectKanboRun(answer.run),
+        column: columns.find(column => column.id === answer.column.id) ?? projectKanboColumn(answer.column, columns),
+      }
+    },
   }
 }
 

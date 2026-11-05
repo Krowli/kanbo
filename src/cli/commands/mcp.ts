@@ -22,7 +22,7 @@ import { isUpdateCheckDisabled, startUpdateCheck } from '../update-check'
  *
  * Every write is filed under this shell's agent (`KANBO_ACTOR_ID`, the agent
  * tool, or the name the MCP client gives when it connects), never the OS user,
- * and all sixteen tools are published: an agent that started itself has to
+ * and all seventeen tools are published: an agent that started itself has to
  * record its own run, which is the one thing an app that launches agents does
  * for them.
  *

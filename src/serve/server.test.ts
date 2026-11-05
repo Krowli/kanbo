@@ -179,6 +179,25 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     expect(inReview).toMatchObject({ allowedFrom: null, wipLimit: null })
   })
 
+  it('claims the first ready card over POST /issues/claim, and says why when nothing or that card is not there to take', async () => {
+    await call(client, 'POST', '/issues', { body: { workspaceId: WORKSPACE.id, title: 'Ready', statusName: 'to_do' } })
+
+    const claimed = await call(client, 'POST', '/issues/claim', { body: { workspaceId: WORKSPACE.id, agentName: 'claude' } })
+    expect(claimed.status).toBe(200)
+    expect(claimed.json).toMatchObject({
+      card: { id: 'WOR-001', activeRun: { agentName: 'claude', state: 'running' } },
+      run: { issueId: 'WOR-001', agentName: 'claude', state: 'running', attempt: 1 },
+      column: { name: 'In Progress', allowedFrom: null, wipLimit: null },
+    })
+
+    const none = await call(client, 'POST', '/issues/claim', { body: { workspaceId: WORKSPACE.id } })
+    expect(none.status).toBe(409)
+    expect(none.json.code).toBe('board_nothing_ready')
+    const named = await call(client, 'POST', '/issues/claim', { body: { workspaceId: WORKSPACE.id, issueId: 'WOR-001' } })
+    expect(named.json).toMatchObject({ code: 'board_card_not_ready', details: { issueId: 'WOR-001', reason: 'run_active' } })
+    expect((await call(client, 'POST', '/issues/claim', { body: { workspaceId: OTHER_WORKSPACE.id } })).status).toBe(404)
+  })
+
   it('names the workspace it serves', async () => {
     const answer = await call(client, 'GET', '/issues/workspace')
     expect(answer.status).toBe(200)

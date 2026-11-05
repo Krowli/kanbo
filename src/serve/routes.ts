@@ -13,6 +13,7 @@ import {
   addPullRequestBody,
   approveBody,
   bulkUpdateBody,
+  claimBody,
   closeSprintBody,
   createIssueBody,
   createMilestoneBody,
@@ -424,6 +425,35 @@ export function createIssueRoutes(session: BoardSession, options: { personWriter
         const { workspaceId: named, ...fields } = body
         requireWorkspace(named)
         return await toWrittenCardView(ops, await ops.createCard({ ...fields, workspace }, actors.placement))
+      },
+    }),
+    route({
+      method: 'POST',
+      path: '/issues/claim',
+      body: claimBody,
+      write: true,
+      handle: async ({ body, actors }) => {
+        const named = requireWorkspace(body.workspaceId)
+        if (body.issueId !== undefined) {
+          await requireCard(body.issueId)
+        }
+        // The run and the move are one write, filed as a card placement: for a
+        // person the column's rules warn instead of refusing.
+        const claimed = await ops.claimCard({
+          workspaceId: named,
+          issueId: body.issueId,
+          run: {
+            agentName: body.agentName ?? actors.writer.id ?? 'agent',
+            branch: body.branch,
+            executionMode: body.executionMode,
+            externalSessionRef: body.externalSessionRef,
+          },
+        }, actors.placement)
+        return {
+          card: await toWrittenCardView(ops, claimed.card),
+          run: await toRunView(claimed.run),
+          column: toStatusView(claimed.column),
+        }
       },
     }),
     route({

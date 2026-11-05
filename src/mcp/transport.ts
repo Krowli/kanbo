@@ -260,6 +260,13 @@ export interface KanboRunStartInput {
 }
 
 /** How `kanbo_run_finish` says a run ended. */
+/** What `kanbo_card_claim` hands back: the card where it now is, the run it started, and the column it went to. */
+export interface KanboClaimResult {
+  card: KanboCardResult
+  run: KanboRunResult
+  column: KanboColumnResult
+}
+
 export interface KanboRunFinishInput {
   run: string
   state: 'finished' | 'failed' | 'stopped'
@@ -293,6 +300,8 @@ export interface KanboToolTransport {
   waitApproval: (input: { card: string, text?: string }) => Promise<KanboCardResult>
   runStart: (input: KanboRunStartInput) => Promise<KanboRunResult>
   runFinish: (input: KanboRunFinishInput) => Promise<KanboRunResult>
+  /** Take a card — `card`, or the first ready one — starting a run named `agent` (the transport's own name for the caller when absent) and moving it into work. */
+  cardClaim: (input: { card?: string, agent?: string }) => Promise<KanboClaimResult>
 }
 
 /**
