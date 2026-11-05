@@ -18,6 +18,34 @@ const OTHER: BoardWorkspaceIdentity = { id: 'other', identifier: 'OTH', name: 'O
 const USER: BoardActor = { kind: 'user', id: '__self__' }
 const AGENT: BoardActor = { kind: 'agent', id: 'agent-1' }
 
+/**
+ * The store, with another claimer's commit landing exactly when the claim's lock
+ * on `issueId` is granted: the moment a claimer that waited for the card's row
+ * lock gets it, the card has a running run it did not have when it was picked.
+ */
+function withRivalAtLock(store: BoardStore, issueId: string): BoardStore {
+  let landed = false
+  return {
+    ...store,
+    transaction: async (fn, options) => await store.transaction(async (tx) => {
+      const lockById = tx.issues.lockById.bind(tx.issues)
+      return await fn({
+        ...tx,
+        issues: {
+          ...tx.issues,
+          lockById: async (id: string) => {
+            if (id === issueId && !landed) {
+              landed = true
+              await startRun(tx, issueId, { agentName: 'rival' }, AGENT)
+            }
+            return await lockById(id)
+          },
+        },
+      })
+    }, options),
+  }
+}
+
 async function refusal(action: () => Promise<unknown>): Promise<BoardError> {
   const failure = await action().then(() => undefined, (error: unknown) => error)
   expect(failure).toBeInstanceOf(BoardError)
@@ -147,5 +175,29 @@ describe.each(BOARD_STORE_FACTORIES)('claiming a card on $name', (factory) => {
     const failure = await refusal(async () => await claimCard(store, { workspaceId: flat.id, run: { agentName: 'claude' } }, AGENT))
 
     expect(failure).toMatchObject({ code: 'issue_status_not_found', details: { workspaceId: 'flat', category: 'started' } })
+  })
+
+  it('passes over the card another claimer took between the pick and the lock, and takes the next', async () => {
+    const first = await cardIn('First', 'To Do')
+    const second = await cardIn('Second', 'To Do')
+
+    const claimed = await claimCard(withRivalAtLock(store, first.id), { workspaceId: WORKSPACE.id, run: { agentName: 'claude' } }, AGENT)
+
+    expect(claimed.card.id).toBe(second.id)
+    expect(await store.runs.countByIssue(first.id)).toBe(1)
+    expect((await store.runs.listRunning(first.id)).map(run => run.agentName)).toEqual(['rival'])
+    expect(await store.runs.countByIssue(second.id)).toBe(1)
+  })
+
+  it('refuses a named card another claimer took between the request and the lock, writing nothing', async () => {
+    const first = await cardIn('First', 'To Do')
+
+    const failure = await refusal(async () =>
+      await claimCard(withRivalAtLock(store, first.id), { workspaceId: WORKSPACE.id, issueId: first.id, run: { agentName: 'claude' } }, AGENT))
+
+    expect(failure).toMatchObject({ code: 'board_card_not_ready', details: { issueId: first.id, reason: 'run_active' } })
+    // The rival's run lived in the same transaction as the refused claim, so it is rolled back with it.
+    expect(await store.runs.countByIssue(first.id)).toBe(0)
+    expect(await store.issues.findById(first.id)).toMatchObject({ statusId: first.statusId, statusLine: null })
   })
 })
