@@ -305,12 +305,29 @@ export interface IssueContextRefStore {
   replace: (issueId: string, contextRefs: Issue['contextRefs'], updatedAt: number) => Promise<void>
 }
 
+/** Which field changes `listByFieldSince` reads: the cards of these workspaces, from `since` and up to `until` (unix seconds, both inclusive), `limit` at most. */
+export interface BoardFieldChangeQuery {
+  workspaceIds: readonly string[]
+  since: number
+  until?: number
+  limit?: number
+}
+
+/** A field change with the workspace its card is on — one row of `listByFieldSince`. */
+export type BoardWorkspaceFieldChange = IssueFieldChange & { workspaceId: string }
+
 /** Append-only audit of issue field edits. */
 export interface IssueFieldChangeStore {
   /** Field changes of one issue, oldest first. */
   listByIssue: (issueId: string) => Promise<IssueFieldChange[]>
   /** Field changes of one issue touching one field, oldest first. */
   listByIssueField: (issueId: string, field: string) => Promise<IssueFieldChange[]>
+  /**
+   * The changes of one field on the cards of the named workspaces, ordered by
+   * `(created_at, id)` — the `(field, created_at)` index answers it. An empty
+   * `workspaceIds` lists nothing. What the column-entry feed reads.
+   */
+  listByFieldSince: (field: string, query: BoardFieldChangeQuery) => Promise<BoardWorkspaceFieldChange[]>
   create: (values: typeof issueFieldChanges.$inferInsert) => Promise<void>
 }
 

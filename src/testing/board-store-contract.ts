@@ -733,6 +733,24 @@ export function runBoardStoreContract(name: string, makeStore: () => Promise<Boa
           .toEqual(['change-line-1', 'change-line-2'])
         expect(await store.fieldChanges.listByIssueField(issue.id, 'priority')).toEqual([])
       })
+
+      it('lists one field\'s changes across the named workspaces by time, each with its card\'s workspace', async () => {
+        const mine = await createIssue({ id: 'issue-1', number: 1 })
+        const theirs = await createIssue({ id: 'issue-2', number: 1, workspaceId: secondWorkspaceId })
+        await store.fieldChanges.create({ id: 'change-b', issueId: mine.id, field: 'statusId', toValue: 's2', createdAt: 2_000 })
+        await store.fieldChanges.create({ id: 'change-a', issueId: mine.id, field: 'statusId', toValue: 's1', createdAt: 2_000 })
+        await store.fieldChanges.create({ id: 'change-early', issueId: mine.id, field: 'statusId', toValue: 's0', createdAt: 1_000 })
+        await store.fieldChanges.create({ id: 'change-title', issueId: mine.id, field: 'title', toValue: 'x', createdAt: 2_000 })
+        await store.fieldChanges.create({ id: 'change-theirs', issueId: theirs.id, field: 'statusId', toValue: 's9', createdAt: 3_000 })
+
+        expect((await store.fieldChanges.listByFieldSince('statusId', { workspaceIds: [workspaceId], since: 2_000 })).map(change => [change.id, change.workspaceId]))
+          .toEqual([['change-a', workspaceId], ['change-b', workspaceId]])
+        expect((await store.fieldChanges.listByFieldSince('statusId', { workspaceIds: [workspaceId, secondWorkspaceId], since: 0, until: 2_000, limit: 2 })).map(change => change.id))
+          .toEqual(['change-early', 'change-a'])
+        expect((await store.fieldChanges.listByFieldSince('statusId', { workspaceIds: [secondWorkspaceId], since: 0 })).map(change => change.id))
+          .toEqual(['change-theirs'])
+        expect(await store.fieldChanges.listByFieldSince('statusId', { workspaceIds: [], since: 0 })).toEqual([])
+      })
     })
 
     describe('history within one second', () => {

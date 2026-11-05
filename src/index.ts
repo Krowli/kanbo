@@ -2,12 +2,14 @@ export type {
   BoardActiveRun,
   BoardCardPage,
   BoardCardQuery,
+  BoardFieldChangeQuery,
   BoardLinkedPullRequest,
   BoardMilestoneCardCount,
   BoardRunProjection,
   BoardRunProjectionScope,
   BoardStore,
   BoardTransactionMode,
+  BoardWorkspaceFieldChange,
   IssueCommentStore,
   IssueContextRefStore,
   IssueFieldChangeStore,
@@ -138,6 +140,7 @@ export type {
 export type { CardQueryInput, CardQueryResult } from './ops/card-query'
 export { type BoardWriteScope, readChangeSeq, runBoardWrite } from './ops/change-seq'
 export type { CardNotReadyReason, ClaimCardInput, ClaimedCard } from './ops/claim'
+export type { ColumnEntry, ListColumnEntriesInput } from './ops/column-entries'
 export type { AddColumnInput, ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch, ColumnPosition, RemoveColumnOptions, RemoveColumnResult } from './ops/columns'
 export type { MigrateCardsInput, MigrateCardsResult } from './ops/migrate'
 export type { BoardPullRequestStanding } from './ops/pull-requests'

@@ -49,6 +49,8 @@ import {
   setColumnFlowRules,
   updateColumn,
 } from './columns'
+import type { ListColumnEntriesInput } from './column-entries'
+import { listColumnEntries } from './column-entries'
 import { addContextRef, removeContextRef } from './context-refs'
 import { enforceColumnEntryForCards } from './entry-rules'
 import type { MigrateCardsInput } from './migrate'
@@ -224,6 +226,7 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
     // The board as a whole
     listReady: async (input: { workspaceId: string, limit?: number }) => await listReady(store, input),
     queryReady: async (input: { workspaceId: string, limit?: number, offset?: number }) => await queryReady(store, input),
+    listColumnEntries: async (input: ListColumnEntriesInput) => await listColumnEntries(store, input),
     buildPrimeText: async (workspaceId: string) => await buildPrimeText(store, workspaceId),
   }
 }

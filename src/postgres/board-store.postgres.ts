@@ -1,5 +1,5 @@
 import type { SQL } from 'drizzle-orm'
-import { and, asc, desc, eq, getTableColumns, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 
 import type {
   BoardCardPage,
@@ -10,6 +10,7 @@ import type {
   BoardRunProjectionScope,
   BoardStore,
   BoardTransactionMode,
+  BoardWorkspaceFieldChange,
 } from '../board-store'
 import { containsLikePattern } from '../domain/like-pattern'
 import type { IssueComment, IssueFieldChange, IssuePullRequest, IssueRun } from '../sqlite/schema'
@@ -53,6 +54,11 @@ function toIssueComment({ seq: _seq, ...comment }: StoredComment): IssueComment 
 
 /** The field change without `seq`, for the same reason. */
 function toIssueFieldChange({ seq: _seq, ...change }: StoredFieldChange): IssueFieldChange {
+  return change
+}
+
+/** A field change with its card's workspace, without `seq`, for the same reason. */
+function toWorkspaceFieldChange({ seq: _seq, ...change }: StoredFieldChange & { workspaceId: string }): BoardWorkspaceFieldChange {
   return change
 }
 
@@ -613,6 +619,20 @@ function createStoreOver(database: BoardPostgresDatabase): BoardStore {
         .from(issueFieldChanges)
         .where(and(eq(issueFieldChanges.issueId, issueId), eq(issueFieldChanges.field, field)))
         .orderBy(asc(issueFieldChanges.createdAt), asc(issueFieldChanges.seq))).map(toIssueFieldChange),
+      listByFieldSince: async (field, query) => query.workspaceIds.length === 0
+        ? []
+        : (await database
+            .select({ ...getTableColumns(issueFieldChanges), workspaceId: issues.workspaceId })
+            .from(issueFieldChanges)
+            .innerJoin(issues, eq(issues.id, issueFieldChanges.issueId))
+            .where(and(
+              eq(issueFieldChanges.field, field),
+              gte(issueFieldChanges.createdAt, query.since),
+              query.until === undefined ? undefined : lte(issueFieldChanges.createdAt, query.until),
+              inArray(issues.workspaceId, [...query.workspaceIds]),
+            ))
+            .orderBy(asc(issueFieldChanges.createdAt), asc(issueFieldChanges.id))
+            .limit(query.limit ?? Number.MAX_SAFE_INTEGER)).map(toWorkspaceFieldChange),
       create: async (values) => {
         await database.insert(issueFieldChanges).values(values)
       },

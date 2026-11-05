@@ -1,5 +1,5 @@
 import type { SQL } from 'drizzle-orm'
-import { and, asc, desc, eq, getTableColumns, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, getTableColumns, gte, inArray, isNotNull, isNull, lte, or, sql } from 'drizzle-orm'
 
 import type {
   BoardActiveRun,
@@ -639,6 +639,21 @@ function createSqliteBoardStoreCore(resolveDatabase: () => SqliteDatabase): Sqli
         .where(and(eq(issueFieldChanges.issueId, issueId), eq(issueFieldChanges.field, field)))
         .orderBy(asc(issueFieldChanges.createdAt), FIELD_CHANGE_INSERTION_ORDER)
         .all(),
+      listByFieldSince: (field, query) => query.workspaceIds.length === 0
+        ? []
+        : resolveDatabase()
+            .select({ ...getTableColumns(issueFieldChanges), workspaceId: issues.workspaceId })
+            .from(issueFieldChanges)
+            .innerJoin(issues, eq(issues.id, issueFieldChanges.issueId))
+            .where(and(
+              eq(issueFieldChanges.field, field),
+              gte(issueFieldChanges.createdAt, query.since),
+              query.until === undefined ? undefined : lte(issueFieldChanges.createdAt, query.until),
+              inArray(issues.workspaceId, [...query.workspaceIds]),
+            ))
+            .orderBy(asc(issueFieldChanges.createdAt), asc(issueFieldChanges.id))
+            .limit(query.limit ?? Number.MAX_SAFE_INTEGER)
+            .all(),
       create: (values) => {
         resolveDatabase().insert(issueFieldChanges).values(values).run()
       },
@@ -804,6 +819,7 @@ export function createSqliteBoardStore(options: { database: () => SqliteDatabase
     fieldChanges: {
       listByIssue: async issueId => core.fieldChanges.listByIssue(issueId),
       listByIssueField: async (issueId, field) => core.fieldChanges.listByIssueField(issueId, field),
+      listByFieldSince: async (field, query) => core.fieldChanges.listByFieldSince(field, query),
       create: async values => core.fieldChanges.create(values),
     },
 
