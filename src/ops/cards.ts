@@ -105,7 +105,7 @@ export async function createCard<TStore extends BoardStore>(
     // checklist it is written with.
     const column = statusId === null ? null : await tx.statuses.findById(statusId)
     const unmet = column
-      ? await enforceColumnEntry(tx, { id: null, description: input.description ?? null }, column, actor)
+      ? await enforceColumnEntry(tx, { id: null, description: input.description ?? null, statusId: null }, column, actor)
       : []
     const milestoneId = await requireMilestoneInWorkspace(tx, workspaceId, input.milestoneId ?? null)
     // The parent is checked before the key is generated: a key the board has not
@@ -252,7 +252,7 @@ export async function updateCard<TStore extends BoardStore>(
       : null
     if (column) {
       const description = 'description' in updates ? updates.description ?? null : card.description
-      unmet = await enforceColumnEntry(tx, { id: card.id, description }, column, actor)
+      unmet = await enforceColumnEntry(tx, { id: card.id, description, statusId: card.statusId }, column, actor)
     }
     if ('assigneeKind' in input) {
       updates.assigneeKind = input.assigneeKind ?? null

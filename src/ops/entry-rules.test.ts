@@ -7,7 +7,7 @@ import type { TestBoardStore } from '../testing/board-stores'
 import { BOARD_STORE_FACTORIES } from '../testing/board-stores'
 import { approve, createCard, createCommentOnce, moveCard, returnCard, updateCard } from './cards'
 import { readChangeSeq } from './change-seq'
-import { createColumn, ensureDefaultColumns, requireColumn, setColumnEntryRules, updateColumn } from './columns'
+import { createColumn, ensureDefaultColumns, requireColumn, setColumnEntryRules, setColumnFlowRules, updateColumn } from './columns'
 import { enforceColumnEntryForCards } from './entry-rules'
 import { linkPullRequest } from './pull-requests'
 import { closeSprint, createMilestone } from './sprints'
@@ -183,6 +183,8 @@ describe.each(BOARD_STORE_FACTORIES)('column entry rules on $name', (factory) =>
   })
 
   it('wants a person\'s approval, which only a person can give', async () => {
+    // About approval alone: Done here accepts cards from any column.
+    await setColumnFlowRules(store, (await requireColumn(store, WORKSPACE.id, 'Done')).id, { allowedFrom: null, wipLimit: null }, USER)
     await setColumnEntryRules(store, WORKSPACE.id, 'Done', ['approved'], USER)
     const card = await createCard(store, { workspace: WORKSPACE, title: 'Card' }, USER)
     expect((await refusal(async () => await moveCard(store, card.id, 'done', AGENT))).details?.unmet)
