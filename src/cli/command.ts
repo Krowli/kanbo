@@ -16,7 +16,7 @@ import type { CliOutputOptions, CliResult } from './output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from './output'
 import { openPostgresBoard } from './postgres-board'
 import { rememberProjectQuietly } from './project-registry'
-import { assertInstalledBoard, assertWritableBoard } from './schema-guard'
+import { assertInstalledBoard, assertReadableBoard, assertWritableBoard } from './schema-guard'
 import { resolveWorkspace } from './workspace'
 
 /**
@@ -130,6 +130,9 @@ async function openFileSession(
     if (mode === 'write') {
       assertWritableBoard(board.database, target.owner)
     }
+    else {
+      assertReadableBoard(board.database, target.owner)
+    }
     // A file of this package's own holds no `workspaces` table to look up —
     // the same reason an external board resolves from the binding alone.
     const workspace = resolveWorkspace(
@@ -148,8 +151,9 @@ async function openFileSession(
 /**
  * The same, on a board that is a database of its own.
  *
- * The guard runs whatever the command came to do. A board file that this build
- * cannot write to is still a board worth reading; a connection string pointing
+ * The guard runs whatever the command came to do. A board file whose only
+ * difference from this build is its schema stamp is still a board worth
+ * reading; a connection string pointing
  * at a database with no board in it is nothing to read at all, and every
  * command would otherwise fail one statement later with the driver's own words.
  */

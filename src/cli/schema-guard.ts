@@ -41,6 +41,33 @@ export function assertWritableBoard(database: SqliteDatabase, owner: BoardFileOw
 }
 
 /**
+ * Refuse a read of a board file that lacks a table or a column this build
+ * reads — a file a migration behind — with the sentence a write gets, instead
+ * of letting the first statement fail on what is missing. A file whose only
+ * difference is its schema stamp is still read: every statement this build
+ * makes works on it, and a person who cannot migrate now can still look at
+ * their cards.
+ */
+export function assertReadableBoard(database: SqliteDatabase, owner: BoardFileOwner): void {
+  try {
+    assertBoardSchema(database)
+  }
+  catch (error) {
+    if (!(error instanceof BoardError && error.code === 'board_schema_outdated')) {
+      throw error
+    }
+    if (lacksWhatThisBuildReads(error.details)) {
+      throw new CliError(EXIT_SCHEMA_OUTDATED, owner === 'kanbo' ? FILE_SCHEMA_OUTDATED_MESSAGE : SCHEMA_OUTDATED_MESSAGE)
+    }
+  }
+}
+
+/** Whether `assertBoardSchema` found a table or a column missing, rather than only another stamp. */
+function lacksWhatThisBuildReads(details: Record<string, unknown> | undefined): boolean {
+  return details !== undefined && ('missingTables' in details || 'missingAddedTables' in details || 'missingColumns' in details)
+}
+
+/**
  * Refuse an external board this build cannot speak for — before reading it as
  * well as before writing to it.
  *

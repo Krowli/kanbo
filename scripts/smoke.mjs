@@ -511,6 +511,8 @@ async function upgradeMain() {
   note(`${newVersion}, and kanbo connect exists`)
 
   step('u4b. the board is a migration behind: a write asks for kanbo migrate, and kanbo migrate brings it forward')
+  const unread = kanbo(['card', 'list'], { expectCode: 3 })
+  check(unread.all.includes('Run kanbo migrate'), 'a read of the old board does not ask for kanbo migrate', unread.all)
   const refused = kanbo(['card', 'create', '--title', 'Written before kanbo migrate'], { expectCode: 3 })
   check(refused.all.includes('Run kanbo migrate'), 'a write to the old board does not ask for kanbo migrate', refused.all)
   kanbo(['migrate'])

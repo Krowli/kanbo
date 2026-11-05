@@ -7,10 +7,11 @@ import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { createCard } from '../ops/cards'
 import type { BoardActor } from '../ops/types'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
+import { markBoardFileOwnedByKanbo } from '../sqlite/open-database'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import { registerCardCommands } from './commands/card'
-import { SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
+import { FILE_SCHEMA_OUTDATED_MESSAGE, SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
 
 const WORKSPACE: BoardWorkspaceIdentity = { id: 'workspace', identifier: 'WOR', name: 'Workspace' }
 const USER: BoardActor = { kind: 'user', id: '__self__' }
@@ -39,6 +40,12 @@ describe('a board file older than this build', () => {
     board.database.run(sql`update kanban_meta set revision = 0 where key = 'schema_epoch'`)
   }
 
+  /** The same file a migration behind: the columns 0005 added are not there. */
+  function dropTheNewestColumns(): void {
+    board.connection.exec('alter table issue_statuses drop column wip_limit')
+    board.connection.exec('alter table issue_statuses drop column allowed_from')
+  }
+
   async function run(argv: string[]): Promise<string[]> {
     const printed: string[] = []
     vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
@@ -64,5 +71,19 @@ describe('a board file older than this build', () => {
     ageTheDatabase()
 
     expect((await run(['card', 'list'])).join('\n')).toContain('Card')
+  })
+
+  it('refuses a read the file lacks a column for with the sentence a write gets, not the driver\'s', async () => {
+    await createCard(store, { workspace: WORKSPACE, title: 'Card', statusName: 'To Do' }, USER)
+    dropTheNewestColumns()
+
+    await expect(run(['card', 'list'])).rejects.toThrowError(expect.objectContaining({ exitCode: 3, message: SCHEMA_OUTDATED_MESSAGE }))
+  })
+
+  it('names kanbo migrate when the file a migration behind is kanbo\'s own', async () => {
+    markBoardFileOwnedByKanbo(board.database)
+    dropTheNewestColumns()
+
+    await expect(run(['card', 'list'])).rejects.toThrowError(expect.objectContaining({ exitCode: 3, message: FILE_SCHEMA_OUTDATED_MESSAGE }))
   })
 })

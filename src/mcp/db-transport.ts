@@ -52,10 +52,12 @@ export interface KanboDbTransport extends KanboToolTransport {
 }
 
 export async function createDbTransport(input: KanboDbTransportInput): Promise<KanboDbTransport> {
-  // Opened for reading: a board file older than this build is still worth
-  // looking at, and every write below asks the same guard a `kanbo` command
-  // asks. A client talks to this server for as long as it likes, and the board
-  // may be migrated underneath it in the meantime.
+  // Opened for reading: a board file whose only difference from this build is
+  // its schema stamp is still worth looking at, and every write below asks the
+  // same guard a `kanbo` command asks. A file a migration behind is refused
+  // here, as an outdated Postgres board is, with the sentence that names
+  // `kanbo migrate`. A client talks to this server for as long as it likes, and
+  // the board may be migrated underneath it in the meantime.
   const session = await openBoardSession(
     { db: input.dbPath, databaseUrl: input.databaseUrl, workspace: input.workspaceId, asAgent: true },
     'read',

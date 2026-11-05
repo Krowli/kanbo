@@ -291,7 +291,8 @@ export function buildCapabilitiesManifest(): KanboCapabilities {
       '`kanbo migrate` and `kanbo roles apply` refuse a host app\'s own database file: the app migrates it, '
       + 'and this package never touches it.',
       'A write to a board older than this build\'s schema epoch is refused (exit 3) until `kanbo migrate` '
-      + 'runs (on a host app\'s database, until the app migrates it) — reads stay open either way.',
+      + 'runs (on a host app\'s database, until the app migrates it), and so is a read of a board file that lacks a '
+      + 'table or a column this build reads; a board whose only difference is its schema stamp stays readable.',
       'There is no MCP tool that approves a card, and there never will be: `kanbo_wait_approval` hands the '
       + 'card to a person and ends the turn; only a person takes it back.',
     ],

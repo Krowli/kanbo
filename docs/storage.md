@@ -92,9 +92,9 @@ Two migration chains ship with the package: `drizzle-sqlite/` for board files an
 
 Before every write to a board file, and before any access to a Postgres board, kanbo checks that the tables, the columns and `schema_epoch` match this build. When they do not:
 
-- a board file refuses writes (exit `3`, `This board file was made by an older kanbo. Run kanbo migrate.`) but stays readable;
+- a board file refuses writes (exit `3`, `This board file was made by an older kanbo. Run kanbo migrate.`), and reads too when it lacks a table or a column this build reads — a file a migration behind; a file whose only difference is its schema stamp stays readable;
 - a Postgres board refuses everything (exit `3`, `This Postgres database has no kanbo board yet, or one an older kanbo made. Run kanbo migrate.`).
 
 After `kanbo migrate` on Postgres, run `kanbo roles apply` again: a migration may add a sequence the roles need a grant on.
 
-kanbo 0.5.0 adds `issue_statuses.allowed_from`, `issue_statuses.wip_limit` and an index on `issue_field_changes(field, created_at)`. Run `kanbo migrate` once after upgrading (on a board file, `kanbo doctor --fix` does it too). Until then a write is refused as above.
+kanbo 0.5.0 adds `issue_statuses.allowed_from`, `issue_statuses.wip_limit` and an index on `issue_field_changes(field, created_at)`. Run `kanbo migrate` once after upgrading (on a board file, `kanbo doctor --fix` does it too). Until then a read or a write is refused as above.
