@@ -6,6 +6,7 @@
  */
 export type BoardErrorCode
   = | 'board_approval_requires_user'
+    | 'board_card_run_active'
     | 'board_column_name_taken'
     | 'board_column_not_empty'
     | 'board_column_ready_protected'

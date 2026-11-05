@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import type { BoardStore } from '../board-store'
+import { BoardError } from '../domain/errors'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import type { TestBoardStore } from '../testing/board-stores'
 import { BOARD_STORE_FACTORIES } from '../testing/board-stores'
 import { createCard, setStatusLine } from './cards'
+import { readChangeSeq } from './change-seq'
 import {
   attachRunExecution,
   clearRunSessionRef,
@@ -60,6 +62,22 @@ describe.each(BOARD_STORE_FACTORIES)('board runs on $name', (factory) => {
     expect(await store.comments.listByIssue(card.id)).toEqual([
       expect.objectContaining({ authorKind: 'system.run', content: 'Run started: Claude · attempt 1 · worktree' }),
     ])
+  })
+
+  it('refuses a second run on a card that has one going, and starts one once it has ended', async () => {
+    const card = await createCardToRun()
+    const first = await startRun(store, card.id, { agentName: 'Claude' }, EXTERNAL)
+    const version = await readChangeSeq(store)
+
+    const failure = await startRun(store, card.id, { agentName: 'Codex' }, AGENT).then(() => undefined, (error: unknown) => error)
+
+    expect(failure).toBeInstanceOf(BoardError)
+    expect(failure).toMatchObject({ code: 'board_card_run_active', details: { issueId: card.id, runId: first.id, agentName: 'Claude' } })
+    expect(await readChangeSeq(store)).toBe(version)
+    expect(await store.runs.countByIssue(card.id)).toBe(1)
+
+    await finishRun(store, first.id, { state: 'finished' }, EXTERNAL)
+    expect((await startRun(store, card.id, { agentName: 'Codex' }, AGENT)).agentName).toBe('Codex')
   })
 
   it('counts every launch as the next attempt and takes the card its execution mode', async () => {
@@ -144,6 +162,8 @@ describe.each(BOARD_STORE_FACTORIES)('board runs on $name', (factory) => {
       .toMatchObject({ code: 'board_run_session_ref_conflict' })
     expect((await store.runs.findById(run.id))?.externalSessionRef).toBe('claude:abc')
 
+    // A card has one run going at a time: the first one ends before the next starts.
+    await finishRun(store, run.id, { state: 'finished' }, EXTERNAL)
     const bare = await startRun(store, card.id, { agentName: 'Claude' }, EXTERNAL)
     expect((await attachRunExecution(store, bare.id, { externalSessionRef: null })).externalSessionRef).toBeNull()
   })

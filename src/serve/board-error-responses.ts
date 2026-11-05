@@ -35,6 +35,7 @@ export interface BoardErrorResponse {
  */
 export const BOARD_ERROR_RESPONSES: Record<BoardErrorCode, BoardErrorResponse> = {
   board_approval_requires_user: { status: 403, message: 'Only a person can approve a card', code: 'issue_approval_requires_user' },
+  board_card_run_active: { status: 409, message: 'The card already has a run going' },
   board_column_name_taken: { status: 400, message: 'Another column already has that name' },
   board_column_not_empty: { status: 409, message: 'The column still holds cards: say which column they move to' },
   board_column_ready_protected: { status: 400, message: 'To Do is where agents take work from: it cannot be renamed or removed' },

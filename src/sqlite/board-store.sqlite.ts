@@ -388,6 +388,9 @@ function createSqliteBoardStoreCore(resolveDatabase: () => SqliteDatabase): Sqli
         .all(),
       listByIds: issueIds => resolveDatabase().select().from(issues).where(inArray(issues.id, issueIds)).all(),
       findById: issueId => resolveDatabase().select().from(issues).where(eq(issues.id, issueId)).get() ?? null,
+      // A board write already holds the file's lock (`begin immediate`): nobody
+      // else writes until it ends, so reading the row is locking it.
+      lockById: issueId => resolveDatabase().select().from(issues).where(eq(issues.id, issueId)).get() ?? null,
       findInWorkspace: (workspaceId, issueId) => resolveDatabase()
         .select()
         .from(issues)
@@ -748,6 +751,7 @@ export function createSqliteBoardStore(options: { database: () => SqliteDatabase
       countByMilestone: async workspaceId => core.issues.countByMilestone(workspaceId),
       listByIds: async issueIds => core.issues.listByIds(issueIds),
       findById: async issueId => core.issues.findById(issueId),
+      lockById: async issueId => core.issues.lockById(issueId),
       findInWorkspace: async (workspaceId, issueId) => core.issues.findInWorkspace(workspaceId, issueId),
       findByNumber: async (workspaceId, number) => core.issues.findByNumber(workspaceId, number),
       maxNumber: async workspaceId => core.issues.maxNumber(workspaceId),

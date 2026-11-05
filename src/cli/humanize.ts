@@ -28,6 +28,10 @@ const AS_A_PERSON = 'run it in your own terminal, or on the board page (kanbo se
 
 export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => HumanizedFailure> = {
   board_approval_requires_user: () => ({ text: 'Only a person can approve a card.', next: AS_A_PERSON }),
+  board_card_run_active: details => ({
+    text: `${named(details.issueId)} already has a run going: ${named(details.agentName)}'s, run ${named(details.runId)}.`,
+    next: 'kanbo ready',
+  }),
   board_column_name_taken: details => ({
     text: `Another column, ${named(details.takenBy)}, already has that name (same slug). Pick another name.`,
     next: 'kanbo columns list',

@@ -266,6 +266,13 @@ export function runBoardStoreContract(name: string, makeStore: () => Promise<Boa
         expect(await store.issues.findByNumber(workspaceId, 2)).toBeNull()
       })
 
+      it('reads an issue for a write with lockById, and nothing for an id it does not hold', async () => {
+        const issue = await createIssue({ id: 'issue-1', number: 1 })
+
+        expect(await store.transaction(async tx => await tx.issues.lockById(issue.id))).toEqual(issue)
+        expect(await store.transaction(async tx => await tx.issues.lockById('issue-404'))).toBeNull()
+      })
+
       it('lists every issue newest first, across workspaces', async () => {
         await createIssue({ id: 'issue-old', number: 1, createdAt: 1_000 })
         await createIssue({ id: 'issue-new', workspaceId: secondWorkspaceId, number: 1, createdAt: 3_000 })

@@ -135,6 +135,12 @@ export const STOPPED_BY_YOU_STATUS_LINE = 'stopped by you'
  * the board reads the same whether the agent was launched by an app or from
  * somewhere else entirely. The attempt number is simply how many runs the card
  * has had — a card whose runs were all launched elsewhere still counts them.
+ *
+ * A card has one run going at a time. A start on a card whose run is still going
+ * is refused with `board_card_run_active`, naming that run — whichever path it
+ * came by, an app's launch, `kanbo run start`, MCP, or a second app on a shared
+ * Postgres board. The card's row is locked first, so two starts racing for it
+ * are settled one after the other.
  */
 export async function startRun<TStore extends BoardStore>(
   store: TStore,
@@ -147,7 +153,14 @@ export async function startRun<TStore extends BoardStore>(
   // back changes nothing.
   const externalSessionRef = readExternalSessionRef(input.externalSessionRef) ?? null
   return await runBoardWrite(store, async ({ tx }) => {
-    const card = await requireCard(tx, issueId)
+    const card = await tx.issues.lockById(issueId)
+    if (!card) {
+      throw new BoardError('issue_not_found', { issueId })
+    }
+    const [active] = await tx.runs.listRunning(issueId)
+    if (active) {
+      throw new BoardError('board_card_run_active', { issueId, runId: active.id, agentName: active.agentName })
+    }
     const attempt = await tx.runs.countByIssue(issueId) + 1
     const executionMode = input.executionMode ?? card.executionMode
 

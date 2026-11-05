@@ -82,6 +82,12 @@ export interface IssueRowStore {
   /** Issues with the given ids, in no particular order. Missing ids are simply absent. */
   listByIds: (issueIds: string[]) => Promise<Issue[]>
   findById: (issueId: string) => Promise<Issue | null>
+  /**
+   * The issue, read inside a write so no other writer can change it until this
+   * transaction ends: `select … for update` on Postgres. A SQLite write already
+   * holds the whole file (`begin immediate`), so there it is `findById`.
+   */
+  lockById: (issueId: string) => Promise<Issue | null>
   /** The issue, only when it belongs to the given workspace. */
   findInWorkspace: (workspaceId: string, issueId: string) => Promise<Issue | null>
   /** The issue carrying that number inside the workspace — the uniqueness constraint behind key generation. */

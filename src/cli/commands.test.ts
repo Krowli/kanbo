@@ -195,8 +195,10 @@ describe('board commands', () => {
   it('counts which attempt a run is, starting from the card\'s first launch', async () => {
     const card = await createCardIn('Card', 'To Do')
 
-    const first = await run(['run', 'start', card.id, '--agent', 'Claude', '--json', 'attempt'])
-    expect(JSON.parse(first)).toEqual({ attempt: 1 })
+    const first = JSON.parse(await run(['run', 'start', card.id, '--agent', 'Claude', '--json', 'id,attempt']))
+    expect(first).toEqual({ id: expect.any(String), attempt: 1 })
+    // A card has one run going at a time: the first one ends before the second starts.
+    await finishRun(store, first.id, { state: 'finished' }, USER)
 
     const second = await run(['run', 'start', card.id, '--agent', 'Claude', '--json', 'attempt'])
     expect(JSON.parse(second)).toEqual({ attempt: 2 })
