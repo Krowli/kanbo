@@ -85,6 +85,9 @@ const StatusSchema = z.object({
   // The column's entry rules, as the row stores them (a JSON array in text) or
   // already read into a list; absent from a server that predates them.
   entryRules: z.union([z.string(), z.array(z.string())]).nullish(),
+  // The column's flow rules: the stored JSON text or a list, and the limit; absent from a server that predates them.
+  allowedFrom: z.union([z.string(), z.array(z.string())]).nullish(),
+  wipLimit: z.number().nullish(),
 })
 
 const CommentSchema = z.object({
@@ -156,7 +159,7 @@ export function createHttpTransport(input: KanboHttpTransportInput): KanboToolTr
     const statuses = z.array(StatusSchema).parse(
       await request('GET', `/issues/statuses?workspaceId=${encodeURIComponent(input.workspaceId())}`),
     )
-    return statuses.map(projectKanboColumn)
+    return statuses.map(status => projectKanboColumn(status, statuses))
   }
 
   /**

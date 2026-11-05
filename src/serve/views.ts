@@ -2,6 +2,7 @@ import type { BoardRunProjection } from '../board-store'
 import type { IssueCommentAuthorView } from '../domain/activity-types'
 import type { EntryRule, UnmetEntryRule } from '../domain/entry-rules'
 import { readEntryRules } from '../domain/entry-rules'
+import { readFlowRules } from '../domain/flow-rules'
 import { commentAuthorReference } from '../domain/issue-activity'
 import type { IssueActorReference, IssueView } from '../domain/issue-view'
 import { isOutsideWriter, toIssueView } from '../domain/issue-view'
@@ -31,8 +32,8 @@ import type { Issue, IssueComment, IssueStatus } from '../sqlite/schema'
  */
 export type ServeCardView = IssueView & Omit<BoardRunProjection, 'issueId'> & { unmetRules?: UnmetEntryRule[] }
 
-/** A column, its entry rules read out of the stored JSON into a list. */
-export type ServeStatusView = Omit<IssueStatus, 'entryRules'> & { entryRules: EntryRule[] }
+/** A column, its entry rules and the columns it accepts cards from read out of the stored JSON into lists. */
+export type ServeStatusView = Omit<IssueStatus, 'entryRules' | 'allowedFrom'> & { entryRules: EntryRule[], allowedFrom: string[] | null }
 
 /** A comment, with who wrote it as a reader sees them. */
 export type ServeCommentView = IssueComment & { author: IssueCommentAuthorView }
@@ -62,7 +63,7 @@ export async function toWrittenCardView(ops: BoardOps, card: BoardCardWrite): Pr
 }
 
 export function toStatusView(status: IssueStatus): ServeStatusView {
-  return { ...status, entryRules: readEntryRules(status) }
+  return { ...status, entryRules: readEntryRules(status), allowedFrom: readFlowRules(status).allowedFrom }
 }
 
 export function toCommentView(comment: IssueComment, personWriterId: string | null = null): ServeCommentView {

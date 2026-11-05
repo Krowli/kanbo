@@ -5,7 +5,8 @@ export const columnsTool = defineKanboTool({
   name: 'kanbo_columns',
   title: 'Columns of the board',
   description: 'List this board\'s columns in board order, each with the slug kanbo_card_move takes, what the column means here, '
-    + 'and the entryRules a card must meet before you move it in.',
+    + 'the entryRules a card must meet before you move it in, the columns it accepts cards from (allowedFrom, slugs; null for any) '
+    + 'and the most cards it holds (wipLimit).',
   inputSchema: {},
   run: async transport => await transport.columns(),
 })

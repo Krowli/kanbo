@@ -271,6 +271,11 @@ export function buildCapabilitiesManifest(): KanboCapabilities {
       + 'unmet rule (CLI exit 1); a person goes through and is told what is missing. Only a person sets the rules '
       + '— `kanbo columns rules` refuses an agent\'s shell (exit 4). The database role does not '
       + 'enforce them.',
+      'A column may name the columns it accepts cards from (`allowedFrom`) and the most cards it holds (`wipLimit`). '
+      + 'Anyone but a person moving, creating, bulk-moving or claiming a card against them is refused with '
+      + '`board_column_rules_unmet` (`allowed_from`, `wip_limit`); a person goes through and is told. A new board\'s Done '
+      + 'accepts cards from In Review only. Only a person sets them — `kanbo columns flow` refuses an agent\'s shell '
+      + '(exit 4). The database role does not enforce them.',
       'Only a person changes the board\'s columns: `kanbo columns add`, `rename`, `move`, `remove`, `template` and '
       + '`add-standard` refuse an agent\'s shell (exit 4), and the rename, move, remove and add-missing operations '
       + 'refuse any actor but a person (`board_column_structure_requires_user`); no MCP tool changes columns. '

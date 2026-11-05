@@ -171,6 +171,14 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     expect((await call(client, 'POST', '/issues/WOR-001/wait-approval', { body: { statusLine: 'look at this' } })).status).toBe(200)
   }
 
+  it('answers each column with its flow rules decoded', async () => {
+    const statuses = (await call(client, 'GET', `/issues/statuses?workspaceId=${WORKSPACE.id}`)).json as { name: string, id: string, allowedFrom: string[] | null, wipLimit: number | null }[]
+
+    const inReview = statuses.find(status => status.name === 'In Review')!
+    expect(statuses.find(status => status.name === 'Done')).toMatchObject({ allowedFrom: [inReview.id], wipLimit: null })
+    expect(inReview).toMatchObject({ allowedFrom: null, wipLimit: null })
+  })
+
   it('names the workspace it serves', async () => {
     const answer = await call(client, 'GET', '/issues/workspace')
     expect(answer.status).toBe(200)

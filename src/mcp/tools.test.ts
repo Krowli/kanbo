@@ -533,6 +533,27 @@ describe('the board\'s tools over a real board', () => {
     expect(asList).toEqual(asStored)
   })
 
+  it('lists each column\'s flow rules as slugs, and the prime text says where cards come from and how many a column holds', async () => {
+    const ops = boardOps()
+    await ops.ensureDefaultColumns(WORKSPACE.id)
+    const inProgress = await ops.requireColumn(WORKSPACE.id, 'In Progress')
+    await ops.setColumnFlowRules(inProgress.id, { allowedFrom: [(await ops.requireColumn(WORKSPACE.id, 'To Do')).id], wipLimit: 2 }, { kind: 'user', id: '__self__' })
+    const tools = Object.fromEntries(KANBO_TOOLS.map(tool => [tool.name, tool]))
+
+    const columns = readJson(await tools.kanbo_columns!.run(transport, {})) as { slug: string, allowedFrom: string[] | null, wipLimit: number | null }[]
+    expect(columns.find(column => column.slug === 'in_progress')).toMatchObject({ allowedFrom: ['to_do'], wipLimit: 2 })
+    expect(columns.find(column => column.slug === 'done')).toMatchObject({ allowedFrom: ['in_review'], wipLimit: null })
+    expect(columns.find(column => column.slug === 'backlog')).toMatchObject({ allowedFrom: null, wipLimit: null })
+
+    const prime = (await tools.kanbo_prime!.run(transport, {})).content[0]?.text
+    expect(prime).toContain('- In Progress (`in_progress`) — A person or an agent is working on it Accepts cards from `to_do` only. Holds at most 2 cards.')
+    expect(prime).toContain('- Done (`done`) — Finished and accepted Accepts cards from `in_review` only.')
+    expect(prime).toContain('A column that says which columns it accepts cards from')
+
+    const overHttp = createHttpTransport({ workspaceId: () => WORKSPACE.id, request: async () => await ops.listColumns(WORKSPACE.id) })
+    expect(readJson(await tools.kanbo_columns!.run(overHttp, {}))).toEqual(columns)
+  })
+
   /**
    * A server of the `/issues` routes, answering from this board the way
    * `kanbo serve` does — and filtering on no more than it does: one column and

@@ -65,7 +65,8 @@ export async function createDbTransport(input: KanboDbTransportInput): Promise<K
   const actor = input.actor
 
   async function readColumns(): Promise<KanboColumnResult[]> {
-    return (await ops.listColumns(workspaceId)).map(projectKanboColumn)
+    const rows = await ops.listColumns(workspaceId)
+    return rows.map(row => projectKanboColumn(row, rows))
   }
 
   /** One card with what the run registry says about it, in the shape a tool prints. */
@@ -102,7 +103,7 @@ export async function createDbTransport(input: KanboDbTransportInput): Promise<K
    * the waiting and returned ones last said at most two more.
    */
   async function projectPage(page: CardQueryResult, { attend = true } = {}): Promise<KanboCardResult[]> {
-    const columns = page.columns.map(projectKanboColumn)
+    const columns = page.columns.map(column => projectKanboColumn(column, page.columns))
     const runs = await ops.readBoardProjectionForIssues(page.cards.map(card => card.id))
     const attention = attend ? await ops.readCardAttention(page.cards, runs.map(run => run.activeRun !== null)) : []
     return page.cards.map((card, index) => projectKanboCard(

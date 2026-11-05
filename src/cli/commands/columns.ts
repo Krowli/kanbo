@@ -79,7 +79,8 @@ export function registerColumnsCommands(program: Command): void {
     .description('List the columns in order, with the short name to move cards by'))
     .action(async (options: BoardCommandOptions) => {
       await runBoardCommand(options, 'read', async (session) => {
-        const views = (await session.ops.listColumns(session.workspace.id)).map(projectColumn)
+        const board = await session.ops.listColumns(session.workspace.id)
+        const views = board.map(column => projectColumn(column, board))
         return { value: views, text: describeColumns(views) }
       })
     })
@@ -92,7 +93,7 @@ export function registerColumnsCommands(program: Command): void {
     .action(async (column: string, options: DescribeColumnOptions) => {
       await runBoardCommand(options, 'write', async (session) => {
         const updated = await session.ops.describeColumn(session.workspace.id, column, options.text)
-        const view = projectColumn(updated)
+        const view = projectColumn(updated, await session.ops.listColumns(session.workspace.id))
         return { value: view, text: describeColumns([view]) }
       })
     })
@@ -111,7 +112,7 @@ export function registerColumnsCommands(program: Command): void {
 
       await runBoardCommand(options, 'write', async (session) => {
         const updated = await session.ops.setColumnEntryRules(session.workspace.id, column, rules, actor)
-        const view = projectColumn(updated)
+        const view = projectColumn(updated, await session.ops.listColumns(session.workspace.id))
         return { value: view, text: describeColumns([view]) }
       })
     })
@@ -194,7 +195,7 @@ export function registerColumnsCommands(program: Command): void {
           COLUMN_TEMPLATES.standard,
           { mode: 'add-missing', actor },
         )
-        const views = statuses.map(projectColumn)
+        const views = statuses.map(column => projectColumn(column, statuses))
         return {
           value: { added, columns: views },
           text: added.length === 0
@@ -219,7 +220,8 @@ export function registerColumnsCommands(program: Command): void {
       return
     }
     await runBoardCommand({}, 'read', async (session) => {
-      const views = (await session.ops.listColumns(session.workspace.id)).map(projectColumn)
+      const board = await session.ops.listColumns(session.workspace.id)
+      const views = board.map(column => projectColumn(column, board))
       return { value: views, text: describeColumns(views) }
     })
   })

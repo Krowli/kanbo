@@ -1,5 +1,6 @@
 import type { BoardStore } from '../board-store'
 import { ENTRY_RULE_DESCRIPTIONS, readEntryRules } from '../domain/entry-rules'
+import { joinWords, readFlowRules } from '../domain/flow-rules'
 import { normalizeStatusName } from '../domain/status-name'
 import type { IssueStatus } from '../sqlite/schema'
 import { cardDisplayTitle } from '../domain/card-display-title'
@@ -17,12 +18,14 @@ import { listColumns } from './columns'
 export async function buildPrimeText(store: BoardStore, workspaceId: string): Promise<string> {
   const columns = await listColumns(store, workspaceId)
   const ruled = columns.some(column => readEntryRules(column).length > 0)
+  const flowing = columns.some(column => hasFlowRules(column))
   const lines = [
     ...await describeReturnedCards(store, workspaceId, columns),
     'Columns of this board, in board order:',
     '',
-    ...(columns.length > 0 ? columns.map(describeColumnLine) : ['- (this board has no columns yet)']),
+    ...(columns.length > 0 ? columns.map(column => describeColumnLine(column, columns)) : ['- (this board has no columns yet)']),
     ...(ruled ? ['', ENTRY_RULES_NOTE] : []),
+    ...(flowing ? ['', FLOW_RULES_NOTE] : []),
     '',
     'How this board works:',
     '',
@@ -67,13 +70,34 @@ async function describeReturnedCards(store: BoardStore, workspaceId: string, col
  */
 const ENTRY_RULES_NOTE = 'A column that lists requirements refuses a card that does not meet them yet, with the list of what is missing: do that work first, then move the card. A person may still move it.'
 
-function describeColumnLine(column: IssueStatus): string {
+/** Said under the columns only when one of them has flow rules. */
+const FLOW_RULES_NOTE = 'A column that says which columns it accepts cards from, or how many cards it holds, refuses a move that breaks that and says why: move the card through a column it accepts, or wait until a card leaves. A person may still move it.'
+
+function hasFlowRules(column: IssueStatus): boolean {
+  const { allowedFrom, wipLimit } = readFlowRules(column)
+  return allowedFrom !== null || wipLimit !== null
+}
+
+function describeColumnLine(column: IssueStatus, columns: readonly IssueStatus[]): string {
   const slug = normalizeStatusName(column.name)
   const rules = readEntryRules(column)
   const requires = rules.length > 0
     ? ` Requires: ${rules.map(rule => `${rule} (${ENTRY_RULE_DESCRIPTIONS[rule]})`).join('; ')}.`
     : ''
+  const said = `${requires}${describeFlow(column, columns)}`
   return column.description
-    ? `- ${column.name} (\`${slug}\`) — ${column.description}${requires}`
-    : `- ${column.name} (\`${slug}\`)${requires ? ` —${requires}` : ''}`
+    ? `- ${column.name} (\`${slug}\`) — ${column.description}${said}`
+    : `- ${column.name} (\`${slug}\`)${said ? ` —${said}` : ''}`
+}
+
+/** Where a column takes cards from and how many it holds, as the prime text says it; nothing for a column without flow rules. */
+function describeFlow(column: IssueStatus, columns: readonly IssueStatus[]): string {
+  const { allowedFrom, wipLimit } = readFlowRules(column)
+  const from = allowedFrom === null
+    ? ''
+    : allowedFrom.length === 0
+      ? ' Accepts no card from another column: only a person puts a card here.'
+      : ` Accepts cards from ${joinWords(columns.filter(other => allowedFrom.includes(other.id)).map(other => `\`${normalizeStatusName(other.name)}\``))} only.`
+  const holds = wipLimit === null ? '' : ` Holds at most ${wipLimit} ${wipLimit === 1 ? 'card' : 'cards'}.`
+  return `${from}${holds}`
 }

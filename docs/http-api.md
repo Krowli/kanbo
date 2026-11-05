@@ -98,7 +98,7 @@ All routes are under `/issues`. A card is addressed by its key (`API-001`). A `w
 | `GET /issues/:id/pull-requests` · `POST /issues/:id/pull-requests` · `DELETE /issues/:id/pull-requests/:linkId` | Linked pull requests, with their standing as the card's recorded facts say. Nothing is asked of GitHub. |
 | `GET /issues/:id/runs` · `POST /issues/:id/runs` | List and start runs. |
 | `PATCH /issues/runs/:runId` | Finish a run or attach what it ran in. |
-| `GET /issues/statuses` · `POST /issues/statuses` | List and create columns. |
+| `GET /issues/statuses` · `POST /issues/statuses` | List and create columns. Each carries `entryRules`, `allowedFrom` (the ids of the columns a card may enter it from; `null` for any) and `wipLimit`. |
 | `PATCH /issues/statuses/:id` | Update a column's name, description, colour or entry rules. A new name follows `kanbo columns rename`: its slug may not be another column's (`400 board_column_name_taken`), and To Do keeps the slug `to_do` (`400 board_column_ready_protected`). |
 | `DELETE /issues/statuses/:id` | Remove a column. A column holding cards needs `moveCardsTo` (a column's id or name, in the body or the query): its cards move there in the same write, otherwise `409 board_column_not_empty` with `details.cardCount`. To Do is never removed. Answers `{ ok, movedCards, unmetRules? }`. |
 | `POST /issues/statuses/reorder` | Reorder columns. |

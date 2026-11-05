@@ -29,7 +29,7 @@ export async function runColumnsMenu(ui: Ui): Promise<void> {
   while (true) {
     const columns = await readColumns()
     if (showList) {
-      say(ui, ['', 'Columns of this board:', describeColumns(columns.map(projectColumn))].join('\n'))
+      say(ui, ['', 'Columns of this board:', describeColumns(columns.map(column => projectColumn(column, columns)))].join('\n'))
     }
 
     let choice: MenuChoice

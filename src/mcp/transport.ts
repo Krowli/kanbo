@@ -1,6 +1,7 @@
 import type { EntryRule } from '../domain/entry-rules'
 import { ENTRY_RULES, readEntryRules } from '../domain/entry-rules'
 import { foldCase } from '../domain/fold-case'
+import { readFlowRules } from '../domain/flow-rules'
 import type { IssueActorKind } from '../domain/issue-view'
 import { isOutsideWriter, normalizeCommentAuthorKind } from '../domain/issue-view'
 import { normalizeStatusName } from '../domain/status-name'
@@ -163,6 +164,10 @@ export interface KanboColumnResult {
   order: number
   /** What a card must satisfy before an agent may move it here; empty for nothing. */
   entryRules: EntryRule[]
+  /** The slugs of the columns a card may enter this one from, in board order; `null` for any column, `[]` for none — only a person puts a card here. */
+  allowedFrom: string[] | null
+  /** The most cards the column holds; `null` for no limit. */
+  wipLimit: number | null
 }
 
 /**
@@ -446,15 +451,21 @@ export function projectKanboSprint(sprint: {
   }
 }
 
-/** A column of the board, from the row either transport holds. */
+/** A column of the board, from the row either transport holds; `board` is every column, to name the ones it accepts cards from. */
 export function projectKanboColumn(column: {
   id: string
   name: string
   description: string | null
   order: number
   entryRules?: string | readonly string[] | null
-}): KanboColumnResult {
+  /** As the row stores it (JSON text) or already read into a list; absent from a server that predates it. */
+  allowedFrom?: string | readonly string[] | null
+  wipLimit?: number | null
+}, board: readonly { id: string, name: string }[]): KanboColumnResult {
   const stored = column.entryRules
+  const allowedIds = typeof column.allowedFrom === 'string'
+    ? readFlowRules({ allowedFrom: column.allowedFrom, wipLimit: null }).allowedFrom
+    : column.allowedFrom ?? null
   return {
     id: column.id,
     name: column.name,
@@ -464,6 +475,10 @@ export function projectKanboColumn(column: {
     entryRules: typeof stored === 'object' && stored !== null
       ? ENTRY_RULES.filter(rule => stored.includes(rule))
       : readEntryRules({ entryRules: stored ?? null }),
+    allowedFrom: allowedIds === null
+      ? null
+      : board.filter(other => allowedIds.includes(other.id)).map(other => normalizeStatusName(other.name)),
+    wipLimit: column.wipLimit ?? null,
   }
 }
 

@@ -31,9 +31,11 @@ export interface AddColumnRequest {
 }
 
 /** The whole board's columns after a change, and the sentence that says what changed. */
-async function changed(session: BoardSession, message: string, extra: Record<string, unknown> = {}): Promise<CliResult> {
-  const views = (await session.ops.listColumns(session.workspace.id)).map(projectColumn)
-  return { value: { ...extra, columns: views }, text: `${message}\n\n${describeColumns(views)}` }
+async function changed(session: BoardSession, message: string, extra: Record<string, IssueStatus | number | string[]> = {}): Promise<CliResult> {
+  const board = await session.ops.listColumns(session.workspace.id)
+  const views = board.map(column => projectColumn(column, board))
+  const projected = Object.fromEntries(Object.entries(extra).map(([key, value]) => [key, typeof value === 'number' || Array.isArray(value) ? value : projectColumn(value, board)]))
+  return { value: { ...projected, columns: views }, text: `${message}\n\n${describeColumns(views)}` }
 }
 
 /**
@@ -66,7 +68,7 @@ export async function addColumn(session: BoardSession, request: AddColumnRequest
     category: request.category ?? spec.category,
     position: anchor ? (request.after !== undefined ? { after: anchor.id } : { before: anchor.id }) : undefined,
   }, actor)
-  return await changed(session, `Added ${created.name} (slug ${normalizeStatusName(created.name)}).`, { added: projectColumn(created) })
+  return await changed(session, `Added ${created.name} (slug ${normalizeStatusName(created.name)}).`, { added: created })
 }
 
 /** Said after a rename: agents' instructions name no column but To Do, and `kanbo prime` gives them the rest. */
@@ -78,7 +80,7 @@ export async function renameColumn(session: BoardSession, column: string, newNam
   const message = before.name === renamed.name
     ? `${renamed.name} already has that name.`
     : `Renamed ${before.name} to ${renamed.name} (slug ${normalizeStatusName(renamed.name)}).\n${RENAME_NOTE}`
-  return await changed(session, message, { renamed: projectColumn(renamed) })
+  return await changed(session, message, { renamed })
 }
 
 /** `--first`, `--last`, `--before <column>` or `--after <column>` — exactly one. */
@@ -129,7 +131,7 @@ export async function removeColumn(session: BoardSession, column: string, moveCa
   const message = result.movedTo
     ? `Removed ${result.removed.name} and moved ${describeCount(result.movedCards)} to ${result.movedTo.name}.`
     : `Removed ${result.removed.name}.`
-  return await changed(session, message, { removed: projectColumn(result.removed), movedCards: result.movedCards })
+  return await changed(session, message, { removed: result.removed, movedCards: result.movedCards })
 }
 
 /** The template a person named, or the error that lists the ones there are. */

@@ -2,6 +2,7 @@ import type { BoardActiveRun, BoardRunProjection } from '../board-store'
 import { cardDisplayTitle } from '../domain/card-display-title'
 import type { EntryRule } from '../domain/entry-rules'
 import { readEntryRules } from '../domain/entry-rules'
+import { readFlowRules } from '../domain/flow-rules'
 import { toIssueView } from '../domain/issue-view'
 import { normalizeStatusName } from '../domain/status-name'
 import type { CardAttention, CardLastComment } from '../ops/approval'
@@ -99,6 +100,10 @@ export interface ColumnView {
   order: number
   /** What a card must satisfy before an agent may move it here; empty for nothing. */
   entryRules: EntryRule[]
+  /** The slugs of the columns a card may enter this one from; `null` for any, `[]` for none. */
+  allowedFrom: string[] | null
+  /** The most cards the column holds; `null` for no limit. */
+  wipLimit: number | null
 }
 
 /** A milestone read as a sprint, as the command line prints it. Dates are unix seconds. */
@@ -202,7 +207,9 @@ function projectCardActiveRun(run: BoardActiveRun | null): CardActiveRunView | n
     : { id: run.id, agentName: run.agentName, state: run.state, startedAt: run.startedAt }
 }
 
-export function projectColumn(column: IssueStatus): ColumnView {
+/** A column as the command line prints it; `board` is every column, to name the ones it accepts cards from. */
+export function projectColumn(column: IssueStatus, board: readonly IssueStatus[]): ColumnView {
+  const { allowedFrom, wipLimit } = readFlowRules(column)
   return {
     id: column.id,
     name: column.name,
@@ -211,6 +218,8 @@ export function projectColumn(column: IssueStatus): ColumnView {
     category: column.category,
     order: column.order,
     entryRules: readEntryRules(column),
+    allowedFrom: allowedFrom === null ? null : board.filter(other => allowedFrom.includes(other.id)).map(other => normalizeStatusName(other.name)),
+    wipLimit,
   }
 }
 
@@ -317,6 +326,8 @@ export function describeColumns(columns: ColumnView[]): string {
       `${padToWidth(sanitizeTerminalText(column.slug), slugWidth)}  ${sanitizeTerminalText(column.name)}`,
       column.description ? ` — ${sanitizeTerminalText(column.description)}` : '',
       column.entryRules.length > 0 ? ` [requires: ${column.entryRules.join(', ')}]` : '',
+      column.allowedFrom === null ? '' : ` [from: ${column.allowedFrom.length > 0 ? column.allowedFrom.join(', ') : 'no column'}]`,
+      column.wipLimit === null ? '' : ` [wip: ${column.wipLimit}]`,
     ].join(''))
     .join('\n')
 }
