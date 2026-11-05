@@ -48,6 +48,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo columns list` | Every column in board order, with the slug a card is moved by. |
 | `kanbo columns describe <column>` | Say in one line when a card belongs in a column. |
 | `kanbo columns rules <column>` | Set what a card must satisfy before an agent may move it into a column. **Person only.** |
+| `kanbo columns flow <column>` | Set which columns a card may come from and how many cards the column holds. **Person only.** |
 | `kanbo columns add <name>` | Add a column — before Done unless `--after`/`--before` says where. **Person only.** |
 | `kanbo columns rename <column> <name>` | Give a column a new name; its slug follows the name. To Do keeps its slug. **Person only.** |
 | `kanbo columns move <column>` | Move a column: `--first`, `--last`, `--before <column>` or `--after <column>`. **Person only.** |
@@ -357,6 +358,7 @@ Plus `--db`, `--database-url`, `--workspace` and `--format`.
 - `columns list` — common options only.
 - `columns describe <column> --text <text>` — `--text` (required): what the column means.
 - `columns rules <column>` — `--require <rules>`: comma-separated `checklist_complete`, `pull_request_linked`, `ci_green`, `approved`; `--clear`: ask nothing of a card entering the column. Person only.
+- `columns flow <column>` — `--from <columns>`: comma-separated columns a card may enter this one from, by slug, name or id, or `any` for every column; `--wip <count>`: the most cards it holds (1 or more), or `none`. An option left out keeps what the column has. An agent moving a card against them is refused with one line per rule; a person is warned. A new board's Done accepts cards from `in_review` only (a Review + QA board's from `in_review` and `qa`). Person only.
 - `columns add <name>` — `--after <column>` or `--before <column>`: where it goes (neither: before the first completed column, Done, or before Canceled); `--description <text>`: when a card belongs in it, one line agents read; `--category <category>`: `backlog`, `unstarted`, `started` (default), `completed` or `canceled`. A ready-made name (`QA`, `Blocked`, …) brings its own line and category. A name whose slug another column has is refused.
 - `columns rename <column> <name>` — the slug follows the new name, so a name another column's slug already answers to is refused. **To Do can't be renamed away from its slug `to_do`**: `kanbo ready` takes work from the column with that slug, and agents would find no cards to take. Another spelling (`To-do`, `TO DO`) is fine. Agents read column names from `kanbo prime`, so a rename reaches them there.
 - `columns move <column>` — exactly one of `--first`, `--last`, `--before <column>`, `--after <column>`.

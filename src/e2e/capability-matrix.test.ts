@@ -352,6 +352,7 @@ const CASES: MatrixCase[] = [
       'columns list',
       'columns describe',
       'columns rules',
+      'columns flow',
       'columns add',
       'columns rename',
       'columns move',
@@ -374,6 +375,7 @@ const CASES: MatrixCase[] = [
         ['columns', 'template', 'standard', '--add-missing'],
         ['columns', 'add-standard'],
         ['columns', 'rules', 'done', '--require', 'pull_request_linked'],
+        ['columns', 'flow', 'done', '--from', 'any'],
       ]) {
         expect(await b.cliFails(argv, { agent: true })).toBe(4)
       }
@@ -386,10 +388,13 @@ const CASES: MatrixCase[] = [
       expect(await slugs()).toEqual(['testing', 'backlog', 'to_do', 'in_progress', 'in_review', 'done', 'canceled'])
       await b.cli(['columns', 'describe', 'testing', '--text', 'A person clicks through it'])
       await b.cli(['columns', 'rules', 'testing', '--require', 'pull_request_linked'])
+      await b.cli(['columns', 'flow', 'testing', '--from', 'in_review', '--wip', '2'])
       expect((await b.tool('kanbo_columns'))[0]).toMatchObject({
         name: 'Testing',
         description: 'A person clicks through it',
         entryRules: ['pull_request_linked'],
+        allowedFrom: ['in_review'],
+        wipLimit: 2,
       })
 
       await b.cli(['columns', 'remove', 'testing'])

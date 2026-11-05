@@ -2,7 +2,10 @@ import type { Command } from 'commander'
 import { Option } from 'commander'
 
 import { COLUMN_TEMPLATE_IDS, COLUMN_TEMPLATES } from '../../domain/column-templates'
+import { BoardError } from '../../domain/errors'
 import { ENTRY_RULES } from '../../domain/entry-rules'
+import { readFlowRules } from '../../domain/flow-rules'
+import { matchColumn } from '../../ops/columns'
 import type { IssueStatus } from '../../sqlite/schema'
 import { requireHumanActor, typedWords } from '../actor'
 import {
@@ -27,6 +30,11 @@ import { describeColumns, projectColumn } from '../view'
 
 interface DescribeColumnOptions extends BoardCommandOptions {
   text: string
+}
+
+interface ColumnFlowOptions extends BoardCommandOptions {
+  from?: string
+  wip?: string
 }
 
 interface AddColumnOptions extends BoardCommandOptions {
@@ -114,6 +122,35 @@ export function registerColumnsCommands(program: Command): void {
         const updated = await session.ops.setColumnEntryRules(session.workspace.id, column, rules, actor)
         const view = projectColumn(updated, await session.ops.listColumns(session.workspace.id))
         return { value: view, text: describeColumns([view]) }
+      })
+    })
+
+  withBoardOptions(columns
+    .command('flow')
+    .description('Set which columns a card may come from, and how many cards a column holds')
+    .argument('<column>', 'the column, by slug, name or id')
+    .option('--from <columns>', 'comma-separated columns a card may enter it from, or any')
+    .option('--wip <count>', 'the most cards it holds, or none'))
+    .action(async (column: string, options: ColumnFlowOptions, command: Command) => {
+      // Checked before the board is opened, like `columns rules`.
+      const actor = requireHumanActor('columns flow', typedWords(command))
+      if (options.from === undefined && options.wip === undefined) {
+        throw new CliError(1, 'Pass --from <columns|any>, --wip <count|none>, or both.')
+      }
+      const wipLimit = options.wip === undefined ? undefined : readWipLimit(options.wip)
+
+      await runBoardCommand(options, 'write', async (session) => {
+        const workspaceId = session.workspace.id
+        const board = await session.ops.listColumns(workspaceId)
+        const target = await session.ops.requireColumn(workspaceId, column)
+        const current = readFlowRules(target)
+        await session.ops.setColumnFlowRules(target.id, {
+          allowedFrom: options.from === undefined ? current.allowedFrom : readAllowedFrom(board, workspaceId, options.from),
+          wipLimit: wipLimit === undefined ? current.wipLimit : wipLimit,
+        }, actor)
+        const after = await session.ops.listColumns(workspaceId)
+        const views = after.map(each => projectColumn(each, after))
+        return { value: views.find(view => view.id === target.id), text: describeColumns(views) }
       })
     })
 
@@ -259,4 +296,33 @@ function readRequestedRules(options: ColumnRulesOptions): string[] | null {
     throw new CliError(1, `Pass --require ${ENTRY_RULES.join(',')} (any of them) or --clear.`)
   }
   return options.require.split(',').map(rule => rule.trim()).filter(Boolean)
+}
+
+/** `--from`: `any` for every column, else the columns named, by slug, name or id. */
+function readAllowedFrom(board: IssueStatus[], workspaceId: string, value: string): string[] | null {
+  if (value.trim().toLowerCase() === 'any') {
+    return null
+  }
+  const names = value.split(',').map(name => name.trim()).filter(Boolean)
+  if (names.length === 0) {
+    throw new CliError(1, 'Name the columns a card may come from (--from in_review,qa), or --from any.')
+  }
+  return names.map((name) => {
+    const found = matchColumn(board, workspaceId, name)
+    if (!found) {
+      throw new BoardError('issue_status_not_found', { workspaceId, statusName: name })
+    }
+    return found.id
+  })
+}
+
+/** `--wip`: `none` for no limit, else a whole number of cards, 1 or more. */
+function readWipLimit(value: string): number | null {
+  if (value.trim().toLowerCase() === 'none') {
+    return null
+  }
+  if (!/^\d+$/.test(value.trim()) || Number(value) < 1) {
+    throw new CliError(1, '--wip takes a whole number of cards, 1 or more, or none.')
+  }
+  return Number(value)
 }
