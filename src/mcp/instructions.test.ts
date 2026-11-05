@@ -3,7 +3,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { describe, expect, it } from 'vitest'
 
 import { AGENT_GUIDE_TEXT } from '../cli/setup/instructions'
-import { BOARD_RULES, SUBTASK_RULE, WAIT_FOR_PERSON_RULE } from '../ops/agent-rules'
+import { BOARD_RULES, CLAIM_RULE, OWN_SESSION_RULE, SUBTASK_RULE, WAIT_FOR_PERSON_RULE } from '../ops/agent-rules'
 import { KANBO_MCP_INSTRUCTIONS } from './instructions'
 import { createKanboMcpServer } from './server'
 import type { KanboToolTransport } from './transport'
@@ -42,5 +42,11 @@ describe('the kanbo MCP server instructions', () => {
       expect(AGENT_GUIDE_TEXT).toContain(rule)
       expect(BOARD_RULES).toContain(rule)
     }
+  })
+
+  it('tell an agent to claim the card it takes, and prime says the same rule', () => {
+    expect(KANBO_MCP_INSTRUCTIONS).toContain('claim the card with `kanbo_card_claim` before you start')
+    expect(BOARD_RULES).toContain(CLAIM_RULE)
+    expect(BOARD_RULES.indexOf(CLAIM_RULE)).toBe(BOARD_RULES.indexOf(OWN_SESSION_RULE) - 1)
   })
 })

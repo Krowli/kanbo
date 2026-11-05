@@ -29,7 +29,7 @@ export const KANBO_MCP_INSTRUCTIONS = [
   'kanbo is a kanban board shared by people and agents; these tools read and change its cards.',
   '',
   `- At the start of a session call ${tool('kanbo_prime')} — it returns this board's columns and what each one means.`,
-  `- Take work from ${tool('kanbo_ready')}.`,
+  `- Take work from ${tool('kanbo_ready')}, and claim the card with ${tool('kanbo_card_claim')} before you start: it starts your run and moves the card into work in one step, so no other agent takes it.`,
   `- ${MOVE_CARD_RULE} (${tool('kanbo_card_move')})`,
   `- ${STATUS_LINE_RULE} (${tool('kanbo_status_line')})`,
   `- ${COMMENT_RULE} (${tool('kanbo_card_comment')})`,

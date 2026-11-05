@@ -13,7 +13,7 @@ export const ORCHESTRATOR_GUIDE = [
   '## Start of every session',
   '1. Run `kanbo prime` (tool: `kanbo_prime`) and read the column descriptions. On this board the description is the contract, not the name.',
   '2. Run `kanbo ready` (`kanbo_ready`). If nothing is ready, say so and stop.',
-  '3. Take the first card. Run `kanbo run start <card> --agent orchestrator` (`kanbo_run_start`) and move it to the column this board uses for work in progress — `kanbo prime` lists the columns and what each is for — (`kanbo_card_move`) before doing anything else.',
+  '3. Take the first card with `kanbo claim --agent orchestrator` (`kanbo_card_claim`): it starts your run and moves the card out of To Do into the board\'s first work-in-progress column in one step, so no other agent takes it, and it prints the run id you finish later. If another agent got there first, run `kanbo ready` again.',
   '',
   '## While working',
   '- Write a status line (`kanbo card status-line <card> --text "…"`, `kanbo_status_line`) at every step and before and after anything that takes more than a minute. One sentence, present tense.',

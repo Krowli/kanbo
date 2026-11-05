@@ -276,6 +276,10 @@ export function buildCapabilitiesManifest(): KanboCapabilities {
       + '`board_column_rules_unmet` (`allowed_from`, `wip_limit`); a person goes through and is told. A new board\'s Done '
       + 'accepts cards from In Review only. Only a person sets them — `kanbo columns flow` refuses an agent\'s shell '
       + '(exit 4). The database role does not enforce them.',
+      'A claim (`kanbo claim`, `kanbo_card_claim`, `POST /issues/claim`) takes a ready card from To Do, starts its run and '
+      + 'moves it into the board\'s first `started` column in one write; two claimers never get the same card, and the one '
+      + 'that loses is told `board_nothing_ready` or `board_card_not_ready`. A card has one run going at a time: starting a '
+      + 'second is refused with `board_card_run_active`, on every path.',
       'Only a person changes the board\'s columns: `kanbo columns add`, `rename`, `move`, `remove`, `template` and '
       + '`add-standard` refuse an agent\'s shell (exit 4), and the rename, move, remove and add-missing operations '
       + 'refuse any actor but a person (`board_column_structure_requires_user`); no MCP tool changes columns. '

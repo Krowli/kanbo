@@ -145,7 +145,8 @@ export const COMMAND_SHEET = [
   '- `kanbo card create --description "..." --parent TST-5` — a subtask',
   '- `kanbo card update TST-7 --parent TST-5` — move a card at the wrong level under another (`--parent none`: the top level)',
   '- `kanbo card wait-approval TST-5 --text "Ready for review: ..."` — ask a person, then end your turn',
-  '- `kanbo run start TST-5 --agent claude` — record a run you started yourself; it prints the finish command',
+  '- `kanbo claim` — take the first ready card: starts your run and moves it into work in one step (`kanbo claim TST-5` for that card); it prints the finish command',
+  '- `kanbo run start TST-5 --agent claude` — record a run on a card you did not claim; it prints the finish command',
   '- `kanbo run finish <run id> --state finished` — end it: finished, failed or stopped',
   `- \`${COMMAND.capabilities}\` — everything else, rarely needed`,
 ].join('\n')

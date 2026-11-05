@@ -153,7 +153,7 @@ model: sonnet
 You work exactly one card on this project's kanbo board. The card key is in your task.
 
 1. `kanbo_card_get` the card. If it is waiting for a person, stop and say so.
-2. `kanbo_run_start` with your name, then `kanbo_card_move` it to in_progress.
+2. `kanbo_card_claim` the card: your run starts and it moves to in_progress in one step.
 3. Write a `kanbo_status_line` before and after every step that takes a while.
 4. Put decisions and open questions on the card with `kanbo_card_comment`.
 5. Link any pull request with `kanbo_card_link_pr`.

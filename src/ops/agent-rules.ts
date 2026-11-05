@@ -34,6 +34,8 @@ export const SUBTASK_RULE = `${SUBTASK_WHEN_SENTENCE} ${subtaskSplitSentence('th
 
 export const PULL_REQUEST_RULE = 'Opened a pull request? Link it to the card. Its state and CI checks then reach the card as comments on their own — nothing else tells the board a pull request exists.'
 
+export const CLAIM_RULE = 'Taking a card from To Do yourself? Claim it instead of starting a run and moving it: the claim does both in one step, and no other agent gets the same card. Finish the run when you stop.'
+
 export const OWN_SESSION_RULE = 'Started the work yourself, not launched by an app that tracks the run for you? Record the run when you start and finish it when you stop. kanbo fills in the Claude Code or Codex session you are in; never invent a session id.'
 
 /** Said by the `kanbo init` block and the MCP instructions, which name the comment command or tool beside it. */
@@ -61,6 +63,7 @@ export const BOARD_RULES = [
   EXECUTION_MODE_RULE,
   SUBTASK_RULE,
   PULL_REQUEST_RULE,
+  CLAIM_RULE,
   OWN_SESSION_RULE,
   BOARD_TOOLS_RULE,
 ]

@@ -16,7 +16,7 @@ You coordinate work on this project's kanbo board. You do not approve work; a pe
 ## Start of every session
 1. Run `kanbo prime` (tool: `kanbo_prime`) and read the column descriptions. On this board the description is the contract, not the name.
 2. Run `kanbo ready` (`kanbo_ready`). If nothing is ready, say so and stop.
-3. Take the first card. Run `kanbo run start <card> --agent orchestrator` (`kanbo_run_start`) and move it to the column this board uses for work in progress — `kanbo prime` lists the columns and what each is for — (`kanbo_card_move`) before doing anything else.
+3. Take the first card with `kanbo claim --agent orchestrator` (`kanbo_card_claim`): it starts your run and moves the card out of To Do into the board's first work-in-progress column in one step, so no other agent takes it, and it prints the run id you finish later. If another agent got there first, run `kanbo ready` again.
 
 ## While working
 - Write a status line (`kanbo card status-line <card> --text "…"`, `kanbo_status_line`) at every step and before and after anything that takes more than a minute. One sentence, present tense.
@@ -78,7 +78,7 @@ model: sonnet
 
 You implement exactly one card; its key is in your task.
 1. `kanbo_card_get` it. Stop if it waits for a person.
-2. `kanbo_run_start` (agent: implementer), then `kanbo_card_move` to in_progress.
+2. `kanbo_card_claim` it (agent: implementer): your run starts and the card moves to in_progress in one step.
 3. Do the work. Write a `kanbo_status_line` at every step. Tick the description's checklist with `kanbo_card_update` as items are done.
 4. Comment what you changed and how you checked it (`kanbo_card_comment`). Link the pull request (`kanbo_card_link_pr`).
 5. `kanbo_card_move` to in_review, `kanbo_run_finish` with state finished, and stop.
@@ -184,17 +184,9 @@ $ kanbo ready
 API-001  To Do  Add rate limiting to the public API
 API-002  To Do  Fix typo in README
 
-$ kanbo run start API-001 --agent orchestrator
-Run 07341411-7fab-4104-a7c4-91515d0fec3f started on API-001
+$ kanbo claim API-001 --agent orchestrator
+Claimed API-001: run 07341411-7fab-4104-a7c4-91515d0fec3f started, card moved to In Progress
 When you are done: kanbo run finish 07341411-7fab-4104-a7c4-91515d0fec3f --state finished
-
-$ kanbo card move API-001 in_progress
-API-001  In Progress  worktree
-Add rate limiting to the public API
-
-Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.
-
-status line: launched orchestrator
 
 $ kanbo card status-line API-001 --text 'Splitting: middleware and load test are reviewed separately'
 API-001  In Progress  worktree
@@ -233,19 +225,9 @@ Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.
 status line: Waiting for sub-agents on API-003 and API-004
 
 # ── implementer sub-agent (agent shell), handed API-003 ──
-$ kanbo run start API-003 --agent implementer
-Run 11f4b723-78da-4865-999d-a341f1756872 started on API-003
+$ kanbo claim API-003 --agent implementer
+Claimed API-003: run 11f4b723-78da-4865-999d-a341f1756872 started, card moved to In Progress
 When you are done: kanbo run finish 11f4b723-78da-4865-999d-a341f1756872 --state finished
-
-$ kanbo card move API-003 in_progress
-API-003  In Progress  worktree
-Token-bucket middleware
-
-- [ ] middleware
-- [ ] unit tests
-
-status line: launched implementer
-parent: API-001
 
 $ kanbo card status-line API-003 --text 'Writing the middleware and its unit tests'
 API-003  In Progress  worktree
