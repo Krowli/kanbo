@@ -24,6 +24,8 @@ export function statusFixture(fields: Partial<ServeStatusView> & Pick<ServeStatu
     category: 'unstarted',
     order: 0,
     entryRules: [],
+    allowedFrom: null,
+    wipLimit: null,
     createdAt: 0,
     ...fields,
   }

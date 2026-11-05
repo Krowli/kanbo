@@ -74,6 +74,12 @@ export {
   UNMET_ENTRY_RULE_REASONS,
   type UnmetEntryRule,
 } from './domain/entry-rules'
+export {
+  type ColumnFlowRules,
+  FLOW_RULES,
+  type FlowRule,
+  readFlowRules,
+} from './domain/flow-rules'
 export { BoardError, type BoardErrorCode } from './domain/errors'
 export {
   type ExternalSessionRef,

@@ -2,6 +2,7 @@ import { z } from 'zod'
 
 import type { IssueStatus } from '../sqlite/schema'
 import { BoardError } from './errors'
+import type { FlowRule } from './flow-rules'
 
 /**
  * What a column may ask of a card before an agent puts the card in it (ruling
@@ -28,6 +29,8 @@ export const UNMET_ENTRY_RULE_REASONS = [
   'approval_pending',
   'returned',
   'not_approved',
+  'not_allowed_from',
+  'column_full',
 ] as const
 
 type UnmetEntryRuleReason = typeof UNMET_ENTRY_RULE_REASONS[number]
@@ -35,10 +38,11 @@ type UnmetEntryRuleReason = typeof UNMET_ENTRY_RULE_REASONS[number]
 /**
  * One rule a card does not meet yet: `detail` says what is missing in English
  * words the command line and MCP print; `reason` (with `checked` and `total`
- * for `unchecked`) says the same for a surface that translates it.
+ * for `unchecked`) says the same for a surface that translates it. `rule` is an
+ * entry rule, or a flow rule (`allowed_from`, `wip_limit`) the same door checks.
  */
 export interface UnmetEntryRule {
-  rule: EntryRule
+  rule: EntryRule | FlowRule
   reason: UnmetEntryRuleReason
   detail: string
   checked?: number
