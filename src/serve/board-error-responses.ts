@@ -21,7 +21,7 @@ export interface BoardErrorResponse {
  * answering for a person — approving a card, sending it back or closing a
  * sprint — as anyone but one is 403, dropping a pull request link somebody else made is the same 403
  * for the same reason, and acting on a run that has already ended is 409,
- * because the answer would have been yes a moment earlier. An agent putting a
+ * because the answer would have been yes a moment earlier. Starting a run on a card that has one going, and claiming a card nobody can take right now, are 409 for the same reason. An agent putting a
  * card in a column whose entry rules it does not meet yet is 409 for the same
  * reason turned around: the answer will be yes once the card meets them, and
  * `details.unmet` says what is missing. Deleting a column that still holds
