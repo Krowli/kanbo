@@ -23,8 +23,7 @@ import { createSqliteBoardStore } from './sqlite/board-store.sqlite'
 import { openBoardDatabase } from './sqlite/open-database'
 
 /**
- * A board made by kanbo-cli 0.2.1 opens with this build: no migration error,
- * no "outdated" refusal, every card still there, and new writes go through.
+ * A board made by kanbo-cli 0.2.1 opens with this build once `kanbo migrate` has run: a write before it is refused with exit 3 and the command that fixes it, every card is still there after it, and new writes go through.
  *
  * The boards are built with the migrations exactly as the v0.2.1 tag shipped
  * them (`src/testing/fixtures/v0.2.1/`, copied with `git show
@@ -178,16 +177,18 @@ describe('a board made by kanbo 0.2.1', () => {
       identifier: 'UPG',
     })
 
-    await kanbo(['columns', 'add-standard'])
-    await kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema', '--column', 'backlog'])
+    // 0.5.0 added columns to issue_statuses: a write to the 0.2.1 board asks for kanbo migrate first.
+    await expect(kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema', '--column', 'backlog']))
+      .rejects
+      .toThrowError(expect.objectContaining({ exitCode: 3 }))
     await kanbo(['migrate'])
+    await kanbo(['columns', 'add-standard'])
     await kanbo(['card', 'create', '--title', 'Written after kanbo migrate', '--column', 'to_do'])
 
     expect(await listCards()).toEqual([
-      { id: 'UPG-001', title: 'Written on the 0.2.1 schema', column: 'Backlog' },
-      { id: 'UPG-002', title: 'Written after kanbo migrate', column: 'To Do' },
+      { id: 'UPG-001', title: 'Written after kanbo migrate', column: 'To Do' },
     ])
-    expect(JSON.parse(await kanbo(['ready', '--json', 'id']))).toEqual([{ id: 'UPG-002' }])
+    expect(JSON.parse(await kanbo(['ready', '--json', 'id']))).toEqual([{ id: 'UPG-001' }])
   })
 
   it('as a shared Postgres board', async () => {
@@ -212,14 +213,15 @@ describe('a board made by kanbo 0.2.1', () => {
         identifier: 'UPG',
       })
 
-      await kanbo(['columns', 'add-standard'])
-      await kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema', '--column', 'backlog'])
+      await expect(kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema', '--column', 'backlog']))
+        .rejects
+        .toThrowError(expect.objectContaining({ exitCode: 3 }))
       await kanbo(['migrate'])
+      await kanbo(['columns', 'add-standard'])
       await kanbo(['card', 'create', '--title', 'Written after kanbo migrate', '--column', 'to_do'])
 
       expect(await listCards()).toEqual([
-        { id: 'UPG-001', title: 'Written on the 0.2.1 schema', column: 'Backlog' },
-        { id: 'UPG-002', title: 'Written after kanbo migrate', column: 'To Do' },
+        { id: 'UPG-001', title: 'Written after kanbo migrate', column: 'To Do' },
       ])
     }
     finally {
@@ -240,6 +242,10 @@ describe('a board made by kanbo 0.2.1', () => {
       setup.close()
     }
     writeBinding(projectDir, { schemaVersion: 1, workspaceId: 'upgrade', boardId: null, dbPath: join('.kanbo', 'board.db'), identifier: 'UPG' })
+
+    // 0.5.0 added columns to issue_statuses: the board reads once kanbo migrate
+    // has brought it forward, and migrating keeps every row 0.2.1 wrote.
+    await kanbo(['migrate'])
 
     const board = await openBoardDatabase(path)
     try {
@@ -265,6 +271,10 @@ describe('a board made by kanbo 0.2.1', () => {
         close: async () => {},
       }))
       writeBinding(projectDir, { schemaVersion: 1, workspaceId: 'upgrade', boardId: null, dbPath: null, databaseUrl: DATABASE_URL, identifier: 'UPG' })
+
+      // 0.5.0 added columns to issue_statuses: the board reads once kanbo migrate
+      // has brought it forward, and migrating keeps every row 0.2.1 wrote.
+      await kanbo(['migrate'])
 
       await expectBoardReadsAsWritten(createPostgresBoardStore({ database }), kanbo)
     }

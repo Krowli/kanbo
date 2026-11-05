@@ -61,6 +61,10 @@ export const issueStatuses = pgTable('issue_statuses', {
   order: integer('order').notNull().default(0),
   /** A JSON array of `ENTRY_RULES`, or `null` for none — see the SQLite schema. */
   entryRules: text('entry_rules'),
+  /** A JSON array of the status ids a card may enter from, or `null` for any — see the SQLite schema. */
+  allowedFrom: text('allowed_from'),
+  /** The most cards the column holds, or `null` — see the SQLite schema. */
+  wipLimit: integer('wip_limit'),
   ...createdAt(),
 }, table => [
   index('issue_statuses_workspace_id_idx').on(table.workspaceId),
@@ -211,6 +215,7 @@ export const issueFieldChanges = pgTable('issue_field_changes', {
   seq: bigserial('seq', { mode: 'number' }).notNull(),
 }, table => [
   index('issue_field_changes_issue_id_idx').on(table.issueId),
+  index('issue_field_changes_field_created_at_idx').on(table.field, table.createdAt),
 ])
 
 /** A pull request someone said belongs to a card — see the SQLite twin for what the row is and is not. */

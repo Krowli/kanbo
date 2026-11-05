@@ -75,12 +75,12 @@ Nine tables, the same logical schema on both engines (`src/sqlite/schema.ts`, `s
 | Table | Holds |
 | --- | --- |
 | `issues` | The cards: key number, title, description, priority, labels, parent, column, board order, `status_line`, `waiting_for`, `execution_mode`, milestone, delegation. |
-| `issue_statuses` | The columns of a workspace, in order, with a category, a `description` and `entry_rules`. |
+| `issue_statuses` | The columns of a workspace, in order, with a category, a `description`, `entry_rules`, and the flow rules `allowed_from` (the columns a card may enter from) and `wip_limit` (the most cards it holds). |
 | `issue_milestones` | Milestones; one with a `start_date` and a `due_date` is a sprint. |
 | `issue_comments` | Comments, including the board's own `system.*` comments; `dedupe_key` makes a write idempotent. |
 | `issue_runs` | One row per launch of a card: agent, host, execution mode, branch, worktree, `chat_session_id`, `external_session_ref`, state, times. |
 | `issue_relations` | Edges between cards (`blocks`, `duplicates`, `relates_to`). |
-| `issue_field_changes` | The append-only history of field edits. |
+| `issue_field_changes` | The append-only history of field edits; a card's first `statusId` row is the column it was created in. Indexed by `(field, created_at)` for the column-entry feed. |
 | `issue_pull_requests` | Pull requests a card names: owner, repo, number, url, who linked it. |
 | `kanban_meta` | Counters: `board` (bumped once per write that changed something — poll it to see changes) and `schema_epoch`. |
 
@@ -96,3 +96,5 @@ Before every write to a board file, and before any access to a Postgres board, k
 - a Postgres board refuses everything (exit `3`, `This Postgres database has no kanbo board yet, or one an older kanbo made. Run kanbo migrate.`).
 
 After `kanbo migrate` on Postgres, run `kanbo roles apply` again: a migration may add a sequence the roles need a grant on.
+
+kanbo 0.5.0 adds `issue_statuses.allowed_from`, `issue_statuses.wip_limit` and an index on `issue_field_changes(field, created_at)`. Run `kanbo migrate` once after upgrading (on a board file, `kanbo doctor --fix` does it too). Until then a write is refused as above.

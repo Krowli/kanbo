@@ -510,6 +510,11 @@ async function upgradeMain() {
   kanbo(['connect', '--help'])
   note(`${newVersion}, and kanbo connect exists`)
 
+  step('u4b. the board is a migration behind: a write asks for kanbo migrate, and kanbo migrate brings it forward')
+  const refused = kanbo(['card', 'create', '--title', 'Written before kanbo migrate'], { expectCode: 3 })
+  check(refused.all.includes('Run kanbo migrate'), 'a write to the old board does not ask for kanbo migrate', refused.all)
+  kanbo(['migrate'])
+
   step('u5. every card, comment, run and change is where it was')
   const cardsAfter = JSON.parse(kanbo(['card', 'list', '--json', cardFields]).stdout)
   check(JSON.stringify(cardsAfter) === JSON.stringify(cardsBefore), 'kanbo card list differs after the upgrade', `before ${JSON.stringify(cardsBefore)}\nafter  ${JSON.stringify(cardsAfter)}`)

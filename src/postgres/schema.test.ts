@@ -121,6 +121,24 @@ describe('the board schema in Postgres', () => {
     expect((failure as BoardError).details).toEqual({ missingColumns: ['issue_statuses.entry_rules'] })
   })
 
+  it('turns away a board that predates the flow rules a column carries', async () => {
+    board = await createTestPostgresDatabase()
+    await board.client.exec('alter table "issue_statuses" drop column "allowed_from"; alter table "issue_statuses" drop column "wip_limit"')
+
+    const failure = await assertBoardSchema(board.database).then(() => undefined, (error: Error) => error)
+
+    expect(failure).toBeInstanceOf(BoardError)
+    expect((failure as BoardError).details).toEqual({ missingColumns: ['issue_statuses.allowed_from', 'issue_statuses.wip_limit'] })
+  })
+
+  it('carries the (field, created_at) index the column-entry feed reads by', async () => {
+    board = await createTestPostgresDatabase()
+
+    const indexes = await board.client.query<{ indexdef: string }>('select indexdef from pg_indexes where indexname = \'issue_field_changes_field_created_at_idx\'')
+
+    expect(indexes.rows.map(row => row.indexdef)).toEqual([expect.stringMatching(/ON public\.issue_field_changes USING btree \(field, created_at\)$/)])
+  })
+
   it('turns away a board that predates a table added within the epoch, as an older board rather than no board', async () => {
     board = await createTestPostgresDatabase()
     await board.client.exec('drop table "issue_pull_requests"')

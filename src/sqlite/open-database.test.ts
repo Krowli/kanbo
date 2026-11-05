@@ -152,6 +152,42 @@ describe('assertBoardSchema', () => {
       board.close()
     }
   })
+
+  it('turns away a file whose columns predate their flow rules', async () => {
+    const board = await openBoardDatabase(join(directory, 'board.db'))
+    try {
+      migrateBoardFile(board.database)
+      // A file migrated before 0005: the stamp still says epoch 1, and the
+      // flow rules a column now carries are not there.
+      board.connection.exec('alter table issue_statuses drop column allowed_from')
+      board.connection.exec('alter table issue_statuses drop column wip_limit')
+
+      let failure: unknown
+      try {
+        assertBoardSchema(board.database)
+      }
+      catch (error) {
+        failure = error
+      }
+      expect(failure).toBeInstanceOf(BoardError)
+      expect((failure as BoardError).details).toEqual({ missingColumns: ['issue_statuses.allowed_from', 'issue_statuses.wip_limit'] })
+    }
+    finally {
+      board.close()
+    }
+  })
+
+  it('carries the (field, created_at) index the column-entry feed reads by', async () => {
+    const board = await openBoardDatabase(join(directory, 'board.db'))
+    try {
+      migrateBoardFile(board.database)
+      expect(board.connection.prepare('select sql from sqlite_master where type = \'index\' and name = \'issue_field_changes_field_created_at_idx\'').get())
+        .toEqual({ sql: expect.stringContaining('ON `issue_field_changes` (`field`,`created_at`)') })
+    }
+    finally {
+      board.close()
+    }
+  })
 })
 
 describe('readBoardFileOwner', () => {

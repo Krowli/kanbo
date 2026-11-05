@@ -50,6 +50,14 @@ export const issueStatuses = sqliteTable('issue_statuses', {
    * through `readEntryRules`, never by hand.
    */
   entryRules: text('entry_rules'),
+  /**
+   * The columns a card may enter this one from — a JSON array of status ids;
+   * `null` for any column, `[]` for none (only a person puts a card here). Read
+   * it through `readFlowRules`, never by hand.
+   */
+  allowedFrom: text('allowed_from'),
+  /** The most cards this column holds, 1 or more; `null` for no limit. */
+  wipLimit: int('wip_limit'),
   ...createdAt(),
 }, table => ({
   byWorkspace: index('issue_statuses_workspace_id_idx').on(table.workspaceId),
@@ -194,6 +202,8 @@ export const issueFieldChanges = sqliteTable('issue_field_changes', {
   ...createdAt(),
 }, table => ({
   byIssue: index('issue_field_changes_issue_id_idx').on(table.issueId),
+  /** The column-entry feed reads one field across a board by time. */
+  byFieldCreatedAt: index('issue_field_changes_field_created_at_idx').on(table.field, table.createdAt),
 }))
 
 /**

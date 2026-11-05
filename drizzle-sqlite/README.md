@@ -53,6 +53,14 @@ Generated with `npm run generate:sqlite` from
   `codex:<id>` (a Codex session id — the one in the rollout's `session_meta`); `null` while it never has — a plain
   `ADD COLUMN`. The epoch stays 1; a file still at 0003 reads as
   `board_schema_outdated` (`missingColumns`) until `kanbo migrate` has run.
+- **0005_flow_rules_and_column_entries.sql**: `issue_statuses.allowed_from`
+  (text, a JSON array of the status ids a card may enter the column from,
+  nullable — `null` for any column, `[]` for none) and `issue_statuses.wip_limit`
+  (integer, the most cards the column holds, nullable): the column's flow rules
+  (board-workflow spec, Part 2). And `issue_field_changes_field_created_at_idx`
+  on `(field, created_at)`, which the column-entry feed reads by. Two plain
+  `ADD COLUMN`s and a `CREATE INDEX`. The epoch stays 1; a file still at 0004
+  reads as `board_schema_outdated` (`missingColumns`) until `kanbo migrate` has run.
 - **meta/**: the drizzle journal and schema snapshots. JSON only, or
   `drizzle-kit generate` fails to parse the directory.
 

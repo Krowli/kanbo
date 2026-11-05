@@ -86,14 +86,14 @@ const SOFT_REFERENCE_COLUMNS: Record<string, string[]> = {
  *
  * Everything else a SQLite file stores in an `integer` is a unix second or a
  * value that will outgrow 32 bits, and Postgres's `integer` is 32 bits — so the
- * board's Postgres schema says `bigint` for all of them. These five are the
+ * board's Postgres schema says `bigint` for all of them. These six are the
  * genuine exceptions: a card's number, a pull request's number, two board
- * positions and the change counter. The list is written down so that narrowing any *other* column to
+ * positions, the change counter and a column's WIP limit. The list is written down so that narrowing any *other* column to
  * `integer` — the drift `schema.ts`'s own docstring warns about — is a failure
  * rather than a thing nobody noticed.
  */
 const NARROW_COLUMNS: Record<string, string[]> = {
-  issue_statuses: ['order'],
+  issue_statuses: ['order', 'wip_limit'],
   issues: ['number', 'order'],
   issue_pull_requests: ['number'],
   kanban_meta: ['revision'],

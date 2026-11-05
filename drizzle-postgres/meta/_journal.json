@@ -43,6 +43,13 @@
       "when": 1790266707460,
       "tag": "0005_run_external_session_ref",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793915081974,
+      "tag": "0006_flow_rules_and_column_entries",
+      "breakpoints": true
     }
   ]
 }

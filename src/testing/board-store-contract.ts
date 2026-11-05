@@ -102,6 +102,17 @@ export function runBoardStoreContract(name: string, makeStore: () => Promise<Boa
         expect((await store.statuses.findById(ruled.id))?.entryRules).toBeNull()
       })
 
+      it('keeps a column\'s flow rules as written, and none on a column without them', async () => {
+        const plain = await store.statuses.create({ id: 'status-plain', workspaceId, name: 'Plain' })
+        expect(plain).toMatchObject({ allowedFrom: null, wipLimit: null })
+
+        const done = await store.statuses.create({ id: 'status-done', workspaceId, name: 'Done', allowedFrom: '["status-plain"]', wipLimit: 3 })
+        expect(done).toMatchObject({ allowedFrom: '["status-plain"]', wipLimit: 3 })
+
+        await store.statuses.update(done.id, { allowedFrom: '[]', wipLimit: null })
+        expect(await store.statuses.findById(done.id)).toMatchObject({ allowedFrom: '[]', wipLimit: null })
+      })
+
       it('lists a workspace\'s statuses in board order, not insertion order', async () => {
         const second = await store.statuses.create({ id: 'status-b', workspaceId, name: 'Second', category: 'unstarted', order: 1 })
         const first = await store.statuses.create({ id: 'status-a', workspaceId, name: 'First', category: 'backlog', order: 0 })

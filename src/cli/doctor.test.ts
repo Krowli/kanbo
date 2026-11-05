@@ -277,9 +277,11 @@ describe('kanbo doctor', () => {
 
   it('migrates a board file a migration behind with --fix, after saying so in the plan', async () => {
     installKanbo('process.exit(1)')
-    // A file from before the last migration: its column gone, and the migration not recorded.
+    // A file from before the last migration (0005): its columns and index gone, and the migration not recorded.
     const database = new SqliteDriver(join(projectDir, '.kanbo', 'board.db'))
-    database.prepare('alter table issue_runs drop column external_session_ref').run()
+    database.prepare('drop index issue_field_changes_field_created_at_idx').run()
+    database.prepare('alter table issue_statuses drop column wip_limit').run()
+    database.prepare('alter table issue_statuses drop column allowed_from').run()
     database.prepare('delete from __drizzle_migrations where created_at = (select max(created_at) from __drizzle_migrations)').run()
     database.close()
 
