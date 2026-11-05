@@ -24,6 +24,7 @@ const EXPECTED: Record<BoardErrorCode, [Record<string, unknown>, string]> = {
   board_column_structure_requires_user: [{ actorKind: 'agent' }, 'Only a person can change the board\'s columns.\n  Next: run it in your own terminal, or on the board page (kanbo serve)'],
   board_entry_rule_invalid: [{ rules: ['green'], allowed: ['ci_green', 'approved'] }, 'Unknown column rule: green. Use any of ci_green, approved.'],
   board_execution_mode_locked: [{ issueId: 'MYA-1', executionMode: 'worktree' }, 'MYA-1 has been started, so where it is worked (worktree) can\'t change now.'],
+  board_flow_rule_invalid: [{ statusId: 's1', wipLimit: 0 }, 'A column holds at least 1 card; 0 is not a limit. Use none for no limit.'],
   board_pull_request_invalid: [{ value: 'nope' }, '"nope" is not a GitHub pull request. Give its link or owner/repo#number.'],
   board_pull_request_not_found: [{ issueId: 'MYA-1', linkId: 'l1' }, 'MYA-1 has no pull request link "l1".\n  Next: kanbo card pr list MYA-1'],
   board_pull_request_not_yours: [{ issueId: 'MYA-1', linkId: 'l1' }, 'Someone else linked that pull request to MYA-1; only they or a person can unlink it.'],
@@ -84,5 +85,10 @@ describe('board failures in plain words', () => {
     expect(describeFailure(new BoardError('board_column_ready_protected', { statusName: 'To Do', newName: 'Ready' })).message)
       .toBe('To Do can\'t be renamed to "Ready": kanbo ready takes work from To Do, and agents would find no cards to take. '
         + 'Another spelling of To Do (To-do, TO DO) is fine.  [board_column_ready_protected]')
+  })
+
+  it('names the column a flow rule cannot point at', () => {
+    expect(describeFailure(new BoardError('board_flow_rule_invalid', { statusId: 's1', allowedFrom: ['s9'] })).message)
+      .toBe('A column accepts cards only from other columns of its own board, and s9 is not one.\n  Next: kanbo columns list  [board_flow_rule_invalid]')
   })
 })

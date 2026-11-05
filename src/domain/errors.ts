@@ -15,6 +15,7 @@ export type BoardErrorCode
     | 'board_column_rules_unmet'
     | 'board_entry_rule_invalid'
     | 'board_execution_mode_locked'
+    | 'board_flow_rule_invalid'
     | 'board_pull_request_invalid'
     | 'board_pull_request_not_found'
     | 'board_pull_request_not_yours'

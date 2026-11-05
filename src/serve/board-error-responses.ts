@@ -44,6 +44,7 @@ export const BOARD_ERROR_RESPONSES: Record<BoardErrorCode, BoardErrorResponse> =
   board_column_structure_requires_user: { status: 403, message: 'Only a person can change the columns of a board', code: 'issue_column_structure_requires_user' },
   board_entry_rule_invalid: { status: 400, message: 'Unknown column entry rule' },
   board_execution_mode_locked: { status: 400, message: 'Execution mode cannot change once the card has been launched' },
+  board_flow_rule_invalid: { status: 400, message: 'A column accepts cards from other columns of its own board, and holds at least one card' },
   board_pull_request_invalid: { status: 400, message: 'Not a GitHub pull request: give its URL or owner/repo#number' },
   board_pull_request_not_found: { status: 404, message: 'The card names no such pull request' },
   board_pull_request_not_yours: { status: 403, message: 'You did not link that pull request', code: 'issue_pull_request_not_yours' },

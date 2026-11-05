@@ -65,6 +65,9 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
   board_execution_mode_locked: details => ({
     text: `${named(details.issueId)} has been started, so where it is worked (${named(details.executionMode)}) can't change now.`,
   }),
+  board_flow_rule_invalid: details => details.wipLimit !== undefined
+    ? { text: `A column holds at least 1 card; ${named(details.wipLimit)} is not a limit. Use none for no limit.` }
+    : { text: `A column accepts cards only from other columns of its own board, and ${list(details.allowedFrom)} is not one.`, next: 'kanbo columns list' },
   board_pull_request_invalid: details => ({
     text: `"${named(details.value)}" is not a GitHub pull request. Give its link or owner/repo#number.`,
   }),

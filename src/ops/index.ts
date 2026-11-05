@@ -1,5 +1,6 @@
 import type { BoardStore } from '../board-store'
 import type { ColumnSpec } from '../domain/column-templates'
+import type { ColumnFlowRules } from '../domain/flow-rules'
 import type { Issue } from '../sqlite/schema'
 import type { IssueActivityResolver } from './activity'
 import { listActivity, listFieldChanges } from './activity'
@@ -30,6 +31,7 @@ import {
   addColumn,
   addStandardColumns,
   applyColumnTemplate,
+  applyStandardFlow,
   createColumn,
   deleteColumn,
   describeColumn,
@@ -42,6 +44,7 @@ import {
   reorderColumns,
   requireColumn,
   setColumnEntryRules,
+  setColumnFlowRules,
   updateColumn,
 } from './columns'
 import { addContextRef, removeContextRef } from './context-refs'
@@ -173,6 +176,10 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
       await describeColumn(store, workspaceId, nameOrId, description, scope),
     setColumnEntryRules: async (workspaceId: string, nameOrId: string, entryRules: readonly string[] | null, actor: BoardActor, scope?: Scope) =>
       await setColumnEntryRules(store, workspaceId, nameOrId, entryRules, actor, scope),
+    setColumnFlowRules: async (columnId: string, rules: ColumnFlowRules, actor: BoardActor, scope?: Scope) =>
+      await setColumnFlowRules(store, columnId, rules, actor, scope),
+    applyStandardFlow: async (workspaceId: string, actor: BoardActor, scope?: Scope) =>
+      await applyStandardFlow(store, workspaceId, actor, scope),
     enforceColumnEntryForCards: async (issueIds: string[], statusId: string, actor: BoardActor) =>
       await enforceColumnEntryForCards(store, issueIds, statusId, actor),
     deleteColumn: async (statusId: string, scope?: Scope, actor?: BoardActor) => await deleteColumn(store, statusId, scope, actor),

@@ -6,6 +6,8 @@ import { READY_COLUMN_SLUG } from '../domain/column-templates'
 import type { UnmetEntryRule } from '../domain/entry-rules'
 import { serializeEntryRules } from '../domain/entry-rules'
 import { BoardError } from '../domain/errors'
+import type { ColumnFlowRules } from '../domain/flow-rules'
+import { readFlowRules, serializeAllowedFrom, STANDARD_FLOW_TARGET, standardFlowOf } from '../domain/flow-rules'
 import { DEFAULT_STATUSES, normalizeStatusName } from '../domain/status-name'
 import { currentUnixSeconds } from '../domain/time'
 import type { Issue, IssueStatus, issueStatuses } from '../sqlite/schema'
@@ -136,6 +138,8 @@ export async function applyColumnTemplate<TStore extends BoardStore>(
     for (const [order, column] of columns.entries()) {
       await insertColumn(tx, { workspaceId, ...column }, order)
     }
+    // A new board starts with the standard flow: nothing reaches Done but through review.
+    await writeStandardFlow(tx, await listColumns(tx, workspaceId))
     return { statuses: await listColumns(tx, workspaceId), added: columns.map(column => column.name) }
   }, scope)
 }
@@ -277,6 +281,96 @@ export async function setColumnEntryRules<TStore extends BoardStore>(
 }
 
 /**
+ * Set where a card may enter the column from and how many cards it holds:
+ * `allowedFrom` the ids of other columns of its board (`null` for any, `[]` for
+ * none), kept once each in board order; `wipLimit` 1 or more, or `null`. A
+ * person's to set, like the entry rules: an agent that could open a column
+ * could walk any card into it.
+ */
+export async function setColumnFlowRules<TStore extends BoardStore>(
+  store: TStore,
+  columnId: string,
+  rules: ColumnFlowRules,
+  actor: BoardActor,
+  scope?: BoardWriteScope<TStore>,
+): Promise<IssueStatus> {
+  // Checked before the write starts: an actor who is not a person, or a limit
+  // that is no limit, changes nothing.
+  assertPersonSetsEntryRules(actor, { statusId: columnId })
+  if (rules.wipLimit !== null && !(Number.isInteger(rules.wipLimit) && rules.wipLimit >= 1)) {
+    throw new BoardError('board_flow_rule_invalid', { statusId: columnId, wipLimit: rules.wipLimit })
+  }
+  return await runBoardWrite(store, async ({ tx }) => {
+    const column = await tx.statuses.findById(columnId)
+    if (!column) {
+      throw new BoardError('issue_status_not_found', { statusId: columnId })
+    }
+    const allowedFrom = rules.allowedFrom === null
+      ? null
+      : allowedFromInBoardOrder(await listColumns(tx, column.workspaceId), column, rules.allowedFrom)
+    await tx.statuses.update(columnId, { allowedFrom: serializeAllowedFrom(allowedFrom), wipLimit: rules.wipLimit })
+    return (await tx.statuses.findById(columnId))!
+  }, scope)
+}
+
+/** The ids asked for, once each and in board order — or the refusal naming those that are not another column of this board. */
+function allowedFromInBoardOrder(columns: IssueStatus[], column: IssueStatus, requested: readonly string[]): string[] {
+  const others = columns.filter(other => other.id !== column.id)
+  const invalid = requested.filter(id => !others.some(other => other.id === id))
+  if (invalid.length > 0) {
+    throw new BoardError('board_flow_rule_invalid', { statusId: column.id, allowedFrom: invalid })
+  }
+  return others.filter(other => requested.includes(other.id)).map(other => other.id)
+}
+
+/**
+ * Put the standard flow on a board: Done accepts cards from In Review only —
+ * and from QA, when the board has it — so nothing reaches Done but through
+ * review. Done's WIP limit and every other column stay as they are. A board
+ * without Done, or with neither In Review nor QA, has nothing to apply it to.
+ */
+export async function applyStandardFlow<TStore extends BoardStore>(
+  store: TStore,
+  workspaceId: string,
+  actor: BoardActor,
+  scope?: BoardWriteScope<TStore>,
+): Promise<IssueStatus[]> {
+  assertPersonSetsEntryRules(actor, { workspaceId })
+  return await runBoardWrite(store, async ({ tx }) => {
+    const columns = await listColumns(tx, workspaceId)
+    if (!await writeStandardFlow(tx, columns)) {
+      const hasDone = columns.some(column => normalizeStatusName(column.name) === STANDARD_FLOW_TARGET)
+      throw new BoardError('issue_status_not_found', { workspaceId, statusName: hasDone ? 'In Review' : 'Done' })
+    }
+    return await listColumns(tx, workspaceId)
+  }, scope)
+}
+
+/** Done takes cards from the board's In Review and QA; `false`, with nothing written, when the board has no such columns. */
+async function writeStandardFlow(store: BoardStore, columns: IssueStatus[]): Promise<boolean> {
+  const flow = standardFlowOf(columns)
+  if (!flow) {
+    return false
+  }
+  await store.statuses.update(flow.target.id, { allowedFrom: serializeAllowedFrom(flow.sources.map(column => column.id)) })
+  return true
+}
+
+/**
+ * Take a deleted column out of every list of where cards may come from. A list
+ * it empties stays empty: a column that took cards only from it does not open
+ * to every column.
+ */
+async function dropFromAllowedFrom(store: BoardStore, workspaceId: string, statusId: string): Promise<void> {
+  for (const other of await listColumns(store, workspaceId)) {
+    const { allowedFrom } = readFlowRules(other)
+    if (allowedFrom?.includes(statusId)) {
+      await store.statuses.update(other.id, { allowedFrom: serializeAllowedFrom(allowedFrom.filter(id => id !== statusId)) })
+    }
+  }
+}
+
+/**
  * Take an empty column off the board, and number the columns left 0..n-1 in
  * the same write.
  *
@@ -312,6 +406,7 @@ export async function deleteColumn<TStore extends BoardStore>(
       })
     }
     await tx.statuses.delete(statusId)
+    await dropFromAllowedFrom(tx, column.workspaceId, statusId)
     await renumberColumns(tx, column.workspaceId)
   }, scope)
 }
