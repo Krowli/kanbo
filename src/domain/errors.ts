@@ -6,6 +6,7 @@
  */
 export type BoardErrorCode
   = | 'board_approval_requires_user'
+    | 'board_card_not_ready'
     | 'board_card_run_active'
     | 'board_column_name_taken'
     | 'board_column_not_empty'
@@ -17,6 +18,7 @@ export type BoardErrorCode
     | 'board_entry_rule_invalid'
     | 'board_execution_mode_locked'
     | 'board_flow_rule_invalid'
+    | 'board_nothing_ready'
     | 'board_pull_request_invalid'
     | 'board_pull_request_not_found'
     | 'board_pull_request_not_yours'

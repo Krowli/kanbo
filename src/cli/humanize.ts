@@ -28,6 +28,14 @@ const AS_A_PERSON = 'run it in your own terminal, or on the board page (kanbo se
 
 export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => HumanizedFailure> = {
   board_approval_requires_user: () => ({ text: 'Only a person can approve a card.', next: AS_A_PERSON }),
+  board_card_not_ready: details => ({
+    text: details.reason === 'run_active'
+      ? `${named(details.issueId)} is taken: it has a run going.`
+      : details.reason === 'waiting_for_person'
+        ? `${named(details.issueId)} is waiting for a person.`
+        : `${named(details.issueId)} is not in To Do, so it is not there to take.`,
+    next: 'kanbo ready',
+  }),
   board_card_run_active: details => ({
     text: `${named(details.issueId)} already has a run going: ${named(details.agentName)}'s, run ${named(details.runId)}.`,
     next: 'kanbo ready',
@@ -72,6 +80,10 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
   board_flow_rule_invalid: details => details.wipLimit !== undefined
     ? { text: `A column holds at least 1 card; ${named(details.wipLimit)} is not a limit. Use none for no limit.` }
     : { text: `A column accepts cards only from other columns of its own board, and ${list(details.allowedFrom)} is not one.`, next: 'kanbo columns list' },
+  board_nothing_ready: () => ({
+    text: 'No card in To Do is ready to take: each one is taken or waits for a person, or there is none.',
+    next: 'kanbo ready',
+  }),
   board_pull_request_invalid: details => ({
     text: `"${named(details.value)}" is not a GitHub pull request. Give its link or owner/repo#number.`,
   }),
@@ -131,7 +143,9 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
   issue_relation_self_reference: () => ({ text: 'A card can\'t be linked to itself.' }),
   issue_status_name_empty: () => ({ text: 'Give the column a name.' }),
   issue_status_not_found: details => ({
-    text: `No column "${named(details.statusName ?? details.statusId)}" on this board.`,
+    text: details.category !== undefined
+      ? `This board has no ${named(details.category)} column for a claimed card to go to.`
+      : `No column "${named(details.statusName ?? details.statusId)}" on this board.`,
     next: 'kanbo columns list',
   }),
   issue_status_reference_conflict: () => ({ text: 'Name the column once: by its id or by its name, not both.' }),

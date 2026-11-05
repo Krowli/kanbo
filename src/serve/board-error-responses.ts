@@ -35,6 +35,7 @@ export interface BoardErrorResponse {
  */
 export const BOARD_ERROR_RESPONSES: Record<BoardErrorCode, BoardErrorResponse> = {
   board_approval_requires_user: { status: 403, message: 'Only a person can approve a card', code: 'issue_approval_requires_user' },
+  board_card_not_ready: { status: 409, message: 'That card is not there to take: it is not in To Do, waits for a person, or has a run going' },
   board_card_run_active: { status: 409, message: 'The card already has a run going' },
   board_column_name_taken: { status: 400, message: 'Another column already has that name' },
   board_column_not_empty: { status: 409, message: 'The column still holds cards: say which column they move to' },
@@ -46,6 +47,7 @@ export const BOARD_ERROR_RESPONSES: Record<BoardErrorCode, BoardErrorResponse> =
   board_entry_rule_invalid: { status: 400, message: 'Unknown column entry rule' },
   board_execution_mode_locked: { status: 400, message: 'Execution mode cannot change once the card has been launched' },
   board_flow_rule_invalid: { status: 400, message: 'A column accepts cards from other columns of its own board, and holds at least one card' },
+  board_nothing_ready: { status: 409, message: 'No card in To Do is ready to take' },
   board_pull_request_invalid: { status: 400, message: 'Not a GitHub pull request: give its URL or owner/repo#number' },
   board_pull_request_not_found: { status: 404, message: 'The card names no such pull request' },
   board_pull_request_not_yours: { status: 403, message: 'You did not link that pull request', code: 'issue_pull_request_not_yours' },

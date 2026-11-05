@@ -58,7 +58,7 @@ Both are raised as SQLSTATE `42501` (`insufficient_privilege`). An agent may sti
 
 The session has to **be** the role. A login merely granted membership (`create role bot login; grant kanban_agent to bot;`) keeps `current_user = 'bot'`, and the triggers never fire. Hand out `kanban_agent`'s own connection string, or have the session run `set role kanban_agent`.
 
-The roles do not enforce closing a sprint or column entry rules; kanbo's operations do.
+The roles do not enforce closing a sprint, column entry rules or flow rules (`allowed_from`, `wip_limit`); kanbo's operations do. A claim needs no grant of its own: it locks the card's row — and the target column's, when it has a WIP limit — with `select … for update`, which both roles may do because they hold `update` on `issues` and `issue_statuses`.
 
 ### Supabase notes
 

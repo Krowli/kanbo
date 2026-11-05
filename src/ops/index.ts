@@ -26,6 +26,8 @@ import {
   waitApproval,
 } from './cards'
 import type { BoardWriteScope } from './change-seq'
+import type { ClaimCardInput } from './claim'
+import { claimCard } from './claim'
 import type { AddColumnInput, ApplyColumnTemplateOptions, BoardColumnInput, BoardColumnPatch, ColumnPosition, RemoveColumnOptions } from './columns'
 import {
   addColumn,
@@ -201,6 +203,8 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
     // Runs
     startRun: async (issueId: string, input: StartRunInput, actor: BoardActor, scope?: Scope) =>
       await startRun(store, issueId, input, actor, scope),
+    claimCard: async (input: ClaimCardInput, actor: BoardActor, scope?: Scope) =>
+      await claimCard(store, input, actor, scope),
     attachRunExecution: async (runId: string, input: AttachRunExecutionInput, scope?: Scope) =>
       await attachRunExecution(store, runId, input, scope),
     recordRunSessionRef: async (runId: string, ref: string, scope?: Scope) =>

@@ -12,6 +12,7 @@ const EVERY_CODE = Object.keys(BOARD_ERROR_RESPONSES) as BoardErrorCode[]
 /** What each failure prints, from the details the board throws it with. */
 const EXPECTED: Record<BoardErrorCode, [Record<string, unknown>, string]> = {
   board_approval_requires_user: [{ issueId: 'MYA-1', actorKind: 'agent' }, 'Only a person can approve a card.\n  Next: run it in your own terminal, or on the board page (kanbo serve)'],
+  board_card_not_ready: [{ issueId: 'MYA-1', reason: 'run_active' }, 'MYA-1 is taken: it has a run going.\n  Next: kanbo ready'],
   board_card_run_active: [{ issueId: 'MYA-1', runId: 'r1', agentName: 'claude' }, 'MYA-1 already has a run going: claude\'s, run r1.\n  Next: kanbo ready'],
   board_column_name_taken: [{ name: 'done', takenBy: 'Done' }, 'Another column, Done, already has that name (same slug). Pick another name.\n  Next: kanbo columns list'],
   board_column_not_empty: [{ statusName: 'In Review', cardCount: 2 }, 'In Review holds 2 cards. Say where they go.\n  Next: kanbo columns remove in_review --move-cards-to <column>'],
@@ -26,6 +27,7 @@ const EXPECTED: Record<BoardErrorCode, [Record<string, unknown>, string]> = {
   board_entry_rule_invalid: [{ rules: ['green'], allowed: ['ci_green', 'approved'] }, 'Unknown column rule: green. Use any of ci_green, approved.'],
   board_execution_mode_locked: [{ issueId: 'MYA-1', executionMode: 'worktree' }, 'MYA-1 has been started, so where it is worked (worktree) can\'t change now.'],
   board_flow_rule_invalid: [{ statusId: 's1', wipLimit: 0 }, 'A column holds at least 1 card; 0 is not a limit. Use none for no limit.'],
+  board_nothing_ready: [{ workspaceId: 'w1' }, 'No card in To Do is ready to take: each one is taken or waits for a person, or there is none.\n  Next: kanbo ready'],
   board_pull_request_invalid: [{ value: 'nope' }, '"nope" is not a GitHub pull request. Give its link or owner/repo#number.'],
   board_pull_request_not_found: [{ issueId: 'MYA-1', linkId: 'l1' }, 'MYA-1 has no pull request link "l1".\n  Next: kanbo card pr list MYA-1'],
   board_pull_request_not_yours: [{ issueId: 'MYA-1', linkId: 'l1' }, 'Someone else linked that pull request to MYA-1; only they or a person can unlink it.'],
@@ -91,5 +93,14 @@ describe('board failures in plain words', () => {
   it('names the column a flow rule cannot point at', () => {
     expect(describeFailure(new BoardError('board_flow_rule_invalid', { statusId: 's1', allowedFrom: ['s9'] })).message)
       .toBe('A column accepts cards only from other columns of its own board, and s9 is not one.\n  Next: kanbo columns list  [board_flow_rule_invalid]')
+  })
+
+  it('says why a named card is not there to take, and which kind of column a claim needs', () => {
+    expect(describeFailure(new BoardError('board_card_not_ready', { issueId: 'MYA-1', reason: 'not_in_to_do' })).message)
+      .toBe('MYA-1 is not in To Do, so it is not there to take.\n  Next: kanbo ready  [board_card_not_ready]')
+    expect(describeFailure(new BoardError('board_card_not_ready', { issueId: 'MYA-1', reason: 'waiting_for_person' })).message)
+      .toBe('MYA-1 is waiting for a person.\n  Next: kanbo ready  [board_card_not_ready]')
+    expect(describeFailure(new BoardError('issue_status_not_found', { workspaceId: 'w1', category: 'started' })).message)
+      .toBe('This board has no started column for a claimed card to go to.\n  Next: kanbo columns list  [issue_status_not_found]')
   })
 })
