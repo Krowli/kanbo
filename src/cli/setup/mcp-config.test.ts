@@ -43,6 +43,30 @@ describe('which kanbo entries are kanbo\'s own', () => {
     expect(isOwnMcpEntry(entry('C:\\tools\\bun.exe', [SCRIPT, 'mcp']))).toBe(false)
   })
 
+  it('reads Claude Code\'s own registration, with its empty env, as kanbo\'s own', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kanbo-own-entry-'))
+    try {
+      const file = join(dir, 'claude.json')
+      writeFileSync(file, JSON.stringify({ mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: {} } } }))
+      expect(isOwnMcpEntry(readJsonMcpEntry(file)!)).toBe(true)
+    }
+    finally {
+      rmSync(dir, { force: true, recursive: true })
+    }
+  })
+
+  it('keeps an entry with an env variable the person\'s', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'kanbo-own-entry-'))
+    try {
+      const file = join(dir, 'claude.json')
+      writeFileSync(file, JSON.stringify({ mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: { KANBO_ACTOR_ID: 'me' } } } }))
+      expect(isOwnMcpEntry(readJsonMcpEntry(file)!)).toBe(false)
+    }
+    finally {
+      rmSync(dir, { force: true, recursive: true })
+    }
+  })
+
   it('never calls a Windows entry of the person\'s own stale, however it starts kanbo', () => {
     for (const own of [entry('cmd', ['/c', 'kanbo', 'mcp']), entry('npx', ['-y', 'kanbo-cli', 'mcp']), entry('kanbo', ['mcp'], ['env'])]) {
       expect(isStaleMcpEntry(own, 'user', 'win32')).toBe(false)

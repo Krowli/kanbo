@@ -164,7 +164,10 @@ export function readJsonMcpEntry(path: string): McpEntry | undefined {
   return {
     command: typeof command === 'string' && command.trim() ? command.trim() : null,
     args: Array.isArray(args) ? args.filter((arg): arg is string => typeof arg === 'string') : [],
-    otherFields: Object.keys(entry).filter(key => key !== 'command' && key !== 'args' && !(key === 'type' && entry.type === 'stdio')),
+    otherFields: Object.keys(entry).filter(key => key !== 'command' && key !== 'args'
+      && !(key === 'type' && entry.type === 'stdio')
+      // Claude Code adds an empty `env` to the entry it registers itself.
+      && !(key === 'env' && isPlainObject(entry.env) && Object.keys(entry.env).length === 0)),
   }
 }
 
@@ -202,7 +205,7 @@ export function planCodexMcpServer(path: string, launch: McpLaunch = PORTABLE_MC
  * Is this entry one kanbo wrote, in exactly the shape it writes it? `kanbo mcp`
  * (with `"type": "stdio"` or without), or a Node given by full path running
  * kanbo's own script (`…/kanbo-cli/dist/cli.cjs mcp`) — and nothing else: an
- * entry with an `env`, a `cwd` or any other field, or one that starts kanbo
+ * entry with a non-empty `env`, a `cwd` or any other field, or one that starts kanbo
  * some other way (`cmd /c kanbo mcp`, `npx -y kanbo-cli mcp`), is the
  * person's, and kanbo never rewrites or removes it without asking.
  */

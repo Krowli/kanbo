@@ -230,6 +230,16 @@ describe('kanbo connect', () => {
       await expect(connect('--check', 'gemini')).rejects.toThrowError(expect.objectContaining({ exitCode: 1 }))
     })
 
+    it('calls the registration Claude Code writes itself (with an empty env) ok, not yours', async () => {
+      writeFileSync(join(home, '.claude.json'), JSON.stringify({
+        mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: {} } },
+      }))
+
+      const rows = await check('--global')
+
+      expect(rows.find(row => row.agent === 'claude')).toMatchObject({ mcp: 'ok', scope: 'user' })
+    })
+
     it('tells an old block, an edited one and a registration that no longer starts from a current one', async () => {
       writeFileSync(join(projectDir, 'CLAUDE.md'), CLAUDE_MD_0_2_1)
       writeFileSync(join(projectDir, '.mcp.json'), JSON.stringify({
