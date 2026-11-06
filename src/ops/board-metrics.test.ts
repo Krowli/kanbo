@@ -233,3 +233,21 @@ describe('board metrics at the edges', () => {
     expect(parked.returns.total).toBe(3)
   })
 })
+
+describe('board metrics fix round 1', () => {
+  it('gives empty series for a range that starts after now (R012-11)', () => {
+    const later = computeBoardMetrics(METRICS_HISTORY, { ...METRICS_INPUT, from: METRICS_NOW + 3_600 }, METRICS_NOW)
+
+    expect(later.throughput).toEqual([])
+    expect(later.cumulativeFlow).toEqual([])
+  })
+
+  it('names an agent the same whichever order two same-second runs come in', () => {
+    const first = { ...METRICS_HISTORY.runs[0]!, id: 'run-a', agentId: 'agent-x', agentName: 'x-old', startedAt: day(3) }
+    const second = { ...first, id: 'run-b', agentName: 'x-new' }
+    const nameFor = (runs: typeof METRICS_HISTORY.runs) =>
+      computeBoardMetrics({ ...METRICS_HISTORY, runs }, METRICS_INPUT, METRICS_NOW).agents.find(agent => agent.key === 'agent-x')?.agentName
+
+    expect(nameFor([first, second])).toBe(nameFor([second, first]))
+  })
+})

@@ -304,7 +304,7 @@ export function computeBoardMetrics(history: BoardMetricsHistory, input: BoardMe
   const leadTime = durations(finishedCards.map(card => card.leadSeconds))
 
   const throughput: BoardMetricsWeek[] = []
-  for (let start = isoWeekOf(from).start; start <= to; start += WEEK_SECONDS) {
+  for (let start = isoWeekOf(from).start; from <= to && start <= to; start += WEEK_SECONDS) {
     throughput.push({
       week: isoWeekOf(start).week,
       start,
@@ -353,7 +353,7 @@ export function computeBoardMetrics(history: BoardMetricsHistory, input: BoardMe
   }
 
   const cumulativeFlow: BoardMetricsFlowDay[] = []
-  for (let dayStart = utcDayStart(from); dayStart <= to; dayStart += DAY_SECONDS) {
+  for (let dayStart = utcDayStart(from); from <= to && dayStart <= to; dayStart += DAY_SECONDS) {
     const at = Math.min(dayStart + DAY_SECONDS - 1, to)
     const cards = Object.fromEntries(columns.map(column => [column.slug, 0]))
     for (const fact of facts) {
@@ -410,7 +410,7 @@ function agentRows(runs: IssueRun[], finished: BoardMetricsFinishedCard[], inRan
     if (ranged.length === 0 && worked.size === 0) {
       continue
     }
-    const newest = own.toSorted((left, right) => right.startedAt - left.startedAt)[0]!
+    const newest = own.toSorted((left, right) => right.startedAt - left.startedAt || right.id.localeCompare(left.id))[0]!
     const ended = ranged.flatMap(run => (run.endedAt === null ? [] : [run.endedAt - run.startedAt]))
     rows.push({
       key,
