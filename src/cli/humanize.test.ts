@@ -13,7 +13,7 @@ const EVERY_CODE = Object.keys(BOARD_ERROR_RESPONSES) as BoardErrorCode[]
 const EXPECTED: Record<BoardErrorCode, [Record<string, unknown>, string]> = {
   board_approval_requires_user: [{ issueId: 'MYA-1', actorKind: 'agent' }, 'Only a person can approve a card.\n  Next: run it in your own terminal, or on the board page (kanbo serve)'],
   board_card_not_ready: [{ issueId: 'MYA-1', reason: 'run_active' }, 'MYA-1 is taken: it has a run going.\n  Next: kanbo ready'],
-  board_card_run_active: [{ issueId: 'MYA-1', runId: 'r1', agentName: 'claude' }, 'MYA-1 already has a run going: claude\'s, run r1.\n  Next: kanbo ready'],
+  board_card_run_active: [{ issueId: 'MYA-1', runId: 'r1', agentName: 'claude' }, 'MYA-1 already has a run going: claude\'s, run r1.\n  Next: kanbo run finish r1 --state stopped'],
   board_column_name_taken: [{ name: 'done', takenBy: 'Done' }, 'Another column, Done, already has that name (same slug). Pick another name.\n  Next: kanbo columns list'],
   board_column_not_empty: [{ statusName: 'In Review', cardCount: 2 }, 'In Review holds 2 cards. Say where they go.\n  Next: kanbo columns remove in_review --move-cards-to <column>'],
   board_column_ready_protected: [{ statusName: 'To Do' }, 'To Do can\'t be removed: kanbo ready takes work from To Do, and agents would find no cards to take.'],

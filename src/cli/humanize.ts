@@ -38,7 +38,7 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
   }),
   board_card_run_active: details => ({
     text: `${named(details.issueId)} already has a run going: ${named(details.agentName)}'s, run ${named(details.runId)}.`,
-    next: 'kanbo ready',
+    next: `kanbo run finish ${named(details.runId)} --state stopped`,
   }),
   board_column_name_taken: details => ({
     text: `Another column, ${named(details.takenBy)}, already has that name (same slug). Pick another name.`,
