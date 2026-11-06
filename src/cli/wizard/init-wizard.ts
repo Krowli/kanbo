@@ -25,13 +25,12 @@ import { describeFailure } from '../failure'
 import { CliError } from '../output'
 import type { AgentDetection, AgentId } from '../setup/agents'
 import { AGENTS } from '../setup/agents'
-import { describeManualOutcome, displayPath, explainItem, itemPath, pendingItems } from '../setup/connect-plan'
+import { describeManualOutcome, displayPath, itemPath, pendingItems, readMcpState } from '../setup/connect-plan'
 import type { ExistingWorkspace } from '../setup/existing-workspace'
 import { inspectBoardFile, inspectPostgresWorkspace } from '../setup/existing-workspace'
 import { findGitRoot } from '../setup/git-root'
 import type { AppliedInitPlan, InitPlan } from '../setup/init-plan'
 import { describeInitPlan } from '../setup/init-plan'
-import { INSTRUCTION_BLOCK } from '../setup/instructions'
 import { tildify } from '../tildify'
 import type { Ui } from '../ui/ui'
 import { CancelledError } from '../ui/ui'
@@ -73,14 +72,14 @@ export interface InitWizardResult {
   options: InitOptions
   /** What will be written — the plan the person said yes to. */
   plan: InitPlan
-  /** The person chose to paste the instructions into their agent themselves. */
-  pasted: boolean
+  /** The agents used here that already reach kanbo through its MCP server, before this run. */
+  alreadyConnected: AgentId[]
   launchWarning: string | null
 }
 
 type BoardHome = 'file' | 'postgres'
 type ColumnChoice = ColumnTemplateId | 'custom'
-type ConnectChoice = 'yes' | 'not-now' | 'paste'
+type ConnectChoice = 'yes' | 'not-now'
 
 export async function runInitWizard(context: InitWizardContext): Promise<InitWizardResult> {
   const { ui } = context
@@ -110,21 +109,25 @@ export async function runInitWizard(context: InitWizardContext): Promise<InitWiz
     }
   }
 
-  let pasted = false
-  if (options.connect === undefined && options.instructions === undefined && options.mcp === undefined) {
-    const agents = await askAgents(ui, context.detect(projectDir))
-    const choice: ConnectChoice = agents.length > 0 ? await askConnect(ui) : 'not-now'
-    options.connect = choice === 'yes' ? agents : []
-    if (choice === 'paste') {
-      pasted = true
-      say(ui, `Paste this into your agent's instructions (or run kanbo instructions --copy):\n\n${INSTRUCTION_BLOCK}\n`)
+  const alreadyConnected: AgentId[] = []
+  if (options.connect === undefined) {
+    // Asked only when an agent used here still lacks kanbo's MCP server: one registration serves every project.
+    const detections = context.detect(projectDir)
+    const reaches = (agent: AgentId): boolean => (['project', 'user'] as const).some(scope => readMcpState(agent, scope, projectDir) !== 'missing')
+    const detected = detections.filter(detection => detection.detected)
+    alreadyConnected.push(...detected.map(detection => detection.agent).filter(reaches))
+    if (detected.length > 0 && alreadyConnected.length === detected.length) {
+      say(ui, 'Your agents already reach kanbo through its MCP server.')
+      options.connect = []
+    }
+    else {
+      const agents = await askAgents(ui, detections, reaches)
+      const choice: ConnectChoice = agents.length > 0 ? await askConnect(ui) : 'not-now'
+      options.connect = choice === 'yes' ? agents : []
     }
   }
 
   const plan = await context.plan(projectDir, options)
-  if (plan.connect && pendingItems(plan.connect).length > 0) {
-    await chooseAgentFiles(ui, plan)
-  }
 
   if (options.firstCard === undefined && canAddCard(plan)) {
     const title = (await ui.text({ message: 'Add a first card? (optional — Enter to skip)', placeholder: 'e.g. Add a README' })).trim()
@@ -138,7 +141,7 @@ export async function runInitWizard(context: InitWizardContext): Promise<InitWiz
   if (!await ui.confirm({ message: 'Write these changes?', initialValue: true })) {
     throw new CliError(1, 'Nothing was written.')
   }
-  return { projectDir, options, plan, pasted, launchWarning: context.launchWarning }
+  return { projectDir, options, plan, alreadyConnected, launchWarning: context.launchWarning }
 }
 
 /** Anything the wizard tells the person, drawn where the prompts are. */
@@ -379,15 +382,15 @@ async function askCustomColumns(ui: Ui): Promise<ColumnSpec[]> {
   return insertOwnColumns(COLUMN_CATALOGUE.filter(column => picked.has(column.name)), own)
 }
 
-/** (5) The agents this person uses; the ones found here are ticked already. */
-async function askAgents(ui: Ui, detections: AgentDetection[]): Promise<AgentId[]> {
+/** (5) The agents this person uses; the ones found here that kanbo does not reach yet are ticked already. */
+async function askAgents(ui: Ui, detections: AgentDetection[], reaches: (agent: AgentId) => boolean): Promise<AgentId[]> {
   return await ui.multiselect<AgentId>({
     message: 'Which coding agents do you use here?',
     options: detections.map(({ agent, detected, evidence }) => ({
       value: agent,
       label: detected && evidence[0] ? `${AGENTS[agent].label} (found ${tildify(evidence[0])})` : AGENTS[agent].label,
     })),
-    initialValues: detections.filter(detection => detection.detected).map(detection => detection.agent),
+    initialValues: detections.filter(detection => detection.detected && !reaches(detection.agent)).map(detection => detection.agent),
   })
 }
 
@@ -396,31 +399,10 @@ async function askConnect(ui: Ui): Promise<ConnectChoice> {
   return await ui.select<ConnectChoice>({
     message: 'Connect them now?',
     options: [
-      { value: 'yes', label: 'Yes — show exactly which files change, then ask' },
-      { value: 'not-now', label: 'Not now — set up the board only; no other file is touched (later: kanbo connect)' },
-      { value: 'paste', label: 'I\'ll paste the instructions myself (prints them; nothing is written)' },
+      { value: 'yes', label: 'Yes — register kanbo\'s MCP server for them, for every project' },
+      { value: 'not-now', label: 'Not now — set up the board only (later: kanbo connect)' },
     ],
   })
-}
-
-/** (7) The files connecting changes, each explained; an unticked one is left out of the plan. */
-async function chooseAgentFiles(ui: Ui, plan: InitPlan): Promise<void> {
-  const connect = plan.connect!
-  const pending = pendingItems(connect)
-  const keys = pending.map((_, index) => `${index}`)
-  const kept = new Set(await ui.multiselect<string>({
-    message: 'These files change so your agents know the board. Keep all of them?',
-    options: pending.map((item, index) => ({
-      value: keys[index]!,
-      label: item.kind === 'claude-cli' ? 'Claude Code user settings' : displayPath(connect, itemPath(item)),
-      hint: explainItem(item),
-    })),
-    initialValues: keys,
-  }))
-  connect.items = connect.items.filter(item => !pending.includes(item) || kept.has(`${pending.indexOf(item)}`))
-  if (pendingItems(connect).some(item => item.kind === 'instructions')) {
-    say(ui, `The kanbo section your agents get:\n\n${INSTRUCTION_BLOCK}\n`)
-  }
 }
 
 /** A shared board whose tables were not created here may have none yet, so there is nowhere to put a card. */
@@ -460,30 +442,23 @@ export function printInitOutro(ui: Ui, result: InitWizardResult, applied: Applie
     connected.push(...outcome.agents)
     lines.push(`✔ ${who}: ${where} (${outcome.state === 'ran' ? `ran ${outcome.command}` : outcome.state})`)
   }
-  for (const file of applied.files) {
-    lines.push(`✔ ${displayPath(plan, file.path).replaceAll('\\', '/')} (${file.state})`)
-  }
   for (const note of plan.connect?.notes ?? []) {
     lines.push(`Note: ${note}`)
   }
   if (applied.firstCard) {
     lines.push(`✔ First card: ${applied.firstCard.id} ${applied.firstCard.title}`)
   }
-  const anyAgent = connected.length > 0 || applied.files.length > 0
-  if (anyAgent && result.launchWarning) {
+  if (connected.length > 0 && result.launchWarning) {
     lines.push(`! ${result.launchWarning}`)
   }
 
   lines.push('')
-  const first = result.options.connect?.find(agent => connected.includes(agent))
+  const first = [...connected, ...result.alreadyConnected][0]
   if (first) {
     lines.push(`Next: start ${AGENTS[first].label} in this folder and say "take the next card from kanbo".`)
   }
-  else if (result.pasted) {
-    lines.push('Next: paste the instructions into your agent, then say "take the next card from kanbo".')
-  }
-  else if (!anyAgent) {
-    lines.push('Next: connect your agent with kanbo connect <agent>, or paste kanbo instructions --copy into it.')
+  else {
+    lines.push('Next: connect your agent once: kanbo connect claude (or codex, cursor, gemini).')
   }
   lines.push('See the board: kanbo board · in your browser: kanbo serve')
   lines.push('Run kanbo any time to come back here.')

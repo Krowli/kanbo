@@ -424,10 +424,10 @@ function readJsonConfig(path: string, text: string | null): { mcpServers?: Recor
     parsed = JSON.parse(text)
   }
   catch {
-    throw new CliError(1, `${path} is not valid JSON. Fix or remove it, then run kanbo init again.`)
+    throw new CliError(1, `${path} is not valid JSON. Fix or remove it, then run kanbo connect again.`)
   }
   if (!isPlainObject(parsed)) {
-    throw new CliError(1, `${path} does not hold a JSON object. Fix or remove it, then run kanbo init again.`)
+    throw new CliError(1, `${path} does not hold a JSON object. Fix or remove it, then run kanbo connect again.`)
   }
   if (parsed.mcpServers !== undefined && !isPlainObject(parsed.mcpServers)) {
     throw new CliError(1, `${path} has an "mcpServers" that is not an object. Fix it, then run kanbo init again.`)

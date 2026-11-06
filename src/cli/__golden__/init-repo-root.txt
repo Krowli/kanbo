@@ -62,7 +62,7 @@ Nothing else is changed.
 ✔ Columns: Backlog, To Do, In Progress, In Review, Done, Canceled
 ✔ Card numbers: WST-001, WST-002, …
 
-Next: connect your agent with kanbo connect <agent>, or paste kanbo instructions --copy into it.
+Next: connect your agent once: kanbo connect claude (or codex, cursor, gemini).
 See the board: kanbo board · in your browser: kanbo serve
 Run kanbo any time to come back here.
 

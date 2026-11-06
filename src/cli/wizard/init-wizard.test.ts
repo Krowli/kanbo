@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, relative } from 'node:path'
+import { delimiter, dirname, join, relative } from 'node:path'
 
 import { PGlite } from '@electric-sql/pglite'
 import { Command } from 'commander'
@@ -14,17 +14,16 @@ import { createPostgresBoardStore } from '../../postgres/board-store.postgres'
 import { boardPostgresSchema } from '../../postgres/schema'
 import type { TestPostgresDatabase } from '../../testing/postgres-database'
 import { createTestPostgresDatabase } from '../../testing/postgres-database'
+import { writeRecordingBin } from '../../testing/fake-bin'
 import type { PromptDriver } from '../../testing/prompt-driver'
 import { createPromptDriver } from '../../testing/prompt-driver'
 import { readBinding } from '../binding'
 import type { InitOptions } from '../commands/init'
 import { AGENT_URL_MISSING_WARNING, normalizeInitOptions, planInit, registerInitCommand } from '../commands/init'
-import { registerCardCommands } from '../commands/card'
-import { registerPrimeCommand } from '../commands/prime'
+import { openBoardSession } from '../command'
 import { overridePostgresOpenerForTests } from '../postgres-board'
 import type { AgentDetection } from '../setup/agents'
 import { AGENT_IDS } from '../setup/agents'
-import { INSTRUCTION_BLOCK } from '../setup/instructions'
 import { NPX_LAUNCH_WARNING } from '../setup/launch-warning'
 import { CancelledError, setUiForTests } from '../ui/ui'
 import { runInitWizard } from './init-wizard'
@@ -97,6 +96,8 @@ describe('kanbo init wizard', () => {
   let home: string
   let projectDir: string
   let driver: PromptDriver
+  /** What the fake `claude` on PATH was asked, one line per call. */
+  let claudeCalls: string
 
   beforeAll(async () => {
     // The prompt library picks its glyphs once, when it loads; Windows
@@ -120,6 +121,12 @@ describe('kanbo init wizard', () => {
     }
     vi.stubEnv('HOME', home)
     vi.stubEnv('USERPROFILE', home)
+    // The only agent program on PATH is one that writes down what it was asked: nothing real is ever run.
+    const bin = join(root, 'bin')
+    mkdirSync(bin)
+    claudeCalls = join(root, 'claude-calls')
+    writeRecordingBin(bin, 'claude', claudeCalls)
+    vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
     machine.detected = []
     machine.launchWarning = null
     driver = createPromptDriver()
@@ -161,9 +168,29 @@ describe('kanbo init wizard', () => {
   function kanbo(...argv: string[]): Promise<unknown> {
     const program = new Command().exitOverride()
     registerInitCommand(program)
-    registerPrimeCommand(program)
-    registerCardCommands(program)
     return program.parseAsync(argv, { from: 'user' }).then(() => null, (error: unknown) => error)
+  }
+
+  /** The board's prime text, read the way an agent's first call reads it. */
+  async function primeText(): Promise<string> {
+    const session = await openBoardSession({}, 'read')
+    try {
+      return await session.ops.buildPrimeText(session.workspace.id)
+    }
+    finally {
+      await session.close()
+    }
+  }
+
+  /** Put a card on the project's board. */
+  async function addCard(title: string): Promise<void> {
+    const session = await openBoardSession({}, 'write')
+    try {
+      await session.ops.createCard({ workspace: session.workspace, title }, { kind: 'user', id: 'tester' })
+    }
+    finally {
+      await session.close()
+    }
   }
 
   /** Run `kanbo init` through these steps; the promise settles with the error it stopped on, or `null`. */
@@ -200,7 +227,6 @@ describe('kanbo init wizard', () => {
     ['Which columns should the board start with?', enter],
     ['Which coding agents do you use here?', enter],
     ['Connect them now?', enter],
-    ['Keep all of them?', enter],
     ['Add a first card?', typeLine('Write the README')],
     ['Write these changes?', enter],
   ]
@@ -214,8 +240,8 @@ describe('kanbo init wizard', () => {
     expect(outcome).toBeNull()
     await expect(transcript(outcome)).toMatchFileSnapshot(golden('standard-claude'))
     expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toMatchObject({ workspaceId: 'weather-station', identifier: 'WST' })
-    expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe(`${INSTRUCTION_BLOCK}\n`)
-    expect(existsSync(join(projectDir, '.mcp.json'))).toBe(true)
+    expect(existsSync(join(projectDir, 'CLAUDE.md'))).toBe(false)
+    expect(readFileSync(claudeCalls, 'utf8')).toBe('mcp add --scope user kanbo -- kanbo mcp\n')
   })
 
   it('touches nothing but the board with "Not now"', async () => {
@@ -238,25 +264,6 @@ describe('kanbo init wizard', () => {
     expect(readdirSync(home)).toEqual([])
   })
 
-  it('prints the instructions and writes no agent file with "I\'ll paste the instructions myself"', async () => {
-    machine.detected = ['claude']
-
-    const outcome = await wizard([
-      ['Where should the board live?', enter],
-      ['Card numbers start with', enter],
-      ['Which columns should the board start with?', enter],
-      ['Which coding agents do you use here?', enter],
-      ['Connect them now?', d => d.press('down', 'down', 'enter')],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
-    ])
-
-    expect(outcome).toBeNull()
-    await expect(transcript(outcome)).toMatchFileSnapshot(golden('paste-myself'))
-    expect(driver.transcript()).toContain(INSTRUCTION_BLOCK.split('\n')[1]!)
-    expect(readdirSync(projectDir)).toEqual(['.kanbo'])
-  })
-
   it('builds custom columns: To Do kept, QA picked, Blocked typed in its own place, one of the person\'s own before Done', async () => {
     const outcome = await wizard([
       ['Where should the board live?', enter],
@@ -273,10 +280,7 @@ describe('kanbo init wizard', () => {
 
     expect(outcome).toBeNull()
     await expect(transcript(outcome)).toMatchFileSnapshot(golden('custom-columns'))
-    const prime = vi.mocked(console.log)
-    prime.mockClear()
-    await kanbo('prime')
-    const printed = prime.mock.calls.map(([line]) => String(line)).join('\n')
+    const printed = await primeText()
     const names = ['Backlog', 'To Do', 'In Progress', 'In Review', 'QA', 'Blocked', 'Design', 'Done', 'Canceled']
     const positions = names.map(name => printed.indexOf(`- ${name} (`))
     expect(positions.every(position => position >= 0), printed).toBe(true)
@@ -299,10 +303,7 @@ describe('kanbo init wizard', () => {
 
     expect(outcome).toBeNull()
     expect(driver.transcript()).not.toContain('One line about')
-    const prime = vi.mocked(console.log)
-    prime.mockClear()
-    await kanbo('prime')
-    const printed = prime.mock.calls.map(([line]) => String(line)).join('\n')
+    const printed = await primeText()
     const names = ['Backlog', 'To Do', 'In Progress', 'In Review', 'Done', 'Canceled']
     const positions = names.map(name => printed.indexOf(`- ${name} (`))
     expect(positions.every(position => position >= 0), printed).toBe(true)
@@ -389,13 +390,13 @@ describe('kanbo init wizard', () => {
     const outcome = await wizard([
       ['Which coding agents do you use here?', enter],
       ['Connect them now?', enter],
-      ['Keep all of them?', enter],
       ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
     expect(driver.transcript()).not.toContain('Workspace id')
-    expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe(`${INSTRUCTION_BLOCK}\n`)
+    expect(existsSync(join(projectDir, 'CLAUDE.md'))).toBe(false)
+    expect(readFileSync(claudeCalls, 'utf8')).toBe('mcp add --scope user kanbo -- kanbo mcp\n')
     expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toMatchObject({ workspaceId: 'station', identifier: 'STA' })
   })
 
@@ -427,7 +428,7 @@ describe('kanbo init wizard', () => {
 
   it('keeps the key of a board file that is there without a binding, and asks no key or columns', async () => {
     expect(await kanbo('init', '--yes', '--key', 'OLD')).toBeNull()
-    expect(await kanbo('card', 'create', '--title', 'Old card')).toBeNull()
+    await addCard('Old card')
     rmSync(join(projectDir, '.kanbo', 'binding.json'))
     driver = createPromptDriver()
     setUiForTests(driver.ui)
@@ -455,7 +456,6 @@ describe('kanbo init wizard', () => {
     const outcome = await wizard([
       ['Which coding agents do you use here?', enter],
       ['Connect them now?', enter],
-      ['Keep all of them?', enter],
       ['Add a first card?', enter],
       ['Write these changes?', enter],
     ])
@@ -466,29 +466,7 @@ describe('kanbo init wizard', () => {
     expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))?.identifier).toBe('WEA')
   })
 
-  it('keeps a kanbo section the person edited unless they say to replace it', async () => {
-    expect(await kanbo('init', '--yes', '--connect', 'claude')).toBeNull()
-    const claudeMd = join(projectDir, 'CLAUDE.md')
-    const edited = readFileSync(claudeMd, 'utf8').replace('kanbo prime', 'kanbo prime first')
-    writeFileSync(claudeMd, edited)
-    machine.detected = ['claude']
-    driver = createPromptDriver()
-    setUiForTests(driver.ui)
-
-    const outcome = await wizard([
-      ['Which coding agents do you use here?', enter],
-      ['Connect them now?', enter],
-      ['You changed the kanbo section in', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
-    ])
-
-    expect(outcome).toBeNull()
-    await expect(transcript(outcome)).toMatchFileSnapshot(golden('edited-block'))
-    expect(readFileSync(claudeMd, 'utf8')).toBe(edited)
-  })
-
-  it('replaces a kanbo 0.2 section with the current one', async () => {
+  it('takes a kanbo 0.2 section out of CLAUDE.md when it connects Claude Code, and keeps the rest', async () => {
     const legacy = readFileSync(join(__dirname, '..', 'setup', 'fixtures', 'claude-md-0.2.1.md'), 'utf8')
     writeFileSync(join(projectDir, 'CLAUDE.md'), legacy)
     machine.detected = ['claude']
@@ -496,11 +474,50 @@ describe('kanbo init wizard', () => {
     const outcome = await wizard(standardClaude)
 
     expect(outcome).toBeNull()
-    await expect(transcript(outcome)).toMatchFileSnapshot(golden('legacy-block'))
-    const claudeMd = readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')
-    expect(claudeMd).toContain('# Project notes')
-    expect(claudeMd).toContain(INSTRUCTION_BLOCK)
-    expect(claudeMd).not.toContain('<!-- KANBO_START -->')
+    expect(driver.transcript()).toContain('the old kanbo section: agents now learn the board from the MCP server')
+    expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe('# Project notes\n')
+  })
+
+  it('asks no agent question when every agent found here already reaches kanbo through its MCP server', async () => {
+    machine.detected = ['claude']
+    writeFileSync(join(home, '.claude.json'), JSON.stringify({
+      mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: {} } },
+    }))
+
+    const outcome = await wizard([
+      ['Where should the board live?', enter],
+      ['Card numbers start with', enter],
+      ['Which columns should the board start with?', enter],
+      ['Add a first card?', enter],
+      ['Write these changes?', enter],
+    ])
+
+    expect(outcome).toBeNull()
+    expect(driver.transcript()).toContain('Your agents already reach kanbo through its MCP server.')
+    expect(driver.transcript()).not.toContain('Which coding agents do you use here?')
+    expect(driver.transcript()).not.toContain('Connect them now?')
+    expect(driver.transcript()).toContain('Next: start Claude Code in this folder and say "take the next card from kanbo".')
+    expect(existsSync(claudeCalls)).toBe(false)
+  })
+
+  it('still asks when an agent found here is not connected yet, though another one is', async () => {
+    machine.detected = ['claude', 'codex']
+    writeFileSync(join(home, '.claude.json'), JSON.stringify({
+      mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: {} } },
+    }))
+
+    const outcome = await wizard([
+      ['Where should the board live?', enter],
+      ['Card numbers start with', enter],
+      ['Which columns should the board start with?', enter],
+      ['Which coding agents do you use here?', enter],
+      ['Connect them now?', d => d.press('down', 'enter')],
+      ['Add a first card?', enter],
+      ['Write these changes?', enter],
+    ])
+
+    expect(outcome).toBeNull()
+    expect(driver.transcript()).toContain('Next: start Claude Code in this folder')
   })
 
   it('offers the repository root when started in a folder inside one', async () => {
@@ -540,25 +557,6 @@ describe('kanbo init wizard', () => {
         expect({ project: snapshot(projectDir), home: snapshot(home) }).toEqual(before)
       })
     }
-
-    it('leaves a bound project as it was at the question about an edited block', async () => {
-      expect(await kanbo('init', '--yes', '--connect', 'claude')).toBeNull()
-      const claudeMd = join(projectDir, 'CLAUDE.md')
-      writeFileSync(claudeMd, readFileSync(claudeMd, 'utf8').replace('kanbo prime', 'kanbo prime first'))
-      const before = snapshot(projectDir)
-      machine.detected = ['claude']
-      driver = createPromptDriver()
-      setUiForTests(driver.ui)
-
-      const outcome = await wizard([
-        ['Which coding agents do you use here?', enter],
-        ['Connect them now?', enter],
-        ['You changed the kanbo section in', d => d.press('ctrl-c')],
-      ])
-
-      expect(outcome).toBeInstanceOf(CancelledError)
-      expect(snapshot(projectDir)).toEqual(before)
-    })
   })
 
   it('writes nothing when the person says no at the end', async () => {
@@ -603,7 +601,6 @@ describe('kanbo init wizard', () => {
       ['Which columns should the board start with?', d => d.press('down', 'down', 'enter')],
       ['Which coding agents do you use here?', enter],
       ['Connect them now?', enter],
-      ['Keep all of them?', enter],
       ['Add a first card?', typeLine('Check the sensors')],
       ['Write these changes?', enter],
     ] satisfies Step[]) {
@@ -614,6 +611,6 @@ describe('kanbo init wizard', () => {
 
     const fromFlags = await planInit(projectDir, flagsFor('--key', 'wx1', '--columns', 'review-qa', '--connect', 'claude,codex', '--first-card', 'Check the sensors'))
     expect(answered.plan).toEqual(fromFlags)
-    expect(answered.plan.connect?.items.map(item => item.kind)).toEqual(['instructions', 'instructions', 'mcp', 'mcp'])
+    expect(answered.plan.connect?.items.map(item => item.kind)).toEqual(['claude-cli', 'mcp'])
   })
 })

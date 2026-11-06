@@ -177,7 +177,7 @@ describe('the kanbo instruction block', () => {
   })
 
   it('kanbo prime on the command line ends with the commands', async () => {
-    await kanbo('init', '--file', '--instructions', 'none', '--yes')
+    await kanbo('init', '--file', '--yes')
 
     const { out } = await kanbo('prime')
 

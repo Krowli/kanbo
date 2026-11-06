@@ -30,28 +30,22 @@ import type { AgentId } from '../setup/agents'
 import { AGENT_IDS, AGENTS, defaultMcpScope, detectAgents, parseAgentId } from '../setup/agents'
 import { describeManualOutcome, pendingItems, planConnect } from '../setup/connect-plan'
 import { inspectBoardFile, inspectPostgresWorkspace } from '../setup/existing-workspace'
-import type { FileOutcome } from '../setup/file-change'
-import type { AppliedInitPlan, InitFileChange, InitPlan } from '../setup/init-plan'
+import type { AppliedInitPlan, InitPlan } from '../setup/init-plan'
 import { applyInitPlan, assertOwnBoardFile } from '../setup/init-plan'
 import { readLaunchWarning } from '../setup/launch-warning'
-import { mcpLaunchSpec } from '../setup/mcp-launch'
-import type { McpClient, ProjectInstructionTarget } from '../setup/paths'
-import { MCP_CLIENTS } from '../setup/paths'
 import { canPrompt } from '../ui/environment'
 import { CancelledError, getUi } from '../ui/ui'
 import { printInitOutro, runInitWizard } from '../wizard/init-wizard'
 import { resolveWorkspace } from '../workspace'
-import { initGlobal } from './init-global'
 
 /**
- * `kanbo init` — tying a project folder to a board, and telling the agents
- * that work in it what the board expects.
+ * `kanbo init` — tying a project folder to a board.
  *
- * Three things come out of it, and each is optional except the first: the
- * binding, so no later command has to be told which workspace this is; a block
- * in the project's agent instructions, so an agent reads the board's rules
- * without being handed them; and a registration of the board's MCP server with
- * whichever tools the person actually uses. Nothing is written to a file the
+ * Two things come out of it, and only the first is always there: the binding,
+ * so no later command has to be told which workspace this is, and — when the
+ * person asks for it with `--connect` or in the wizard — the board's MCP
+ * server registered with the agents they use, as `kanbo connect` does. kanbo
+ * writes no instruction file into the project. Nothing is written to a file the
  * person did not ask for, and nothing is written twice.
  *
  * Every question comes first. The answers become a plan (`setup/init-plan.ts`)
@@ -84,25 +78,18 @@ export const AGENT_URL_MISSING_WARNING
     + 'Until you run "kanbo roles apply" and record the agent role\'s own string with --agent-url, an agent '
     + 'here can approve its own work.'
 
-type InstructionTarget = ProjectInstructionTarget | 'none'
-
 /** What a person is told when the setup stopped at a question. */
 export const INIT_CANCELLED_MESSAGE = 'Cancelled — nothing was written.'
 
 /** What a board set up without its agents ends with. */
-export const CONNECT_LATER_TIP = 'Agents don\'t know about this board yet: kanbo connect <agent>, or kanbo instructions --copy and paste it.'
+export const CONNECT_LATER_TIP = 'Agents can\'t reach this board yet: kanbo connect <agent>.'
 
 const CONNECT_VALUES = `${AGENT_IDS.join(', ')}, all or none`
 
 export interface InitOptions extends BoardCommandOptions {
-  /** Set up this person's own agent tools for every project, instead of binding this one. */
-  global?: boolean
   board?: string
   identifier?: string
   agentUrl?: string
-  /** Parsed per mode: one project file, or a list of the person's own files with `--global`. */
-  instructions?: string
-  mcp?: McpClient[]
   yes?: boolean
   /**
    * `--file` with no value parses to `true` (commander's rule for an optional
@@ -128,7 +115,7 @@ export function registerInitCommand(program: Command): void {
   // spelled the same as everywhere else.
   program
     .command('init')
-    .description('Set up a board for this project and connect your agents (asks step by step)')
+    .description('Set up a board for this project (asks step by step)')
     .option('--db <path>', 'the app\'s database file to find this project in')
     .option('--database-url <url>', 'use a shared Postgres board for this project')
     .option('--file [path]', `keep the board in a file in this project (default ${DEFAULT_BOARD_FILE_PATH})`)
@@ -144,20 +131,8 @@ export function registerInitCommand(program: Command): void {
     .option('--first-card <title>', 'put a first card in To Do')
     .option('--migrate', 'create the board\'s tables in the Postgres database now')
     .option('--agent-url <url>', 'a separate connection string for agents (with fewer rights)')
-    .option('--instructions <agent>', 'where to write the agent instructions: claude, agents or none; with '
-    + '--global, a comma-separated list of claude, codex, gemini, or none')
-    .option('--mcp <clients>', `add the board's MCP server to ${MCP_CLIENTS.join(', ')}`, parseMcpClients)
-    .option('--global', 'set up your agents for every project instead of this one; creates no board')
     .option('--yes', 'take the defaults instead of asking')
     .action(async (options: InitOptions) => {
-      if (options.global) {
-        await initGlobal(options)
-        return
-      }
-      // Refused before anything is asked or written, as a parse-time check would be.
-      if (options.instructions !== undefined) {
-        parseInstructions(options.instructions)
-      }
       readFormat(options)
       const request = normalizeInitOptions(options)
       // Machine output wants the result on stdout, not a wizard drawn over it.
@@ -197,31 +172,21 @@ async function initWithWizard(options: InitOptions): Promise<void> {
 }
 
 /**
- * Agent files — instructions, MCP settings, `claude mcp` — change only on a
- * yes: the wizard's, or `--yes`. Without either (an agent's shell, a script,
- * machine output) the board is still set up and the agent files are left as
- * they are, and the person is told how to connect them, as `kanbo connect` would.
+ * Agent settings — the MCP registration, `claude mcp` — change only on a yes:
+ * the wizard's, or `--yes`. Without either (an agent's shell, a script,
+ * machine output) the board is still set up and the agents are left as they
+ * are, and the person is told how to connect them, as `kanbo connect` would.
  */
 function withoutUnconfirmedAgentFiles(plan: InitPlan, options: InitOptions): InitPlan {
-  const pending = plan.fileChanges.some(({ change }) => change.next !== null) || (plan.connect !== null && pendingItems(plan.connect).length > 0)
-  if (options.yes || !pending) {
+  if (options.yes || plan.connect === null || pendingItems(plan.connect).length === 0) {
     return plan
   }
-  const agents = options.connect?.length
-    ? options.connect
-    : [...new Set([
-        ...(options.instructions === 'claude' ? ['claude'] : options.instructions === 'agents' ? ['codex'] : []),
-        ...(options.mcp ?? []),
-      ])]
-  console.error(`Not changing agent files without a yes: run kanbo connect ${agents.join(' ') || '<agent>'} --yes`)
-  return { ...plan, fileChanges: [], connect: null }
+  console.error(`Not connecting agents without a yes: run kanbo connect ${options.connect?.join(' ') || '<agent>'} --yes`)
+  return { ...plan, connect: null }
 }
 
-/** The flags as `planInit` takes them: `--key` is `--identifier`, and `--connect` does not mix with the older flags. */
+/** The flags as `planInit` takes them: `--key` is `--identifier`. */
 export function normalizeInitOptions(options: InitOptions): InitOptions {
-  if (options.connect && (options.instructions !== undefined || options.mcp)) {
-    throw new CliError(1, 'Use --connect, or the older --instructions and --mcp, not both.')
-  }
   if (options.key === undefined) {
     return options
   }
@@ -254,10 +219,6 @@ export async function planInit(projectDir: string, options: InitOptions): Promis
     boardFile,
     columns: newBoard ? options.columns ?? COLUMN_TEMPLATES.standard : null,
     migrate,
-    fileChanges: [
-      ...await planInstructions(projectDir, options),
-      ...await planMcpServers(projectDir, options.mcp ?? []),
-    ],
     connect: options.connect?.length ? await planAgents(projectDir, options.connect, options) : null,
     firstCard: options.firstCard?.trim() || null,
   }
@@ -284,7 +245,7 @@ async function describeKept(target: BoardTarget, workspace: BoardWorkspaceIdenti
   return kept
 }
 
-/** Connect these agents the way `kanbo connect <agents>` does: the kanbo section in the project, the MCP server where each agent reads it. */
+/** Connect these agents the way `kanbo connect <agents>` does: the MCP server in each agent's own settings, and an old kanbo section taken out. */
 async function planAgents(projectDir: string, agents: AgentId[], options: InitOptions): Promise<InitPlan['connect']> {
   return await planConnect(
     agents.map(agent => ({ agent, instructions: 'both', mcp: defaultMcpScope() })),
@@ -593,47 +554,8 @@ function warnAboutOwnerAccess(target: BoardTarget, options: InitOptions): void {
   }
 }
 
-/**
- * The block in the file `--instructions` named. Without the flag nothing is
- * written into a project's instructions: that is `--connect`, the wizard, or
- * `kanbo connect` later.
- */
-async function planInstructions(projectDir: string, options: InitOptions): Promise<InitFileChange[]> {
-  const target = options.instructions === undefined ? 'none' : parseInstructions(options.instructions)
-  if (target === 'none') {
-    return []
-  }
-  // CLAUDE.md is Claude Code's; AGENTS.md is the one Codex and Cursor read.
-  const agent = target === 'claude' ? 'claude' : 'codex'
-  const plan = await planConnect([{ agent, instructions: 'project', mcp: null }], { projectDir, yes: options.yes })
-  for (const note of plan.notes) {
-    console.error(note)
-  }
-  return plan.items.flatMap(item => (item.kind === 'instructions' ? [{ kind: 'instructions' as const, change: item.change }] : []))
-}
-
-/**
- * Tell the tools the person uses about the board's MCP server, in the project's
- * own files — what `kanbo connect <clients> --project --no-instructions` does.
- *
- * Only the ones they named, and only when the tool does not already know: a
- * `kanbo` entry that is already there belongs to them — it may point at
- * a different binary or carry arguments of its own — and is rewritten only
- * when it is kanbo's own and no longer starts.
- *
- * A project file is shared across machines, so it gets the portable form on every system.
- */
-async function planMcpServers(projectDir: string, clients: McpClient[]): Promise<InitFileChange[]> {
-  const plan = await planConnect(clients.map(agent => ({ agent, instructions: null, mcp: 'project' })), { projectDir })
-  return plan.items.flatMap(item => (item.kind === 'mcp' ? [{ kind: 'mcp' as const, change: item.change }] : []))
-}
-
 export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: InitOptions): CliResult {
   const { workspace, target } = plan
-  const outcome = ({ path, state }: FileOutcome): FileOutcome => ({ path, state })
-  const instructions = applied.files.filter(file => file.kind === 'instructions').map(outcome)[0] ?? null
-  const mcp = applied.files.filter(file => file.kind === 'mcp').map(outcome)
-
   const lines = [`This project uses board ${workspace.name} — ${applied.bindingPath}`]
   if (target.kind === 'postgres') {
     lines.push(`Board: ${maskDatabaseUrl(target.url)}`)
@@ -645,12 +567,6 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
     lines.push(`Columns: ${applied.columns.join(', ')}`)
   }
   lines.push(...plan.kept)
-  if (instructions) {
-    lines.push(`Instructions: ${instructions.path} (${instructions.state})`)
-  }
-  for (const entry of mcp) {
-    lines.push(`MCP: ${entry.path} (${entry.state})`)
-  }
   for (const entry of applied.connect) {
     const who = entry.agents.map(agent => AGENTS[agent].label).join(', ')
     lines.push(entry.state === 'manual'
@@ -660,14 +576,10 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
   if (applied.firstCard) {
     lines.push(`First card: ${applied.firstCard.id} ${applied.firstCard.title}`)
   }
-  const warning = mcp.length > 0 ? mcpLaunchSpec({ scope: 'project' }).warning : undefined
-  if (warning) {
-    lines.push(`Note: ${warning}`)
-  }
   for (const note of plan.connect?.notes ?? []) {
     lines.push(`Note: ${note}`)
   }
-  const connected = instructions !== null || mcp.length > 0 || applied.connect.length > 0
+  const connected = applied.connect.length > 0
   const launchWarning = connected ? readLaunchWarning() : null
   if (launchWarning) {
     lines.push(`Note: ${launchWarning}`)
@@ -682,8 +594,6 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
       workspaceId: workspace.id,
       boardId: options.board ?? null,
       database: describeTarget(target),
-      instructions,
-      mcp,
       columns: applied.columns,
       kept: plan.kept,
       connect: applied.connect,
@@ -691,23 +601,6 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
     },
     text: lines.join('\n'),
   }
-}
-
-function parseInstructions(value: string): InstructionTarget {
-  if (value !== 'claude' && value !== 'agents' && value !== 'none') {
-    throw new CliError(1, `Unknown instructions target "${value}". Use claude, agents or none.`)
-  }
-  return value
-}
-
-function parseMcpClients(value: string): McpClient[] {
-  return value.split(',').map(name => name.trim()).filter(name => name.length > 0).map((name) => {
-    const client = MCP_CLIENTS.find(candidate => candidate === name)
-    if (!client) {
-      throw new CliError(1, `Unknown MCP client "${name}". Use one or more of ${MCP_CLIENTS.join(', ')}.`)
-    }
-    return client
-  })
 }
 
 /** `--key`: a letter and two letters or digits, upper-cased. */

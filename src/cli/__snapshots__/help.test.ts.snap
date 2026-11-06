@@ -3,7 +3,7 @@
 exports[`kanbo --help > explains init 1`] = `
 "Usage: kanbo init [options]
 
-Set up a board for this project and connect your agents (asks step by step)
+Set up a board for this project (asks step by step)
 
 Options:
   --db <path>             the app's database file to find this project in
@@ -26,12 +26,6 @@ Options:
   --migrate               create the board's tables in the Postgres database now
   --agent-url <url>       a separate connection string for agents (with fewer
                           rights)
-  --instructions <agent>  where to write the agent instructions: claude, agents
-                          or none; with --global, a comma-separated list of
-                          claude, codex, gemini, or none
-  --mcp <clients>         add the board's MCP server to claude, codex, cursor
-  --global                set up your agents for every project instead of this
-                          one; creates no board
   --yes                   take the defaults instead of asking
   -h, --help              display help for command
 "
@@ -48,8 +42,8 @@ Options:
   -h, --help                           display help for command
 
 Get started:
-  init [options]                       Set up a board for this project and
-                                       connect your agents (asks step by step)
+  init [options]                       Set up a board for this project (asks
+                                       step by step)
   connect|setup [options] [agents...]  Connect your coding agents to the board:
                                        its MCP server, for every project
                                        (--project: this project only)

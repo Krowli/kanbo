@@ -298,6 +298,30 @@ describe('kanbo connect', () => {
     expect(JSON.parse(read(projectDir, '.cursor', 'mcp.json'))).toEqual(own)
   })
 
+  it('merges into the servers a project already has, and leaves an entry of its own name alone', async () => {
+    writeFileSync(join(projectDir, '.mcp.json'), JSON.stringify({ mcpServers: { other: { type: 'stdio', command: 'other' } } }))
+    mkdirSync(join(projectDir, '.codex'))
+    writeFileSync(join(projectDir, '.codex', 'config.toml'), 'model = "gpt-5"\n')
+
+    await connect('claude', 'codex', '--project', '--yes')
+    const codexAfterFirst = read(projectDir, '.codex', 'config.toml')
+    writeFileSync(join(projectDir, '.mcp.json'), read(projectDir, '.mcp.json').replace('"command": "kanbo"', '"command": "kanbo-fork"'))
+
+    await connect('claude', 'codex', '--project', '--yes')
+
+    expect(JSON.parse(read(projectDir, '.mcp.json')).mcpServers.other).toEqual({ type: 'stdio', command: 'other' })
+    expect(JSON.parse(read(projectDir, '.mcp.json')).mcpServers.kanbo.command).toBe('kanbo-fork')
+    expect(codexAfterFirst).toBe('model = "gpt-5"\n\n[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
+    expect(read(projectDir, '.codex', 'config.toml')).toBe(codexAfterFirst)
+  })
+
+  it('refuses a tool configuration it cannot merge into, and leaves the file alone', async () => {
+    writeFileSync(join(projectDir, '.mcp.json'), '["not an object"]')
+
+    await expect(connect('claude', '--project', '--yes')).rejects.toThrowError(/does not hold a JSON object/)
+    expect(read(projectDir, '.mcp.json')).toBe('["not an object"]')
+  })
+
   it('writes Gemini CLI\'s entry without a type, beside the settings already there', async () => {
     mkdirSync(join(projectDir, '.gemini'))
     writeFileSync(join(projectDir, '.gemini', 'settings.json'), JSON.stringify({ theme: 'Dracula' }))

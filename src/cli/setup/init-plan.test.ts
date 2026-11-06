@@ -5,15 +5,14 @@ import { basename, join, relative } from 'node:path'
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { toIssueView } from '../../domain/issue-view'
 import { suggestCardKey } from '../../domain/key-suggestion'
 import type { PromptDriver, PromptKey } from '../../testing/prompt-driver'
 import { createPromptDriver } from '../../testing/prompt-driver'
 import { readBinding } from '../binding'
 import { CONNECT_LATER_TIP, registerInitCommand } from '../commands/init'
-import { registerPrimeCommand } from '../commands/prime'
-import { registerReadyCommand } from '../commands/ready'
+import { openBoardSession } from '../command'
 import { CancelledError, setUiForTests } from '../ui/ui'
-import { INSTRUCTION_BLOCK } from './instructions'
 
 /** Every file under the folder, by path, with its bytes — what "left exactly as it was" is checked against. */
 function snapshot(root: string): Record<string, string> {
@@ -40,11 +39,18 @@ function snapshot(root: string): Record<string, string> {
  */
 describe('kanbo init with nothing naming a board', () => {
   let projectDir: string
+  let home: string
 
   beforeEach(() => {
     projectDir = mkdtempSync(join(tmpdir(), 'kanbo-init-plan-'))
+    // The agents' own settings live under HOME; no agent program is on this PATH, so none is ever run.
+    home = mkdtempSync(join(tmpdir(), 'kanbo-init-plan-home-'))
     vi.spyOn(process, 'cwd').mockReturnValue(projectDir)
-    for (const name of ['KANBO_DB_PATH', 'KANBO_WORKSPACE_ID', 'KANBO_DATABASE_URL', 'KANBO_ACTOR_KIND', 'CI', 'TERM']) {
+    vi.stubEnv('HOME', home)
+    vi.stubEnv('USERPROFILE', home)
+    vi.stubEnv('CODEX_HOME', join(home, 'codex'))
+    vi.stubEnv('PATH', join(home, 'no-bin'))
+    for (const name of ['KANBO_DB_PATH', 'KANBO_WORKSPACE_ID', 'KANBO_DATABASE_URL', 'KANBO_ACTOR_KIND', 'CLAUDE_CONFIG_DIR', 'CI', 'TERM']) {
       vi.stubEnv(name, undefined)
     }
   })
@@ -54,7 +60,19 @@ describe('kanbo init with nothing naming a board', () => {
     vi.unstubAllEnvs()
     vi.restoreAllMocks()
     rmSync(projectDir, { force: true, recursive: true })
+    rmSync(home, { force: true, recursive: true })
   })
+
+  /** The board of the project, opened for reading, for the length of `body`. */
+  async function onBoard<T>(body: (session: Awaited<ReturnType<typeof openBoardSession>>) => Promise<T>): Promise<T> {
+    const session = await openBoardSession({}, 'read')
+    try {
+      return await body(session)
+    }
+    finally {
+      await session.close()
+    }
+  }
 
   async function kanbo(...argv: string[]): Promise<string> {
     const printed: string[] = []
@@ -64,8 +82,6 @@ describe('kanbo init with nothing naming a board', () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const program = new Command().exitOverride()
     registerInitCommand(program)
-    registerPrimeCommand(program)
-    registerReadyCommand(program)
     await program.parseAsync(argv, { from: 'user' })
     return printed.join('\n')
   }
@@ -77,10 +93,10 @@ describe('kanbo init with nothing naming a board', () => {
     expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))?.dbPath).toBe(join('.kanbo', 'board.db'))
   })
 
-  it('seeds the standard columns, so kanbo prime right after lists them', async () => {
+  it('seeds the standard columns, so the board\'s prime text right after lists them', async () => {
     await kanbo('init', '--yes')
 
-    const prime = await kanbo('prime')
+    const prime = await onBoard(async session => await session.ops.buildPrimeText(session.workspace.id))
 
     expect(prime).toContain('To Do')
     expect(prime).not.toContain('this board has no columns yet')
@@ -99,11 +115,11 @@ describe('kanbo init with nothing naming a board', () => {
 
     expect(printed).toContain('Columns: To Do, In Progress, Done')
     expect(printed).toContain('First card: ABC-001 Check the sensors')
-    const ready = await kanbo('ready', '--json', 'id,title')
-    expect(JSON.parse(ready)).toEqual([{ id: 'ABC-001', title: 'Check the sensors' }])
+    const ready = await onBoard(async session => await session.ops.queryReady({ workspaceId: session.workspace.id }))
+    expect(ready.cards.map(card => ({ id: toIssueView(card).id, title: card.title }))).toEqual([{ id: 'ABC-001', title: 'Check the sensors' }])
   })
 
-  it('in an agent\'s shell without --yes sets up the board but changes no agent file, and says how to', async () => {
+  it('in an agent\'s shell without --yes sets up the board but connects no agent, and says how to', async () => {
     vi.stubEnv('CLAUDECODE', '1')
     const said: string[] = []
     const printed = await kanbo('init', '--connect', 'claude')
@@ -111,11 +127,12 @@ describe('kanbo init with nothing naming a board', () => {
 
     expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(true)
     expect(readdirSync(projectDir)).toEqual(['.kanbo'])
-    expect(said.join('\n')).toContain('Not changing agent files without a yes: run kanbo connect claude --yes')
+    expect(said.join('\n')).toContain('Not connecting agents without a yes: run kanbo connect claude --yes')
     expect(printed).toContain(CONNECT_LATER_TIP)
 
-    await kanbo('init', '--connect', 'claude', '--yes')
-    expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toContain('KANBO_START')
+    const connected = await kanbo('init', '--connect', 'claude', '--yes')
+    expect(connected).toContain('claude mcp add --scope user kanbo --')
+    expect(existsSync(join(projectDir, 'CLAUDE.md'))).toBe(false)
   })
 
   it('takes a list of columns, and puts the ones it does not know as the person\'s own', async () => {
@@ -127,7 +144,6 @@ describe('kanbo init with nothing naming a board', () => {
   it('refuses a column list without To Do, and a card key that cannot be one, before writing anything', async () => {
     await expect(kanbo('init', '--yes', '--columns', 'Doing, Done')).rejects.toThrow('--columns needs To Do')
     await expect(kanbo('init', '--yes', '--key', '1AB')).rejects.toThrow('can\'t be a card key')
-    await expect(kanbo('init', '--yes', '--connect', 'claude', '--instructions', 'claude')).rejects.toThrow('not both')
     expect(readdirSync(projectDir)).toEqual([])
   })
 
@@ -150,7 +166,6 @@ describe('kanbo init with nothing naming a board', () => {
         ['Where should the board live?', ['enter']],
         ['Card numbers start with', ['enter']],
         ['Which columns should the board start with?', ['enter']],
-        ['Keep all of them?', ['enter']],
         ['Add a first card?', ['enter']],
         ['Write these changes?', ['enter']],
       ]
@@ -169,7 +184,6 @@ describe('kanbo init with nothing naming a board', () => {
       'Where should the board live?',
       'Card numbers start with',
       'Which columns should the board start with?',
-      'Keep all of them?',
       'Add a first card?',
       'Write these changes?',
     ]) {
@@ -193,28 +207,16 @@ describe('kanbo init with nothing naming a board', () => {
       const preview = driver.transcript()
       expect(preview).toContain(`create  ${join('.kanbo', 'board.db')}`)
       expect(preview).toContain(`write   ${join('.kanbo', 'binding.json')}`)
-      expect(preview).toContain('write   CLAUDE.md')
+      expect(preview).toContain('run     claude mcp add --scope user kanbo -- kanbo mcp')
+      expect(preview).not.toContain('CLAUDE.md')
     })
 
-    it('writes everything it showed once the person says yes', async () => {
+    it('writes everything it showed once the person says yes, and no instruction file', async () => {
+      writeFileSync(join(projectDir, 'CLAUDE.md'), '# Mine\n')
       await answerUpTo('Write these changes?', ['enter'])
 
       expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(true)
-      expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe(`${INSTRUCTION_BLOCK}\n`)
-    })
-
-    it('leaves a bound project byte for byte as it was on Ctrl-C at the question about an edited block', async () => {
-      await kanbo('init', '--yes', '--instructions', 'claude')
-      const path = join(projectDir, 'CLAUDE.md')
-      writeFileSync(path, readFileSync(path, 'utf8').replace('Take work with', 'Pick work with'))
-      const before = snapshot(projectDir)
-
-      const running = kanbo('init', '--instructions', 'claude').catch((error: unknown) => error)
-      await driver.waitFor('You changed the kanbo section in')
-      driver.press('ctrl-c')
-
-      expect(await running).toBeInstanceOf(CancelledError)
-      expect(snapshot(projectDir)).toEqual(before)
+      expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe('# Mine\n')
     })
   })
 })

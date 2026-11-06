@@ -20,8 +20,6 @@ import { openPostgresBoard } from '../postgres-board'
 import { rememberProjectQuietly } from '../project-registry'
 import type { ConnectOutcome, ConnectPlan } from './connect-plan'
 import { applyConnectPlan, displayPath, explainItem, itemPath, pendingItems } from './connect-plan'
-import type { FileChange, FileOutcome } from './file-change'
-import { applyFileChange } from './file-change'
 import { renameWithRetry } from './fs-retry'
 
 /**
@@ -49,8 +47,6 @@ export interface InitPlan {
   columns: readonly ColumnSpec[] | null
   /** Create the board's tables in the shared Postgres database first, as `kanbo migrate` does. */
   migrate: boolean
-  /** The agent files `--instructions`/`--mcp` asked for, each worked out already; one that already says it has `next: null`. */
-  fileChanges: InitFileChange[]
   /** The agents `--connect` (or the wizard) connects, as `kanbo connect` would; `null` when none. */
   connect: ConnectPlan | null
   /** The title of a card to put in To Do once the board is there. */
@@ -62,14 +58,8 @@ export interface InitPlan {
   kept: string[]
 }
 
-export interface InitFileChange {
-  kind: 'instructions' | 'mcp'
-  change: FileChange
-}
-
 export interface AppliedInitPlan {
   bindingPath: string
-  files: (FileOutcome & { kind: InitFileChange['kind'] })[]
   connect: ConnectOutcome[]
   /** The columns put on the board, in order; empty when it kept the ones it had. */
   columns: string[]
@@ -109,15 +99,10 @@ export function describeInitPlan(plan: InitPlan): string {
     lines.push(`  create  the board's tables in ${maskDatabaseUrl(plan.target.url)}${columns}`)
   }
   lines.push(`  write   ${BINDING_FILE_PATH} (this project uses board ${plan.workspace.name})`)
-  for (const { kind, change } of plan.fileChanges) {
-    if (change.next !== null) {
-      lines.push(`  write   ${relativeTo(plan, change.path)} (${kind === 'instructions' ? 'the kanbo section for agents' : 'the kanbo MCP server'})`)
-    }
-  }
   for (const item of plan.connect ? pendingItems(plan.connect) : []) {
     lines.push(item.kind === 'claude-cli'
       ? `  run     ${explainItem(item)}`
-      : `  write   ${displayPath(plan, itemPath(item))} (${explainItem(item)})`)
+      : `  ${item.kind === 'instructions' ? 'remove ' : 'write  '} ${displayPath(plan, itemPath(item))} (${explainItem(item)})`)
   }
   if (plan.firstCard) {
     lines.push(`  add     a first card to To Do: ${plan.firstCard}`)
@@ -137,7 +122,7 @@ function relativeTo(plan: InitPlan, path: string): string {
 /**
  * Carry the plan out: the board first — the file, or the shared database's
  * tables — so a migration that fails leaves no binding pointing at nothing;
- * then the binding; then the agent files; then the first card.
+ * then the binding; then the agents' settings; then the first card.
  */
 export async function applyInitPlan(plan: InitPlan): Promise<AppliedInitPlan> {
   let columns: string[] = []
@@ -150,10 +135,9 @@ export async function applyInitPlan(plan: InitPlan): Promise<AppliedInitPlan> {
   }
   const bindingPath = writeBinding(plan.projectDir, plan.binding)
   rememberProjectQuietly(plan.projectDir)
-  const files = plan.fileChanges.map(({ kind, change }) => ({ kind, ...applyFileChange(change) }))
   const connect = plan.connect ? applyConnectPlan(plan.connect) : []
   const firstCard = plan.firstCard ? await addFirstCard(plan, plan.firstCard) : null
-  return { bindingPath, files, connect, columns, firstCard }
+  return { bindingPath, connect, columns, firstCard }
 }
 
 /** Create or update the shared board's tables, and put the columns on a board that has none. */

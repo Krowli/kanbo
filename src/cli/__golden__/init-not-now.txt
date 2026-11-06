@@ -42,21 +42,16 @@ kanbo — set up a board for this project
 │  Claude Code (found ~/.claude), Codex (found ~/.codex)
 │
 ◆  Connect them now?
-│  ● Yes — show exactly which files change, then ask
-│  ○ Not now — set up the board only; no other file is touched (later: kanbo
-│  connect)
-│  ○ I'll paste the instructions myself (prints them; nothing is written)
+│  ● Yes — register kanbo's MCP server for them, for every project
+│  ○ Not now — set up the board only (later: kanbo connect)
 │  ↑/↓ to navigate • Enter: confirm
 └
-│  ○ Yes — show exactly which files change, then ask
-│  ● Not now — set up the board only; no other file is touched (later: kanbo
-│  connect)
-│  ○ I'll paste the instructions myself (prints them; nothing is written)
+│  ○ Yes — register kanbo's MCP server for them, for every project
+│  ● Not now — set up the board only (later: kanbo connect)
 │  ↑/↓ to navigate • Enter: confirm
 └
 ◇  Connect them now?
-│  Not now — set up the board only; no other file is touched (later: kanbo
-│  connect)
+│  Not now — set up the board only (later: kanbo connect)
 │
 ◆  Add a first card? (optional — Enter to skip)
 │  e.g. Add a README
@@ -77,7 +72,7 @@ Nothing else is changed.
 ✔ Columns: To Do, In Progress, Done
 ✔ Card numbers: MET-001, MET-002, …
 
-Next: connect your agent with kanbo connect <agent>, or paste kanbo instructions --copy into it.
+Next: connect your agent once: kanbo connect claude (or codex, cursor, gemini).
 See the board: kanbo board · in your browser: kanbo serve
 Run kanbo any time to come back here.
 

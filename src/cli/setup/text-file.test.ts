@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { registerInitCommand } from '../commands/init'
+import { registerConnectCommand } from '../commands/connect'
 import { collectDoctorFindings } from '../doctor'
 import { INSTRUCTION_BLOCK } from './instructions'
 import { planJsonMcpServer, readJsonMcpCommand } from './mcp-config'
@@ -30,7 +30,7 @@ describe('text files in the shape they came in', () => {
   })
 })
 
-describe('kanbo init and doctor on a Windows-edited project', () => {
+describe('kanbo connect and doctor on a Windows-edited project', () => {
   let root: string
   let projectDir: string
 
@@ -58,27 +58,28 @@ describe('kanbo init and doctor on a Windows-edited project', () => {
     rmSync(root, { force: true, recursive: true })
   })
 
-  async function init(): Promise<void> {
+  async function connect(): Promise<void> {
     const program = new Command().exitOverride()
-    registerInitCommand(program)
-    await program.parseAsync(['init', '--file', '--instructions', 'claude', '--mcp', 'claude', '--yes'], { from: 'user' })
+    registerConnectCommand(program)
+    await program.parseAsync(['connect', 'claude', '--yes'], { from: 'user' })
   }
 
-  it('keeps a CRLF CLAUDE.md pure CRLF, and the doctor calls its block current', async () => {
+  it('takes an old section out of a CRLF CLAUDE.md and keeps it pure CRLF, after the doctor named it', async () => {
     const path = join(projectDir, 'CLAUDE.md')
-    writeFileSync(path, '# Project notes\r\n\r\nKeep it tidy.\r\n')
+    mkdirSync(join(projectDir, '.kanbo'))
+    writeFileSync(path, `# Project notes\r\n\r\nKeep it tidy.\r\n\r\n${INSTRUCTION_BLOCK.replaceAll('\n', '\r\n')}\r\n`)
 
-    await init()
+    const findings = await collectDoctorFindings({ cwd: projectDir, self: null, handshakeTimeoutMs: 1_000 })
+    expect(findings.find(finding => finding.detail.startsWith(path))).toMatchObject({ check: 'instructions', status: 'warn' })
+
+    await connect()
 
     const after = readFileSync(path, 'utf8')
     expect(after).not.toMatch(LONE_LF)
-    expect(after).toBe(`# Project notes\r\n\r\nKeep it tidy.\r\n\r\n${INSTRUCTION_BLOCK.replaceAll('\n', '\r\n')}\r\n`)
+    expect(after).toBe('# Project notes\r\n\r\nKeep it tidy.\r\n')
 
-    const findings = await collectDoctorFindings({ cwd: projectDir, self: null, handshakeTimeoutMs: 1_000 })
-    expect(findings.find(finding => finding.detail.startsWith(path))).toMatchObject({ check: 'instructions', status: 'ok' })
-
-    // A second run finds the block current too, and leaves the file alone.
-    await init()
+    // A second run finds nothing to remove, and leaves the file alone.
+    await connect()
     expect(readFileSync(path, 'utf8')).toBe(after)
   })
 

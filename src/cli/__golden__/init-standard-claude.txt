@@ -36,32 +36,12 @@ kanbo — set up a board for this project
 │  Claude Code (found ~/.claude)
 │
 ◆  Connect them now?
-│  ● Yes — show exactly which files change, then ask
-│  ○ Not now — set up the board only; no other file is touched (later: kanbo
-│  connect)
-│  ○ I'll paste the instructions myself (prints them; nothing is written)
+│  ● Yes — register kanbo's MCP server for them, for every project
+│  ○ Not now — set up the board only (later: kanbo connect)
 │  ↑/↓ to navigate • Enter: confirm
 └
 ◇  Connect them now?
-│  Yes — show exactly which files change, then ask
-│
-◆  These files change so your agents know the board. Keep all of them?
-│  ◼ CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs
-│   kanbo prime before a task)
-│  ◼ .mcp.json (lets Claude Code call the board's tools in this project)
-│  ↑/↓ to navigate • Space: select • Enter: confirm
-└
-◇  These files change so your agents know the board. Keep all of them?
-│  CLAUDE.md, .mcp.json
-The kanbo section your agents get:
-
-<!-- KANBO_START v3 h=38d0418d -->
-## Kanbo board
-
-This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
-Take work with `kanbo claim`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
-<!-- KANBO_END -->
-
+│  Yes — register kanbo's MCP server for them, for every project
 │
 ◆  Add a first card? (optional — Enter to skip)
 │  e.g. Add a README
@@ -71,8 +51,7 @@ Take work with `kanbo claim`. Only a person approves a card, and only a person t
 kanbo init will:
   create  .kanbo/board.db (a board file of this project's own, with the columns Backlog, To Do, In Progress, In Review, Done, Canceled)
   write   .kanbo/binding.json (this project uses board WST)
-  write   CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs kanbo prime before a task)
-  write   .mcp.json (lets Claude Code call the board's tools in this project)
+  run     claude mcp add --scope user kanbo -- kanbo mcp
   add     a first card to To Do: Write the README
 Nothing else is changed.
 │
@@ -84,8 +63,7 @@ Nothing else is changed.
 ✔ Board: .kanbo/board.db
 ✔ Columns: Backlog, To Do, In Progress, In Review, Done, Canceled
 ✔ Card numbers: WST-001, WST-002, …
-✔ Claude Code: CLAUDE.md (written)
-✔ Claude Code: .mcp.json (written)
+✔ Claude Code: <home>/.claude.json (ran claude mcp add --scope user kanbo -- kanbo mcp)
 ✔ First card: WST-001 Write the README
 ! kanbo runs from npx; agents can't start `kanbo mcp` until it's installed: npm install -g kanbo-cli
 
@@ -99,5 +77,3 @@ Run kanbo any time to come back here.
 .kanbo/.gitignore
 .kanbo/binding.json
 .kanbo/board.db
-.mcp.json
-CLAUDE.md

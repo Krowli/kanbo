@@ -12,32 +12,12 @@ This project already has a board: .kanbo/board.db (cards WEA-001, WEA-002, …).
 │  Claude Code (found ~/.claude)
 │
 ◆  Connect them now?
-│  ● Yes — show exactly which files change, then ask
-│  ○ Not now — set up the board only; no other file is touched (later: kanbo
-│  connect)
-│  ○ I'll paste the instructions myself (prints them; nothing is written)
+│  ● Yes — register kanbo's MCP server for them, for every project
+│  ○ Not now — set up the board only (later: kanbo connect)
 │  ↑/↓ to navigate • Enter: confirm
 └
 ◇  Connect them now?
-│  Yes — show exactly which files change, then ask
-│
-◆  These files change so your agents know the board. Keep all of them?
-│  ◼ CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs
-│   kanbo prime before a task)
-│  ◼ .mcp.json (lets Claude Code call the board's tools in this project)
-│  ↑/↓ to navigate • Space: select • Enter: confirm
-└
-◇  These files change so your agents know the board. Keep all of them?
-│  CLAUDE.md, .mcp.json
-The kanbo section your agents get:
-
-<!-- KANBO_START v3 h=38d0418d -->
-## Kanbo board
-
-This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
-Take work with `kanbo claim`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
-<!-- KANBO_END -->
-
+│  Yes — register kanbo's MCP server for them, for every project
 │
 ◆  Add a first card? (optional — Enter to skip)
 │  e.g. Add a README
@@ -46,8 +26,7 @@ Take work with `kanbo claim`. Only a person approves a card, and only a person t
 │
 kanbo init will:
   write   .kanbo/binding.json (this project uses board WEA)
-  write   CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs kanbo prime before a task)
-  write   .mcp.json (lets Claude Code call the board's tools in this project)
+  run     claude mcp add --scope user kanbo -- kanbo mcp
 Nothing else is changed.
 │
 ◆  Write these changes?
@@ -57,8 +36,7 @@ Nothing else is changed.
 │  Yes
 ✔ Board: .kanbo/board.db (kept as it is)
 ✔ Card numbers: WEA-001, WEA-002, …
-✔ Claude Code: CLAUDE.md (written)
-✔ Claude Code: .mcp.json (written)
+✔ Claude Code: <home>/.claude.json (ran claude mcp add --scope user kanbo -- kanbo mcp)
 
 Next: start Claude Code in this folder and say "take the next card from kanbo".
 See the board: kanbo board · in your browser: kanbo serve
@@ -70,5 +48,3 @@ Run kanbo any time to come back here.
 .kanbo/.gitignore
 .kanbo/binding.json
 .kanbo/board.db
-.mcp.json
-CLAUDE.md

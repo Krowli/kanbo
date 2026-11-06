@@ -12,7 +12,6 @@ import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import { readBinding } from './binding'
 import { registerInitCommand } from './commands/init'
-import { INSTRUCTION_BLOCK } from './setup/instructions'
 
 /**
  * The one way to interrupt a migration half-way from outside it. Off for every
@@ -186,72 +185,78 @@ describe('kanbo init', () => {
     expect(read('.other-tool', 'worktrees.json')).toBe('{}\n')
   })
 
-  it('writes the instruction block once, and changes nothing the second time', async () => {
-    writeFileSync(join(projectDir, 'CLAUDE.md'), '# Project\n\nOur own instructions.\n')
+  it('writes no agent file and registers no server on a plain init', async () => {
+    await run()
 
-    await run(['--instructions', 'claude'])
-    const afterFirst = read('CLAUDE.md')
-
-    await run(['--instructions', 'claude'])
-
-    expect(afterFirst).toContain('Our own instructions.')
-    expect(afterFirst).toContain(INSTRUCTION_BLOCK)
-    expect(afterFirst.match(/KANBO_START/g)).toHaveLength(1)
-    expect(read('CLAUDE.md')).toBe(afterFirst)
-  })
-
-  it('leaves the instruction files alone when told to write to neither', async () => {
-    await run(['--instructions', 'none'])
-
-    expect(existsSync(join(projectDir, 'CLAUDE.md'))).toBe(false)
-    expect(existsSync(join(projectDir, 'AGENTS.md'))).toBe(false)
-  })
-
-  it('registers the MCP server only with the tools --mcp names', async () => {
-    await run(['--mcp', 'claude'])
-
-    expect(JSON.parse(read('.mcp.json'))).toEqual({
-      mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
-    })
+    for (const file of ['CLAUDE.md', 'AGENTS.md', 'GEMINI.md', '.mcp.json']) {
+      expect(existsSync(join(projectDir, file))).toBe(false)
+    }
     expect(existsSync(join(projectDir, '.codex', 'config.toml'))).toBe(false)
     expect(existsSync(join(projectDir, '.cursor', 'mcp.json'))).toBe(false)
   })
 
-  it('touches no tool configuration without the flag', async () => {
-    await run()
-
-    expect(existsSync(join(projectDir, '.mcp.json'))).toBe(false)
-    expect(existsSync(join(projectDir, '.codex', 'config.toml'))).toBe(false)
+  it('no longer takes --instructions, --mcp or --global', async () => {
+    for (const flag of [['--instructions', 'claude'], ['--mcp', 'claude'], ['--global']]) {
+      await expect(run(flag)).rejects.toThrowError(expect.objectContaining({ exitCode: 1 }))
+    }
+    expect(existsSync(join(projectDir, '.kanbo'))).toBe(false)
   })
 
-  it('merges into the servers a project already has, and leaves an entry of its own name alone', async () => {
-    writeFileSync(
-      join(projectDir, '.mcp.json'),
-      JSON.stringify({ mcpServers: { other: { type: 'stdio', command: 'other' } } }),
-    )
-    mkdirSync(join(projectDir, '.codex'))
-    writeFileSync(join(projectDir, '.codex', 'config.toml'), 'model = "gpt-5"\n')
+  describe('--connect', () => {
+    let home: string
 
-    await run(['--mcp', 'claude,codex'])
-    const codexAfterFirst = read('.codex', 'config.toml')
-    writeFileSync(join(projectDir, '.mcp.json'), read('.mcp.json').replace('"command": "kanbo"', '"command": "kanbo-fork"'))
+    beforeEach(() => {
+      home = mkdtempSync(join(tmpdir(), 'kanbo-init-home-'))
+      vi.stubEnv('HOME', home)
+      vi.stubEnv('USERPROFILE', home)
+      vi.stubEnv('CODEX_HOME', join(home, 'codex'))
+      vi.stubEnv('PATH', join(home, 'no-bin'))
+    })
 
-    await run(['--mcp', 'claude,codex'])
+    afterEach(() => {
+      rmSync(home, { force: true, recursive: true })
+    })
 
-    expect(JSON.parse(read('.mcp.json')).mcpServers.other).toEqual({ type: 'stdio', command: 'other' })
-    expect(JSON.parse(read('.mcp.json')).mcpServers.kanbo.command).toBe('kanbo-fork')
-    expect(codexAfterFirst).toBe('model = "gpt-5"\n\n[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
-    expect(read('.codex', 'config.toml')).toBe(codexAfterFirst)
-  })
+    it('registers the server in the person\'s own settings, as kanbo connect does, and writes no instruction file', async () => {
+      await run(['--connect', 'cursor,codex'])
 
-  it('reads a quoted Codex table as the registration it is', async () => {
-    const quoted = '[mcp_servers."kanbo"]\ncommand = "kanbo-fork"\nargs = ["mcp"]\n'
-    mkdirSync(join(projectDir, '.codex'))
-    writeFileSync(join(projectDir, '.codex', 'config.toml'), quoted)
+      expect(JSON.parse(readFileSync(join(home, '.cursor', 'mcp.json'), 'utf8'))).toEqual({
+        mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
+      })
+      expect(readFileSync(join(home, 'codex', 'config.toml'), 'utf8'))
+        .toBe('[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
+      expect(existsSync(join(projectDir, 'AGENTS.md'))).toBe(false)
+      expect(existsSync(join(projectDir, '.cursor'))).toBe(false)
+    })
 
-    await run(['--mcp', 'codex'])
+    it('does nothing to the agents without a yes, and says how to connect them', async () => {
+      const errors: string[] = []
+      vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
+        errors.push(String(line))
+      })
+      const program = new Command().exitOverride()
+      registerInitCommand(program)
+      vi.spyOn(console, 'log').mockImplementation(() => {})
 
-    expect(read('.codex', 'config.toml')).toBe(quoted)
+      await program.parseAsync(['init', '--db', board.path, '--workspace', WORKSPACE_ID, '--connect', 'cursor'], { from: 'user' })
+
+      expect(errors).toContain('Not connecting agents without a yes: run kanbo connect cursor --yes')
+      expect(existsSync(join(home, '.cursor', 'mcp.json'))).toBe(false)
+      expect(existsSync(join(projectDir, '.kanbo', 'binding.json'))).toBe(true)
+    })
+
+    it('puts no connection string in any file an agent reads', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      await runExternal(['--database-url', DATABASE_URL, '--agent-url', AGENT_URL, '--connect', 'cursor,codex'])
+
+      // The binding is the one file `init` keeps out of git, and the one place
+      // the string is written down. `kanbo mcp` resolves the board from it.
+      for (const file of [readFileSync(join(home, '.cursor', 'mcp.json'), 'utf8'), readFileSync(join(home, 'codex', 'config.toml'), 'utf8')]) {
+        expect(file).not.toContain('secret')
+        expect(file).not.toContain('board.example')
+      }
+    })
   })
 
   it('writes the external board and the card key into the binding', async () => {
@@ -317,7 +322,7 @@ describe('kanbo init', () => {
     await runExternal(['--database-url', DATABASE_URL, '--agent-url', AGENT_URL, '--board', 'board-1'])
 
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    await runExternal(['--instructions', 'none'])
+    await runExternal([])
 
     expect(readBinding(join(projectDir, '.kanbo', 'binding.json'))).toEqual({
       schemaVersion: 1,
@@ -357,42 +362,13 @@ describe('kanbo init', () => {
       warnings.push(String(line))
     })
 
-    await runExternal(['--database-url', DATABASE_URL, '--mcp', 'claude'])
+    await runExternal(['--database-url', DATABASE_URL])
 
     expect(warnings).toHaveLength(1)
     expect(warnings[0]).toContain('kanbo roles apply')
     expect(warnings[0]).toContain('--agent-url')
     // The warning is about the string, and never says it.
     expect(warnings[0]).not.toContain('secret')
-  })
-
-  it('puts no connection string in a file the project shares', async () => {
-    vi.spyOn(console, 'error').mockImplementation(() => {})
-
-    await runExternal(['--database-url', DATABASE_URL, '--agent-url', AGENT_URL, '--mcp', 'claude,codex,cursor'])
-
-    // `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are committed;
-    // the binding is the one file `init` keeps out of git, and the one place
-    // the string is written down. `kanbo mcp` resolves the board from it.
-    expect(JSON.parse(read('.mcp.json'))).toEqual({
-      mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
-    })
-    expect(JSON.parse(read('.cursor', 'mcp.json'))).toEqual({
-      mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
-    })
-    expect(read('.codex', 'config.toml'))
-      .toBe('[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
-    for (const file of [read('.mcp.json'), read('.codex', 'config.toml'), read('.cursor', 'mcp.json')]) {
-      expect(file).not.toContain('secret')
-      expect(file).not.toContain('board.example')
-    }
-  })
-
-  it('refuses a tool configuration it cannot merge into, and leaves the file alone', async () => {
-    writeFileSync(join(projectDir, '.mcp.json'), '["not an object"]')
-
-    await expect(run(['--mcp', 'claude'])).rejects.toThrowError(/does not hold a JSON object/)
-    expect(read('.mcp.json')).toBe('["not an object"]')
   })
 
   describe('--file: a board file of this project\'s own', () => {
