@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Does a real coding agent use kanbo the way its instructions say? Runs Claude Code
-// (and Codex, when asked) headless against a throwaway project with a kanbo board,
+// (and Codex, when asked) headless against a throwaway project with a kanbo board
+// that the agent reaches through the MCP server alone (the one variant, `mcp`),
 // then scores what it did from the board and from its transcript.
 //
-//   node evals/agent-eval.mjs                                  # every scenario, variant x3, Claude Code
+//   node evals/agent-eval.mjs                                  # every scenario, x3, Claude Code
 //   node evals/agent-eval.mjs --scenarios take-next --n 1      # one scenario, one run
-//   node evals/agent-eval.mjs --agents claude,codex --variants full
+//   node evals/agent-eval.mjs --agents claude,codex --variants mcp
 //   node evals/agent-eval.mjs --summary evals/results/2026-09-28.json   # markdown from a results file
 //
 // Costs money: every run is a real agent session. See evals/README.md.
@@ -24,7 +25,7 @@ const KEY = 'TST'
 function parseArgs(argv) {
   const o = {
     agents: ['claude'],
-    variants: ['full', 'mcp', 'instructions'],
+    variants: ['mcp'],
     scenarios: null,
     n: 3,
     model: 'sonnet',
@@ -310,8 +311,7 @@ function claudeCommand(o, project, variant) {
   ]
   if (o.model)
     args.push('--model', o.model)
-  if (variant !== 'instructions')
-    args.push('--mcp-config', join(project, '.mcp.json'))
+  args.push('--mcp-config', join(project, '.mcp.json'))
   return { cmd: 'claude', args }
 }
 
@@ -325,8 +325,7 @@ function codexCommand(o, project, variant) {
   // server kanbo connect wrote there is handed over on the command line.
   // codex exec never asks for approval, so an MCP tool that needs one is refused
   // unless the server's tools are approved up front.
-  if (variant !== 'instructions')
-    args.push('-c', 'mcp_servers.kanbo.command="kanbo"', '-c', 'mcp_servers.kanbo.args=["mcp"]', '-c', 'mcp_servers.kanbo.default_tools_approval_mode="approve"')
+  args.push('-c', 'mcp_servers.kanbo.command="kanbo"', '-c', 'mcp_servers.kanbo.args=["mcp"]', '-c', 'mcp_servers.kanbo.default_tools_approval_mode="approve"')
   args.push(null)
   return { cmd: 'codex', args }
 }
@@ -501,10 +500,6 @@ function makeProject(bins, scenario, variant, agent) {
   k('init', '--yes', '--columns', 'standard', '--key', KEY)
   const facts = SCENARIOS[scenario].seed(k, dir)
   const connect = ['connect', agent, '--project', '--yes']
-  if (variant === 'mcp')
-    connect.push('--no-instructions')
-  if (variant === 'instructions')
-    connect.push('--no-mcp')
   run('kanbo', connect, { cwd: dir, env: cleanEnv(bins.test, { KANBO_ACTOR_KIND: 'person' }) })
   run('git', ['add', '-A'], { cwd: dir })
   run('git', ['commit', '-qm', 'kanbo board'], { cwd: dir, allowFail: true })

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // End-to-end check of what users install: pack kanbo, install the tarball
 // globally into a temporary prefix, and drive the installed `kanbo` through a
-// new project — board, card, agent connection, MCP handshake, `serve`,
+// new project — board, first card, agent connection, MCP handshake, `serve`,
 // `doctor`, `uninstall`. Plain Node, the same on every OS.
 //
 // With --upgrade it checks an upgrade instead: the published kanbo-cli@0.2.1
@@ -326,26 +326,23 @@ async function main() {
   const bare = kanbo([])
   check(bare.all.includes('kanbo init --yes'), 'bare kanbo does not mention kanbo init --yes', bare.all)
 
-  step('c. kanbo init --yes --columns simple --key SMK')
-  kanbo(['init', '--yes', '--columns', 'simple', '--key', KEY])
+  step('c. kanbo init --yes --columns simple --key SMK --first-card')
+  kanbo(['init', '--yes', '--columns', 'simple', '--key', KEY, '--first-card', 'smoke card'])
   const boardFile = join(project, '.kanbo', 'board.db')
   check(existsSync(boardFile), `no board file at ${boardFile}`)
 
-  step('d. kanbo prime')
-  const prime = kanbo(['prime'])
-  check(prime.stdout.includes('To Do'), 'kanbo prime does not list To Do', prime.all)
+  step('d. kanbo board')
+  const board = kanbo(['board'])
+  check(board.stdout.includes('To Do'), 'kanbo board does not list To Do', board.all)
 
-  step('e. a card, and kanbo ready')
-  kanbo(['card', 'create', '--description', 'smoke card'])
-  const ready = kanbo(['ready', '--json', 'id'])
-  check(ready.stdout.includes(`"${KEY}-001"`), `kanbo ready does not list ${KEY}-001`, ready.all)
-  note(ready.stdout.trim().replace(/\s+/g, ' '))
+  step('e. the first card is on the board')
+  const cards = kanbo(['board', '--json'])
+  check(cards.stdout.includes(`"${KEY}-001"`), `kanbo board does not list ${KEY}-001`, cards.all)
+  note(`${KEY}-001 is in To Do`)
 
   step('f. kanbo connect claude --project --yes')
   const connect = kanbo(['connect', 'claude', '--project', '--yes'])
-  const claudeMd = readText(join(project, 'CLAUDE.md'))
-  const block = BLOCK_PATTERN.exec(claudeMd)
-  check(block !== null && /(^|\s)v3(\s|$)/.test(block[1]), 'CLAUDE.md has no v3 kanbo block', claudeMd)
+  check(!existsSync(join(project, 'CLAUDE.md')), 'kanbo connect wrote a CLAUDE.md')
   const mcpJson = JSON.parse(readText(join(project, '.mcp.json')))
   const projectEntry = mcpJson.mcpServers?.kanbo
   check(projectEntry !== undefined, '.mcp.json has no kanbo entry', JSON.stringify(mcpJson, null, 2))
@@ -389,11 +386,7 @@ async function main() {
   }
   note(`${list.length} findings, ${fails.length} fail`)
 
-  step('j. kanbo instructions short matches the CLAUDE.md block')
-  const short = kanbo(['instructions', 'short']).stdout.trim()
-  check(short === block[2].trim(), 'kanbo instructions short differs from the block in CLAUDE.md', `--- instructions short\n${short}\n--- CLAUDE.md block\n${block[2]}`)
-
-  step('k. kanbo uninstall --yes')
+  step('j. kanbo uninstall --yes')
   kanbo(['uninstall', '--yes'])
   const claudeAfter = existsSync(join(project, 'CLAUDE.md')) ? readText(join(project, 'CLAUDE.md')) : ''
   check(!claudeAfter.includes('KANBO_START'), 'CLAUDE.md still has the kanbo block', claudeAfter)

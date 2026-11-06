@@ -21,7 +21,7 @@ When a client connects, the server sends `instructions` in its MCP initialize re
 - if a tool answers that this folder has no kanbo board, leave the board alone for this session: only a person sets one up;
 - the full manifest is the resource `kanbo://capabilities.md`.
 
-The text is static (about 2k characters) and names no column, so it is valid before a board is resolved; the board's own columns come from `kanbo_prime`. Its rule sentences are the same ones `kanbo_prime` uses. `kanbo/mcp` exports it as `KANBO_MCP_INSTRUCTIONS`; `createKanboMcpServer` sends it, `registerKanboTools` does not — a server of your own decides its own instructions.
+The text is static (about 1.8k characters) and names no column, so it is valid before a board is resolved; the board's own columns come from `kanbo_prime`. Its rule sentences are the same ones `kanbo_prime` uses. `kanbo/mcp` exports it as `KANBO_MCP_INSTRUCTIONS`; `createKanboMcpServer` sends it, `registerKanboTools` does not — a server of your own decides its own instructions.
 
 `kanbo mcp` sends them in a folder with no usable board too, so a server registered once for every project never shows up as a broken connection: the server starts, and every tool answers "This folder has no kanbo board yet. Ask a person to run kanbo here." until a board is set up in that folder. A folder whose board cannot be opened right now — the database `KANBO_DB_PATH` names is older than this kanbo, or knows no project for the folder — starts the same way, and each tool answers with the reason ("The app's database is older than this kanbo…", "Could not tell which project this is…"); every call looks again. `createDbTransport` itself is unchanged and still fails when no board resolves.
 
