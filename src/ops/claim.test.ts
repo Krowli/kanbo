@@ -200,4 +200,27 @@ describe.each(BOARD_STORE_FACTORIES)('claiming a card on $name', (factory) => {
     expect(await store.runs.countByIssue(first.id)).toBe(0)
     expect(await store.issues.findById(first.id)).toMatchObject({ statusId: first.statusId, statusLine: null })
   })
+
+  it('locks the target column before the card even when the column has no WIP limit', async () => {
+    const first = await cardIn('First', 'To Do')
+    const inProgress = await requireColumn(store, WORKSPACE.id, 'In Progress')
+    const locks: string[] = []
+    const spied: BoardStore = {
+      ...store,
+      transaction: async (fn, options) => await store.transaction(async (tx) => {
+        const lockColumn = tx.statuses.lockById.bind(tx.statuses)
+        const lockCard = tx.issues.lockById.bind(tx.issues)
+        return await fn({
+          ...tx,
+          statuses: { ...tx.statuses, lockById: async (id: string) => (locks.push(`column:${id}`), await lockColumn(id)) },
+          issues: { ...tx.issues, lockById: async (id: string) => (locks.push(`card:${id}`), await lockCard(id)) },
+        })
+      }, options),
+    }
+
+    await claimCard(spied, { workspaceId: WORKSPACE.id, run: { agentName: 'claude' } }, AGENT)
+
+    expect(locks.indexOf(`column:${inProgress.id}`)).toBeGreaterThanOrEqual(0)
+    expect(locks.indexOf(`column:${inProgress.id}`)).toBeLessThan(locks.indexOf(`card:${first.id}`))
+  })
 })

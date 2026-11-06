@@ -1,7 +1,6 @@
 import type { BoardStore } from '../board-store'
 import { READY_COLUMN_SLUG } from '../domain/column-templates'
 import { BoardError } from '../domain/errors'
-import { readFlowRules } from '../domain/flow-rules'
 import { normalizeStatusName } from '../domain/status-name'
 import type { Issue, IssueRun, IssueStatus } from '../sqlite/schema'
 import type { BoardCardWrite } from './cards'
@@ -43,9 +42,9 @@ export type CardNotReadyReason = 'run_active' | 'waiting_for_person' | 'not_in_t
  * from its first read (`begin immediate`), so the second claimer reads the
  * board after the first one's commit. On Postgres the picked card's row is
  * locked (`select … for update`): a claimer that waited on the lock finds the
- * card taken, and moves on to the next ready one. When the target has a WIP
- * limit its row is locked first, in the order a move into it locks (column,
- * then card), so a claim and a move never wait on each other in a circle.
+ * card taken, and moves on to the next ready one. The target's row is locked
+ * first, always, in the order a move into it locks (column, then card), so a
+ * claim and a move never wait on each other in a circle.
  */
 export async function claimCard<TStore extends BoardStore>(
   store: TStore,
@@ -59,9 +58,7 @@ export async function claimCard<TStore extends BoardStore>(
     if (!target) {
       throw new BoardError('issue_status_not_found', { workspaceId: input.workspaceId, category: 'started' })
     }
-    if (readFlowRules(target).wipLimit !== null) {
-      await tx.statuses.lockById(target.id)
-    }
+    await tx.statuses.lockById(target.id)
     const toDo = columns.find(column => normalizeStatusName(column.name) === READY_COLUMN_SLUG) ?? null
     const card = input.issueId === undefined
       ? await takeFirstReady(tx, input.workspaceId, toDo)
