@@ -2,7 +2,7 @@ import type { KanboDbTransport, KanboDbTransportInput } from '../mcp/db-transpor
 import { createDbTransport } from '../mcp/db-transport'
 import type { KanboToolTransport } from '../mcp/transport'
 import { BoardNotFoundError, DATABASE_NOT_FOUND_AGENT_MESSAGE } from './db-target'
-import { CliError, EXIT_NOT_RESOLVED } from './output'
+import { CliError, EXIT_NOT_RESOLVED, EXIT_SCHEMA_OUTDATED } from './output'
 import type { AvailableUpdate } from './update-check'
 import { describeUpdateForAgent } from './update-check'
 
@@ -10,16 +10,20 @@ import { describeUpdateForAgent } from './update-check'
  * The board `kanbo mcp` serves — or, in a folder with none yet, a stand-in
  * that finds it later.
  *
- * A person who registers kanbo in their own agent settings has it started in
- * every folder they open, and most of those have no board. A server that
- * refused to start there would show up in the agent as a broken connection. So
- * it starts anyway: the client connects and reads the instructions, and every
- * tool answers that there is no board here. Each call looks again, so a board
- * a person creates in this folder while the agent is running is picked up on
- * the next call, and held from then on.
+ * The server is registered once, in the person's own agent settings, so every
+ * project they open starts it — and most of those folders cannot give it a
+ * board: there is none yet, the database `KANBO_DB_PATH` names is older than
+ * this kanbo, or it knows no project for the folder. A server that refused to
+ * start there would show up in the agent's client as a broken connection. So
+ * it starts anyway: the client connects and reads the instructions, and each
+ * tool says why there is no board here. Each call looks again, so a board a
+ * person creates in this folder while the agent is running is picked up on the
+ * next call, and held from then on.
  *
- * Any other failure to open the board — a file that is not a board, a database
- * that does not answer — is not "no board" and still stops the server at once.
+ * "No board" answers with one fixed message; the two other reasons answer with
+ * the error's own message, unchanged. Any other failure to open the board — a
+ * file that is not a board, a database that does not answer — still stops the
+ * server at once.
  */
 
 /** What every tool answers in a folder with no board. */
@@ -75,7 +79,7 @@ function createDeferredBoard(input: KanboDbTransportInput): KanboDbTransport {
       },
       (error: unknown) => {
         opening = null
-        throw isNoBoard(error) ? new CliError(EXIT_NOT_RESOLVED, NO_BOARD_FOR_AGENT_MESSAGE) : error
+        throw error instanceof BoardNotFoundError ? new CliError(EXIT_NOT_RESOLVED, NO_BOARD_FOR_AGENT_MESSAGE) : error
       },
     )
     return await opening
@@ -98,9 +102,14 @@ function createDeferredBoard(input: KanboDbTransportInput): KanboDbTransport {
   }
 }
 
-/** The failure that means nothing names a board here — not a board that failed to open. */
+/**
+ * The failures that mean this folder has no usable board for now: nothing
+ * names one, the host database is older than this kanbo, or no project of it
+ * matches the folder. Not a board that failed to open.
+ */
 function isNoBoard(error: unknown): boolean {
   return error instanceof BoardNotFoundError
+    || (error instanceof CliError && (error.exitCode === EXIT_SCHEMA_OUTDATED || error.exitCode === EXIT_NOT_RESOLVED))
 }
 
 /**

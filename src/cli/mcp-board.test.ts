@@ -7,6 +7,8 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { TestBoardDatabase } from '../testing/board-database'
+import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import { KANBO_MCP_INSTRUCTIONS } from '../mcp/instructions'
 import { createKanboMcpServer } from '../mcp/server'
 import { registerInitCommand } from './commands/init'
@@ -95,6 +97,64 @@ describe('kanbo mcp in a folder with no board', () => {
     finally {
       await close()
     }
+  })
+})
+
+/** A host app's database that `KANBO_DB_PATH` names but this kanbo cannot use for the folder. */
+describe('kanbo mcp when KANBO_DB_PATH names a database it cannot use', () => {
+  let projectDir: string
+  let host: TestBoardDatabase
+
+  beforeEach(async () => {
+    projectDir = mkdtempSync(join(tmpdir(), 'kanbo-mcp-host-'))
+    host = await createTestBoardDatabase()
+    seedHostWorkspace(host, 'other-workspace', 'OTH')
+    vi.spyOn(process, 'cwd').mockReturnValue(projectDir)
+    for (const name of ['KANBO_WORKSPACE_ID', 'KANBO_DATABASE_URL', 'KANBO_ACTOR_KIND', 'CI', 'TERM']) {
+      vi.stubEnv(name, undefined)
+    }
+    vi.stubEnv('KANBO_DB_PATH', host.path)
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+    host.dispose()
+    rmSync(projectDir, { force: true, recursive: true })
+  })
+
+  async function answerOf(name: string): Promise<{ isError: boolean | undefined, text: string }> {
+    const board = await openMcpBoard({ actor: { kind: 'external', id: 'tester' } })
+    const server = createKanboMcpServer(board, { includeRunTools: true })
+    const [clientChannel, serverChannel] = InMemoryTransport.createLinkedPair()
+    const client = new Client({ name: 'host-test', version: '0.0.0' })
+    await Promise.all([client.connect(clientChannel), server.connect(serverChannel)])
+    try {
+      const result = await client.callTool({ name, arguments: {} })
+      return { isError: result.isError as boolean | undefined, text: (result.content as { text: string }[]).map(part => part.text).join('\n') }
+    }
+    finally {
+      await client.close()
+      await board.close()
+    }
+  }
+
+  it('starts, and each tool says the database is older than this kanbo', async () => {
+    host.connection.exec('alter table issue_statuses drop column wip_limit')
+    host.connection.exec('alter table issue_statuses drop column allowed_from')
+    vi.stubEnv('KANBO_WORKSPACE_ID', 'other-workspace')
+
+    const answer = await answerOf('kanbo_prime')
+
+    expect(answer.isError).toBe(true)
+    expect(answer.text).toContain('The app\'s database is older than this kanbo')
+  })
+
+  it('starts, and each tool says which project it could not tell when the database knows none for the folder', async () => {
+    const answer = await answerOf('kanbo_prime')
+
+    expect(answer.isError).toBe(true)
+    expect(answer.text).toContain('Could not tell which project this is')
   })
 })
 

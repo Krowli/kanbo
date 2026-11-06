@@ -44,6 +44,11 @@ describe('the kanbo MCP server instructions', () => {
     }
   })
 
+  it('tell an agent to finish its run and to leave the board alone in a folder without one', () => {
+    expect(KANBO_MCP_INSTRUCTIONS).toContain('kanbo_run_finish')
+    expect(KANBO_MCP_INSTRUCTIONS).toContain('no kanbo board')
+  })
+
   it('tell an agent to claim the card it takes, and prime says the same rule', () => {
     expect(KANBO_MCP_INSTRUCTIONS).toContain('claim the card with `kanbo_card_claim` before you start')
     expect(BOARD_RULES).toContain(CLAIM_RULE)
