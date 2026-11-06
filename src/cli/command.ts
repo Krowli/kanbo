@@ -231,7 +231,8 @@ export function parseCalendarDay(value: string, end: boolean): number {
     return Number(value)
   }
   const day = /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : Number.NaN
-  if (Number.isNaN(day)) {
+  // Date.parse rolls 2026-02-30 over to March; a day that does not print back as typed is not a day.
+  if (Number.isNaN(day) || new Date(day).toISOString().slice(0, 10) !== value) {
     throw new CliError(1, `Expected a date as YYYY-MM-DD or unix seconds, got "${value}".`)
   }
   return day / 1000 + (end ? DAY_SECONDS - 1 : 0)

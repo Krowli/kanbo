@@ -18,11 +18,12 @@ import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import { METRICS_HISTORY, METRICS_NOW, writeMetricsHistory } from '../testing/fixtures/board-metrics'
 import { writeBinding } from './binding'
+import { parseCalendarDay } from './command'
 import { registerCardCommands } from './commands/card'
 import { registerReadyCommand } from './commands/ready'
 import { registerRunCommands } from './commands/run'
 import { registerSprintCommands } from './commands/sprint'
-import { registerStatsCommand } from './commands/stats'
+import { defaultStatsFrom, registerStatsCommand } from './commands/stats'
 import { describeFailure } from './failure'
 
 const WORKSPACE: BoardWorkspaceIdentity = { id: 'workspace', identifier: 'WOR', name: 'Workspace' }
@@ -649,6 +650,25 @@ describe('board commands', () => {
 
       const backwards = await run(['stats', '--from', '2026-01-10', '--to', '2026-01-01']).then(() => undefined, (error: unknown) => error)
       expect(describeFailure(backwards).message).toContain('The range starts after it ends')
+    })
+  })
+  describe('dates on the command line', () => {
+    it('refuses a day the calendar does not have, and a day that is not padded', () => {
+      for (const value of ['2026-02-30', '2026-04-31', '2026-4-1']) {
+        expect(() => parseCalendarDay(value, false), value).toThrow('Expected a date as YYYY-MM-DD or unix seconds')
+      }
+    })
+
+    it('runs an end day through 23:59:59 UTC, and takes unix seconds as they are', () => {
+      expect(parseCalendarDay('2026-02-28', true)).toBe(Date.parse('2026-02-28T23:59:59Z') / 1000)
+      expect(parseCalendarDay('2026-02-28', false)).toBe(Date.parse('2026-02-28T00:00:00Z') / 1000)
+      expect(parseCalendarDay('1767225600', true)).toBe(1_767_225_600)
+    })
+
+    it('starts the default range 11 Mondays before this one, on either edge of the week', () => {
+      for (const now of ['2026-01-19T00:00:00Z', '2026-01-25T23:59:59Z']) {
+        expect(defaultStatsFrom(Date.parse(now) / 1000), now).toBe(Date.parse('2025-11-03T00:00:00Z') / 1000)
+      }
     })
   })
 })
