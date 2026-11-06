@@ -54,7 +54,7 @@ Triggers reading `current_user` enforce, for `kanban_agent`:
 - it may not take a card out of `waiting_for = 'human'` — `kanbo: only a person may take a card out of waiting`;
 - it may not write, update or delete a `system.approved` / `system.returned` comment — `kanbo: only a person may approve or return a card`.
 
-Both are raised as SQLSTATE `42501` (`insufficient_privilege`). An agent may still *ask*: setting `waiting_for` to `human` is what `kanbo card wait-approval` does.
+Both are raised as SQLSTATE `42501` (`insufficient_privilege`). An agent may still *ask*: setting `waiting_for` to `human` is what `kanbo_wait_approval` does.
 
 The session has to **be** the role. A login merely granted membership (`create role bot login; grant kanban_agent to bot;`) keeps `current_user = 'bot'`, and the triggers never fire. Hand out `kanban_agent`'s own connection string, or have the session run `set role kanban_agent`.
 

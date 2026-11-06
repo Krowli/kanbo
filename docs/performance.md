@@ -121,25 +121,19 @@ tables above.
 | SQLite | `kanbo_ready` | 0.99 → 0.47 | 5.26 → 0.78 | 52.3 → 4.57 |
 | SQLite | `kanbo_card_get` | 0.82 → 0.59 | 3.55 → 0.54 | 32.7 → 0.59 |
 | SQLite | `kanbo_sprints` | 0.55 → 0.18 | 2.91 → 0.23 | 26.3 → 0.74 |
-| SQLite | `kanbo ready` (in-process) | 1.79 → 1.15 | 6.36 → 1.67 | 53.6 → 6.43 |
-| SQLite | `kanbo card list` (in-process) | 2.37 → 1.89 | 9.18 → 2.81 | 92.7 → 13.6 |
-| SQLite | `kanbo card list` (spawned) | 106.5 → 92.8 | 114.3 → 94.3 | 234.4 → 106.5 |
-| SQLite | `kanbo ready` (spawned) | 99.5 → 91.8 | 107.0 → 92.0 | 204.4 → 97.5 |
 | PGlite | `kanbo_card_list` | 4.80 → 2.42 | 59.1 → 3.06 | 375.0 → not measured |
 | PGlite | `kanbo_ready` | 4.55 → 1.57 | 38.2 → 1.75 | 300.4 → not measured |
 | PGlite | `kanbo_card_get` | 4.95 → 2.15 | 40.6 → 2.06 | 142.9 → not measured |
 | PGlite | `kanbo_sprints` | 2.61 → 0.77 | 36.7 → 0.84 | 191.2 → not measured |
-| PGlite | `kanbo ready` (in-process) | 9.16 → 5.57 | 50.6 → 5.73 | 342.5 → not measured |
-| PGlite | `kanbo card list` (in-process) | 9.40 → 6.52 | 97.2 → 6.58 | 410.6 → not measured |
 
 What changed:
 
-- `kanbo_card_list`, `kanbo card list` and `kanbo board --column` ask the
+- `kanbo_card_list` and `kanbo board --column` ask the
   database for the cards a question picks — columns, waiting for a person,
   parent, running, text, changed since, labels, priority — and for one page of
   them with the total, in one statement (`BoardStore.issues.listPage`,
   `count(*) over ()`). They answer 50 cards unless told otherwise.
-- `kanbo_ready` and `kanbo ready` are the same statement with the ready rule
+- `kanbo_ready` is one statement with the ready rule
   (To Do, waiting for no one, no running run); 10 cards unless told otherwise.
   The running cards are one `in (select …)` set, not a lookup per card: on
   PGlite a correlated `not exists` took `kanbo_ready` at 1,000 cards to 15 ms,
@@ -161,11 +155,6 @@ a read that asks once per card (an N+1) — or changes from the numbers here.
 
 | read | SQLite | Postgres | before (SQLite / Postgres) |
 | --- | ---: | ---: | --- |
-| `kanbo card list` | 9 | 8 | 4 / 6 |
-| `kanbo card list` with every filter | 10 | 9 | 5 / 7 |
-| `kanbo ready` | 9 | 8 | 4 / 6 |
-| `kanbo prime` | 6 | 5 | 2 / 4 |
-| `kanbo card get` (now with comments and sub-cards) | 9 | 8 | 4 / 6 |
 | `kanbo board` | 7 | 6 | same |
 | a card with its comments (`ops`) | 5 | 5 | same |
 | `kanbo_card_list` | 5 | 5 | 3 / 3 |
@@ -181,7 +170,7 @@ a read that asks once per card (an N+1) — or changes from the numbers here.
 "Before" is the 0.3.0 agent-efficiency build (3e69998). Since the
 [real-agent](#real-agents) fixes, a list page costs two more — which of its cards
 a person returned, and the last comment of the waiting and returned ones, two
-statements for the whole page — `kanbo_ready` and `kanbo ready` two more for the
+statements for the whole page — `kanbo_ready` two more for the
 returned cards they name first, and `kanbo_prime` one. At 1,000 cards on SQLite
 (p50): `kanbo_card_list` 1.78 → 2.49 ms, `kanbo_ready` 0.78 → 1.75 ms,
 `kanbo_prime` 0.08 → 0.89 ms.
@@ -299,6 +288,8 @@ as the `bench` artifact and the job summary. It never runs on a push.
 
 ## Real agents
 
+> This section was measured on kanbo 0.3–0.5, when agents could also use a command line. Command names below are written without the `kanbo` prefix; those commands were removed in 0.7.0, and agents now use the MCP tools only.
+
 What real coding agents do with a board, measured with
 [`evals/agent-eval.mjs`](../evals/README.md) on 2026-09-28: each run is a fresh
 git project (a tiny JavaScript package and a seeded board), `kanbo connect` for the
@@ -382,22 +373,22 @@ changed for each is in [after the fixes](#after-the-fixes)):
   `ToolSearch select:mcp__kanbo__kanbo_card_get` and the call again. Claude Code
   defers MCP tools behind its tool search; an agent that calls a tool before
   loading its schema guesses the argument names from the answers it has seen.
-- `kanbo run finish --state` is `finished`, `failed` or `stopped`; agents write
+- `run finish --state` is `finished`, `failed` or `stopped`; agents write
   `completed` or `succeeded` first — 11 of the 12 Codex runs that started a run,
   and at least 2 of the 8 Claude Code runs that did:
-  `kanbo run finish b116e026-… --state completed` → `Unknown run state "completed"`.
+  `run finish b116e026-… --state completed` → `Unknown run state "completed"`.
 - "Continue the card that was returned to you" has no direct question. The
-  returned card sits in In Progress, so `kanbo ready` does not show it, and agents
+  returned card sits in In Progress, so `ready` does not show it, and agents
   search — one run: `kanbo_card_list {"column":"in_review"}`, `{"hasActiveRun":true}`,
   `{"column":"in_progress"}`, `{"waitingForPerson":false}` before `kanbo_card_get`
   (4 list calls); two of three Codex runs first opened the To Do card `ready`
-  offered (`kanbo card get TST-003 …`). The status line it finds reads
+  offered (`card get TST-003 …`). The status line it finds reads
   `returned by you: …` — said to the person, read by the agent.
 - Claude Code does not know its own session id. The prime text asks for
   `claude:<session id>`, and agents invent one: `"session":"claude:sonnet-5-session"`,
   `claude:current`, `--session "claude:$(echo $CLAUDE_SESSION_ID)"` (a variable
   name the agent guessed), or put it in a status line (`Started via claude:session, …`).
-- With the shell, agents read `kanbo capabilities` to learn the commands: 13 of
+- With the shell, agents read `capabilities` to learn the commands: 13 of
   15 Claude Code runs with `instructions` only and 12 of 15 Codex runs; none with
   MCP, whose tool list already says it.
 
@@ -405,7 +396,7 @@ Headless Codex needs `default_tools_approval_mode = "approve"` on the kanbo MCP
 server: `codex exec` never asks, so without it every `kanbo_*` tool is refused
 (`MCP tool call requires approval, but approval policy is never`). With it, Codex
 still made 190 of its 199 kanbo calls through the shell — the instruction block
-and `kanbo prime` name commands.
+and `prime` name commands.
 
 ### After the fixes
 
@@ -415,11 +406,11 @@ confused"): tool arguments are also accepted under the names agents reached for
 column), and a missing or wrong one is answered with one sentence and a call
 that works; `completed`, `succeeded` and the like are read as `finished`, and
 starting a run prints the call that finishes it; a card a person sent back is
-`returned`, listed first by `kanbo_ready` / `kanbo ready` / `kanbo prime` with the
+`returned`, listed first by `kanbo_ready` / `ready` / `prime` with the
 person's comment, and its status line reads `returned by a person: …`; a waiting
 card in a list carries its last comment (and, on the command line, its status
-line); `kanbo run start` fills in the Claude Code or Codex session from the
-environment; `kanbo prime` writes each command out with its arguments; `kanbo
+line); `run start` fills in the Claude Code or Codex session from the
+environment; `prime` writes each command out with its arguments; `kanbo
 connect codex` writes the approval line.
 
 Re-run on 2026-09-28 with Claude Code 2.1.283 `--model sonnet`, variants `full`
@@ -429,7 +420,7 @@ prints a waiting card's status line — the first re-run showed agents still
 opening each waiting card to read it). Raw results:
 `evals/results/2026-09-28-t35.json` and `evals/results/2026-09-28-t35-waiting.json`.
 Before is 3e69998, the same groups. **Capabilities** counts runs that read
-`kanbo capabilities` (or the `kanbo://capabilities` resource).
+`capabilities` (or the `kanbo://capabilities` resource).
 
 | agent | variant | scenario | all rules kept | median kanbo calls | failed kanbo calls (3 runs) | median tokens | runs reading capabilities | median cost ($) |
 | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -445,7 +436,7 @@ Before is 3e69998, the same groups. **Capabilities** counts runs that read
 | Claude Code | instructions | returned | 3/3 → 3/3 | 9 → 7 | 0 → 0 | 932,541 → 453,004 | 3 → 0 | 0.34 → 0.20 |
 
 Over the 30 runs: all rules kept 25 → 29; kanbo calls 202 → 177; failed kanbo
-calls 4 → 1; runs reading `kanbo capabilities` 13 → 1. Every rule check other
+calls 4 → 1; runs reading `capabilities` 13 → 1. Every rule check other
 than "at most two kanbo calls" was kept in every run, before and after. Claude
 Code reported $4.57 for the re-runs (33 runs, the 3 replaced `whats-waiting` runs
 included).
@@ -463,8 +454,8 @@ included).
   8 and 9), with no list searching: the card is first in `kanbo_ready` / `kanbo
   prime`.
 - **What is waiting.** With MCP, `kanbo_prime` + one `kanbo_card_list
-  { waitingForPerson: true }` in all 3 runs. From the shell, `kanbo prime` +
-  `kanbo card list --waiting` in 2 of 3; the third also asked `kanbo card list
+  { waitingForPerson: true }` in all 3 runs. From the shell, `prime` +
+  `card list --waiting` in 2 of 3; the third also asked `card list
   --returned` ("waiting for *me*"), a third call the scenario counts against it.
 
 **Remaining.** `plan-big` and `plan-small` in the `full` variant took more calls
@@ -472,7 +463,7 @@ than before (10 and 5 median): in `plan-big` every run then moved the three new
 sub-cards one by one (`kanbo_card_move` ×3, none before), and in `plan-small`
 two runs wrote a closing status line and a comment. Both are the agent's own
 choices, allowed by the rules; neither is a failed call. One `instructions` run
-still read `kanbo capabilities` before splitting a card.
+still read `capabilities` before splitting a card.
 
 **Codex was not re-run:** its account hit its usage limit on the first call
 ("You've hit your usage limit"), so the 10 planned runs produced nothing and

@@ -3,7 +3,7 @@
 ## Requirements
 
 - **Node.js** `^22.19.0` or `>=24.11.0` (the `engines` field of `package.json`).
-- **`better-sqlite3`** for board files. It is an *optional dependency*: `npm install -g kanbo-cli` brings it along, with a prebuilt binary for macOS, Linux — glibc (Debian, Ubuntu, …) and musl (**Alpine**) — and Windows, each for x64 and arm64. kanbo loads it only when a board file is actually opened, so a Postgres-only setup, `kanbo capabilities` and `kanbo --help` work even where it could not be installed. Opening a board file without it fails with `Could not load better-sqlite3, which kanbo opens board files with, …`.
+- **`better-sqlite3`** for board files. It is an *optional dependency*: `npm install -g kanbo-cli` brings it along, with a prebuilt binary for macOS, Linux — glibc (Debian, Ubuntu, …) and musl (**Alpine**) — and Windows, each for x64 and arm64. kanbo loads it only when a board file is actually opened, so a Postgres-only setup, `kanbo roles print` and `kanbo --help` work even where it could not be installed. Opening a board file without it fails with `Could not load better-sqlite3, which kanbo opens board files with, …`.
 - For a shared board: a **Postgres** database you can create tables and roles in (Supabase works). See [storage](storage.md).
 
 An older Node is refused before anything else runs: `kanbo needs Node ^22.19.0 || >=24.11.0; this is Node …`.
@@ -64,7 +64,7 @@ A newer build may add columns or tables to the board. When it does:
 
 ## Uninstalling
 
-First take out what `kanbo init` wrote — the instruction blocks and the `kanbo` MCP entries, in the project and in your own files — while `kanbo` is still installed:
+First take out what kanbo wrote — the `kanbo` MCP entries and any old instruction blocks, in the project and in your own files — while `kanbo` is still installed:
 
 ```bash
 cd your-project

@@ -1,83 +1,59 @@
 # Using kanbo with agents
 
-An agent needs three things to work a kanbo board:
+An agent reaches a kanbo board in one way: the `kanbo mcp` server. You register it once, in your own agent settings, and it serves every project:
 
-1. **Instructions** — what the board expects of it (take a card, move it, write status lines, hand it back).
-2. **A way to reach the board** — the `kanbo` command in its shell, or the `kanbo mcp` server as MCP tools.
-3. **To be known as an agent** — so it cannot approve its own work.
+```bash
+kanbo connect claude        # or codex, cursor, gemini, all
+```
 
-An agent that only has the `kanbo mcp` server connected already gets the first one: the server sends the basic rules as its MCP [server instructions](mcp.md#server-instructions) when the client connects. An instruction file is still worth writing for anything beyond the basics — your orchestrator's policy, which agent takes which column, when to hand a card over — and for agents that reach the board through the `kanbo` command instead.
+The server explains itself. When a client connects, it sends the rules as its MCP [server instructions](mcp.md#server-instructions): call `kanbo_prime` first, take work from `kanbo_ready`, claim a card with `kanbo_card_claim`, write status lines and comments, hand the card to a person with `kanbo_wait_approval`, finish the run, and leave approving to a person. kanbo writes no instruction file into your project and none into your own `CLAUDE.md`, `AGENTS.md` or `GEMINI.md`. Your own policy — which agent takes which column, when to hand a card over — belongs in your own instruction files; [orchestrator examples](orchestrator.md) has a text to start from.
 
-You can set these up once for every agent you run, per project, or for one specific agent. The client configuration below was checked against each tool's documentation (links in [Sources](#sources)); if your client version differs, its own docs win.
+The client configuration below was checked against each tool's documentation (links in [Sources](#sources)); if your client version differs, its own docs win.
 
 ## Agents and people
 
 kanbo treats a shell as a person's unless it says otherwise:
 
 - **Claude Code, Codex, Gemini CLI and Cursor's agent terminals are recognised on their own** by a mark each tool leaves (`CLAUDECODE=1`, `CODEX_THREAD_ID`, `GEMINI_CLI=1`, `CURSOR_AGENT`) — Claude Code's, Gemini CLI's and Cursor's are documented by the tool itself; Codex's is not, seen instead in its source and in headless runs. `KANBO_ACTOR_KIND=person` overrides a mark in your own terminal. See [configuration](configuration.md#agent-shells-kanbo-recognises).
-- **`KANBO_ACTOR_KIND=agent`** marks a shell (and every process started from it) as an agent's. Then `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, the column changes (`kanbo columns add|rename|move|remove|template|add-standard`) and `kanbo run clear-session` exit with code `4` without touching the board, column entry rules refuse a card instead of warning, and a Postgres binding's agent connection string is used.
+- **`KANBO_ACTOR_KIND=agent`** marks a shell (and every process started from it) as an agent's. Then `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo columns flow` and the column changes (`kanbo columns add|rename|move|remove|template|add-standard`) exit with code `4` without touching the board, column entry rules refuse a card instead of warning, and a Postgres binding's agent connection string is used.
 - **`kanbo mcp` is always an agent.** Its client is an agent by definition, whatever the environment says. It has no tool that approves, returns or closes a sprint.
 - **`KANBO_ACTOR_ID`** sets the name an agent's writes are filed under (default: the agent tool in an agent's shell, `claude`, `codex`, `cursor` or `gemini`; under `kanbo mcp` the MCP client's own name; the OS user name only in a person's shell. Rows written earlier keep the name they were written with). Give each agent its own, e.g. `KANBO_ACTOR_ID=reviewer`.
 - On a **shared Postgres board**, give agents the `kanban_agent` login (`kanbo init --agent-url …`). Then the database itself refuses an agent that tries to take a card out of waiting or write an approval, whatever client it uses. See [storage](storage.md#roles).
 
-A board file cannot enforce anything beyond kanbo's own commands: an agent that edits the SQLite file directly can write anything. Use MCP or the CLI, and Postgres roles when that matters.
+A board file cannot enforce anything beyond kanbo's own code: an agent that edits the SQLite file directly can write anything. Use Postgres roles when that matters.
 
-**Approve and return are a person's.** An agent runs `kanbo card wait-approval <card>` and ends its turn. You answer with `kanbo approve <card> [--comment …]` or `kanbo return <card> --comment "why"` in your own terminal, or with the buttons on the `kanbo serve` page.
+**Approve and return are a person's.** An agent calls `kanbo_wait_approval` and ends its turn. You answer with `kanbo approve <card> [--comment …]` or `kanbo return <card> --comment "why"` in your own terminal, or with the buttons on the `kanbo serve` page.
 
 ## Connecting agents: `kanbo connect`
 
-`kanbo connect` does the setup for you, one agent or several at a time — `claude`, `codex`, `cursor`, `gemini`, or `all`:
+`kanbo connect` registers kanbo's MCP server with one agent or several at a time — `claude`, `codex`, `cursor`, `gemini`, or `all`:
 
 ```bash
-kanbo connect                        # in a terminal: pick agents, untick files, confirm
-kanbo connect claude --yes           # CLAUDE.md + .mcp.json in this project
-kanbo connect codex cursor --yes     # AGENTS.md (shared) + each one's MCP server
-kanbo connect all --global --yes     # your own files, for every project
-kanbo connect --check                # agent | instructions | MCP | scope
-kanbo connect cursor --remove        # take kanbo out of Cursor's files again
+kanbo connect                        # in a terminal: pick agents, untick changes, confirm
+kanbo connect claude --yes           # claude mcp add --scope user kanbo -- kanbo mcp
+kanbo connect codex cursor --yes     # each one's own configuration
+kanbo connect claude --project       # this project's .mcp.json instead, for a team to commit
+kanbo connect --check                # agent | MCP | scope, and any old kanbo section still in a file
+kanbo connect cursor --remove        # take kanbo out of Cursor's settings again
 kanbo connect claude --dry-run       # show what would change, change nothing
 ```
 
-Every change is shown first and written only after you say yes (or pass `--yes`). Each agent gets two things, which `--no-instructions` and `--no-mcp` leave out:
+Every change is shown first and written only after you say yes (or pass `--yes`). The server goes into your own configuration by default, so one registration serves every project; `--project` writes the project's files instead, and `--global` spells out the default.
 
-| Agent | Instructions: project · `--global` | MCP server: project · `--global` | MCP by default |
-| --- | --- | --- | --- |
-| Claude Code | `CLAUDE.md` · `$CLAUDE_CONFIG_DIR/CLAUDE.md` (default `~/.claude/CLAUDE.md`) | `.mcp.json` · `claude mcp add --scope user kanbo -- kanbo mcp` (stored in `~/.claude.json`; printed for you to run when `claude` is not on `PATH`) | project |
-| Codex | `AGENTS.md` · `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`) | `.codex/config.toml` · `[mcp_servers.kanbo]` in `$CODEX_HOME/config.toml` | your own: Codex loads a project's `.codex/config.toml` only for a trusted project |
-| Cursor | `AGENTS.md` · Cursor Settings → Rules → User Rules (not a file; paste the block yourself) | `.cursor/mcp.json` · `~/.cursor/mcp.json` | project |
-| Gemini CLI | `GEMINI.md` · `$GEMINI_CLI_HOME/.gemini/GEMINI.md` (default `~/.gemini/GEMINI.md`) | `.gemini/settings.json` · `~/.gemini/settings.json` (entries without `type`) | project |
+| Agent | MCP server: your own (default) · `--project` |
+| --- | --- |
+| Claude Code | `claude mcp add --scope user kanbo -- kanbo mcp` (stored in `~/.claude.json`; printed for you to run when `claude` is not on `PATH`) · `.mcp.json` |
+| Codex | `[mcp_servers.kanbo]` in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`) · `.codex/config.toml`, which Codex loads only for a trusted project |
+| Cursor | `~/.cursor/mcp.json` · `.cursor/mcp.json` |
+| Gemini CLI | `~/.gemini/settings.json` (entries without `type`) · `.gemini/settings.json` |
 
-Instructions go into the project unless you pass `--global`; the MCP server goes where the last column says unless you pass `--project` or `--global`. Commit the project files; none of them holds a secret. The board connection stays in `.kanbo/binding.json`, which is never committed.
+Commit project files if you use `--project`; none of them holds a secret. The board connection stays in `.kanbo/binding.json`, which is never committed.
 
-Codex and Cursor share a project's `AGENTS.md`: `kanbo connect cursor --remove` leaves its kanbo section in place unless Codex is removed in the same command (`kanbo connect codex cursor --remove`, or `kanbo connect --remove` for every agent), and says so.
+`kanbo mcp` resolves the board from the directory the client starts it in. In a folder with no board the server still starts and the client connects, and every tool answers "This folder has no kanbo board yet. Ask a person to run kanbo here." Once a board is set up in that folder, the next tool call finds it — no restart needed. The same goes for a folder whose board cannot be opened right now (an app's database that is older than this kanbo, or a project the database does not know): the server starts, and each tool says why.
 
-**Windows.** `kanbo` there is npm's `kanbo.cmd`, which clients that start programs without a shell (Codex) cannot run. So on Windows every agent's MCP server goes into your own configuration by default, naming the Node that runs kanbo and kanbo's own script — `node.exe C:\…\kanbo-cli\dist\cli.cjs mcp` — which every client can start. A project file (`--project`) is shared with other machines and keeps the portable `kanbo mcp`; `kanbo connect` says so when it writes one on Windows. When a Node upgrade or a reinstall leaves such a registration pointing at a file that is gone, `kanbo doctor` fails it, and `kanbo doctor --fix` (or `kanbo connect <agent>`) rewrites its `command` and `args`. kanbo owns only the entries in the exact shapes it writes — `kanbo mcp` (with or without `"type": "stdio"`), or a Node by full path running `…/kanbo-cli/dist/cli.cjs mcp` — with no other field but Codex's `default_tools_approval_mode = "approve"`. Any other `kanbo` entry — `cmd /c kanbo mcp`, `npx -y kanbo-cli mcp`, one with an `env` or a `[mcp_servers.kanbo.env]` table — is yours and is never overwritten: `connect` reports "your own kanbo entry — left as is", and `doctor` warns only when it cannot start. See [what kanbo changes](cli.md#what-kanbo-changes-and-what-it-leaves-alone).
+**Windows.** `kanbo` there is npm's `kanbo.cmd`, which clients that start programs without a shell (Codex) cannot run. So on Windows the project's `.mcp.json` keeps the portable `kanbo mcp`, and the registration in your own configuration names the Node that runs kanbo and kanbo's own script — `node.exe C:\…\kanbo-cli\dist\cli.cjs mcp` — which every client can start. When a Node upgrade or a reinstall leaves such a registration pointing at a file that is gone, `kanbo doctor` fails it, and `kanbo doctor --fix` (or `kanbo connect <agent>`) rewrites its `command` and `args`. kanbo owns only the entries in the exact shapes it writes — `kanbo mcp` (with or without `"type": "stdio"`, and with the empty `env` Claude Code adds), or a Node by full path running `…/kanbo-cli/dist/cli.cjs mcp` — with no other field but Codex's `default_tools_approval_mode = "approve"`. Any other `kanbo` entry — `cmd /c kanbo mcp`, `npx -y kanbo-cli mcp`, one with an `env` variable or a `[mcp_servers.kanbo.env]` table — is yours and is never overwritten: `connect` reports "your own kanbo entry — left as is", and `doctor` warns only when it cannot start. See [what kanbo changes](cli.md#what-kanbo-changes-and-what-it-leaves-alone).
 
-`kanbo init --instructions … --mcp …` and `kanbo init --global` still work, and plan the same changes.
-
-## 1. Globally, for all your agents
-
-```bash
-kanbo connect all --global
-```
-
-It binds no board and creates none; a project gets a board with a plain `kanbo init`. The global block binds nothing:
-
-```markdown
-<!-- KANBO_START v3 h=c58553c6 -->
-## Kanbo boards
-
-In a project with a `.kanbo/` folder, before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
-Take work with `kanbo claim`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
-A project without `.kanbo/` has no board: ignore this section there, and do not create one — a person sets a board up with `kanbo init`.
-<!-- KANBO_END -->
-```
-
-`kanbo mcp` resolves the board from the directory the client starts it in, so one global registration serves every project that has run `kanbo init`. In a folder with no board the server still starts and the client connects, and every tool answers "This folder has no kanbo board yet. Ask a person to run kanbo here." Once a board is set up in that folder, the next tool call finds it — no restart needed.
-
-Run `kanbo connect --check --global` or `kanbo doctor` afterwards to check it. `kanbo uninstall --global` takes it all out again. After upgrading kanbo, `kanbo doctor` warns about a block written by the old version; run `kanbo doctor --fix` (or `kanbo connect <agent> --global --yes`) to rewrite it.
-
-To register by hand instead, the entries `kanbo connect --global` writes are:
+To register by hand instead, the entries `kanbo connect` writes are:
 
 ```toml
 # $CODEX_HOME/config.toml (or: codex mcp add kanbo -- kanbo mcp, then add the last line)
@@ -98,7 +74,11 @@ default_tools_approval_mode = "approve"
 }
 ```
 
+Run `kanbo connect --check` or `kanbo doctor` afterwards to check it. `kanbo uninstall` takes it all out again.
+
 ### Mark every agent shell as an agent's
+
+A shell an agent starts for its own commands should say it is an agent's, so it cannot approve:
 
 | Client | How |
 | --- | --- |
@@ -110,33 +90,9 @@ Claude Code, Codex, Gemini CLI and Cursor's Agent already mark their shells ([re
 
 Do **not** export `KANBO_ACTOR_KIND=agent` in your own shell profile — then you could not approve anything yourself.
 
-## 2. Per project
+To mark agent shells per project instead: `"env": { "KANBO_ACTOR_KIND": "agent" }` in the project's `.claude/settings.json` (Claude Code applies project `env` after the folder is trusted), or `[shell_environment_policy] set = { KANBO_ACTOR_KIND = "agent" }` in `.codex/config.toml`.
 
-From the project root:
-
-```bash
-kanbo init --yes                     # a board file of this project's own
-kanbo connect claude codex --yes     # CLAUDE.md, AGENTS.md, .mcp.json, and Codex's own config
-```
-
-Pass `--project` to put every MCP server into the project's files, Codex's included. Rerunning replaces the block in place.
-
-The block `kanbo connect` writes is a short pointer; the rules themselves come from `kanbo prime` (which, on the command line, also lists the commands) or from the MCP server:
-
-```markdown
-<!-- KANBO_START v3 h=38d0418d -->
-## Kanbo board
-
-This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
-Take work with `kanbo claim`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
-<!-- KANBO_END -->
-```
-
-The start marker carries the block's version and a hash of its text. kanbo replaces a block it wrote — current, from an older version, or the bare `<!-- KANBO_START -->` block of kanbo 0.1–0.2 when its text is word for word one those versions wrote — in place. A block you edited between the markers is replaced only when you answer yes to "You changed the kanbo section in … Replace it with the current one?" (default no); with `--yes` or without a terminal it is left alone, with a note. A block from `kanbo instructions orchestrator --markers` (or any text but `short`/`global`) says `k=<kind>` on its marker and is kept; a block from a newer kanbo is kept; a file whose markers do not pair up is not touched at all.
-
-To mark agent shells per project instead of globally: `"env": { "KANBO_ACTOR_KIND": "agent" }` in the project's `.claude/settings.json` (Claude Code applies project `env` after the folder is trusted), or `[shell_environment_policy] set = { KANBO_ACTOR_KIND = "agent" }` in `.codex/config.toml`.
-
-## 3. One specific agent only
+## One specific agent only
 
 ### A Claude Code subagent
 
@@ -161,7 +117,7 @@ You work exactly one card on this project's kanbo board. The card key is in your
 Never approve or return a card.
 ```
 
-`tools` limits the subagent to these tools; `mcp__kanbo` allows every tool of the `kanbo` MCP server. Leave out `Bash` if the agent should reach the board only through MCP.
+`tools` limits the subagent to these tools; `mcp__kanbo` allows every tool of the `kanbo` MCP server. Leave out `Bash` if the agent has no other use for a shell.
 
 ### A Codex profile
 
@@ -174,28 +130,28 @@ model_reasoning_effort = "medium"
 set = { KANBO_ACTOR_KIND = "agent", KANBO_ACTOR_ID = "board-worker" }
 ```
 
-and `codex --profile board-worker` starts Codex with it. Put the agent's own instructions in the prompt, or in the project's `AGENTS.md`.
+and `codex --profile board-worker` starts Codex with it. Put the agent's own instructions in the prompt, or in the project's `AGENTS.md`; the kanbo tools are there through the registration `kanbo connect codex` made.
 
 ### Any agent, by environment
 
-For a script or any other CLI agent, start it with the variables set:
+For a script or any other agent that speaks MCP, start it with the variables set:
 
 ```bash
 KANBO_ACTOR_KIND=agent KANBO_ACTOR_ID=nightly-triage my-agent --task "triage the backlog"
 ```
 
-Everything it runs through `kanbo` is then filed under `nightly-triage`, and it cannot approve.
+Everything it writes through `kanbo mcp` is then filed under `nightly-triage`, and it cannot approve.
+
+## Upgrading from 0.6 or earlier
+
+Versions up to 0.6 wrote a kanbo section between `<!-- KANBO_START … -->` and `<!-- KANBO_END -->` markers into `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` (in the project, and with `--global` in your own files), and they gave agents `kanbo prime`, `kanbo claim`, `kanbo card …` and `kanbo run …` commands. From 0.7 agents use the MCP server alone and the section is dead text. `kanbo connect <agent>` or `kanbo doctor --fix` takes it out; the rest of each file is kept as it was. A section you edited is kept, with a note, and `kanbo connect --remove --yes` removes it. `kanbo connect --check` lists the files that still carry one.
 
 ## Sources
 
 - Claude Code MCP: https://code.claude.com/docs/en/mcp
-- Claude Code memory (CLAUDE.md, AGENTS.md): https://code.claude.com/docs/en/memory
 - Claude Code subagents: https://code.claude.com/docs/en/sub-agents
 - Claude Code settings (`env`): https://code.claude.com/docs/en/settings and https://code.claude.com/docs/en/settings-reference#env
 - Codex MCP (`config.toml`, `codex mcp add`): https://learn.chatgpt.com/docs/extend/mcp?surface=cli
-- Codex AGENTS.md: https://learn.chatgpt.com/docs/agent-configuration/agents-md
 - Codex profiles and `shell_environment_policy`: https://learn.chatgpt.com/docs/config-file/config-advanced
 - Cursor MCP: https://cursor.com/docs/context/mcp
-- Cursor rules and AGENTS.md: https://cursor.com/docs/context/rules
-- Gemini CLI GEMINI.md: https://google-gemini.github.io/gemini-cli/docs/cli/gemini-md.html
 - Gemini CLI MCP servers (`settings.json`): https://geminicli.com/docs/tools/mcp-server/

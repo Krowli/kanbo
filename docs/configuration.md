@@ -7,7 +7,7 @@ kanbo has no configuration file of its own beyond the per-project binding. Every
 | Variable | Read by | Meaning |
 | --- | --- | --- |
 | `KANBO_DATABASE_URL` | every board command | Connection string of an external Postgres board. Beats the project's binding, in every shell — an agent's included. |
-| `KANBO_DB_PATH` | every board command, `kanbo init` | Path of a SQLite board file to open when neither a flag nor the project's binding names one. An app that keeps the board inside its own database sets this for the shells it starts. |
+| `KANBO_DB_PATH` | every board command | Path of a SQLite board file to open when neither a flag nor the project's binding names one. An app that keeps the board inside its own database sets this for the shells it starts. `kanbo init` ignores it when it makes a project's own board: only `kanbo init --db <path>` binds a project to an app's database. |
 | `KANBO_WORKSPACE_ID` | every board command | The workspace to work on, when `--workspace` is not given. Beats the binding. |
 | `KANBO_ACTOR_ID` | every writing command, `kanbo mcp`, `kanbo serve` | The name writes are filed under. Defaults, in an agent's shell, to the agent tool (`claude`, `codex`, `cursor`, `gemini`); under `kanbo mcp`, to the tool, else the MCP client's name; in a person's shell, to the operating-system user name. Rows written earlier keep the name they were written with. |
 | `KANBO_ACTOR_KIND` | every command | `agent` marks the shell as an agent's: person-only commands exit `4`, no question is asked, column entry rules refuse instead of warning, and a Postgres binding's `agentDatabaseUrl` is used. `person` marks it as a person's even when an agent tool's mark is there (see [Agent shells kanbo recognises](#agent-shells-kanbo-recognises)). Unset, the marks decide. |
@@ -49,7 +49,7 @@ No check is made when `CI` is set (to anything but empty, `0` or `false`), with 
 
 ## Agent shells kanbo recognises
 
-Some agent tools leave a mark in the environment of every command their agent runs. kanbo reads a shell carrying one as an agent's, exactly as if `KANBO_ACTOR_KIND=agent` were set: `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo columns add|rename|move|remove|template|add-standard`, `kanbo run clear-session` and `kanbo run attach-session --replace` exit `4` with `Only a person can …. This shell belongs to an agent (<mark>): ask a person to … on the board page (kanbo serve).`, then a second line, `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo <the command as typed>` (on Windows: `If you are a person in an editor terminal, run in PowerShell: $env:KANBO_ACTOR_KIND='person'; kanbo <the command as typed>`) — and nothing asks a question (so `kanbo uninstall --purge` keeps the board file).
+Some agent tools leave a mark in the environment of every command their agent runs. kanbo reads a shell carrying one as an agent's, exactly as if `KANBO_ACTOR_KIND=agent` were set: `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo columns rules`, `kanbo columns add|rename|move|remove|template|add-standard` exit `4` with `Only a person can …. This shell belongs to an agent (<mark>): ask a person to … on the board page (kanbo serve).`, then a second line, `If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo <the command as typed>` (on Windows: `If you are a person in an editor terminal, run in PowerShell: $env:KANBO_ACTOR_KIND='person'; kanbo <the command as typed>`) — and nothing asks a question (so `kanbo uninstall --purge` keeps the board file).
 
 | Mark | Set by | Source |
 | --- | --- | --- |
@@ -62,7 +62,7 @@ Some agent tools leave a mark in the environment of every command their agent ru
 
 ## The session a run records
 
-`kanbo run start` without `--session`, and `kanbo_run_start` without `session`, record the session of the agent that runs them, read from the environment:
+`kanbo_run_start` without `session` records the session of the agent that runs it, read from the environment:
 
 | Variable | Set by | Recorded as |
 | --- | --- | --- |
@@ -137,14 +137,6 @@ Written by `kanbo init`, merged on every later run, mode `0600`, and listed in `
 
 kanbo never edits your own `.gitignore`.
 
-## Files `kanbo init` may also write
+## Files `kanbo init` writes
 
-| Flag | File | Content |
-| --- | --- | --- |
-| `--instructions claude` | `CLAUDE.md` | The instruction block between the `<!-- KANBO_START … -->` and `<!-- KANBO_END -->` markers. |
-| `--instructions agents` | `AGENTS.md` | The same block. |
-| `--mcp claude` | `.mcp.json` | `{"mcpServers":{"kanbo":{"type":"stdio","command":"kanbo","args":["mcp"]}}}`, merged. |
-| `--mcp cursor` | `.cursor/mcp.json` | The same entry, merged. |
-| `--mcp codex` | `.codex/config.toml` | `[mcp_servers.kanbo]` with `command = "kanbo"`, `args = ["mcp"]` and `default_tools_approval_mode = "approve"` (so `codex exec` can call the board's tools without asking), appended. |
-
-These are committed project files, and none of them contains a secret: `kanbo mcp` reads the board from the binding like every other command.
+`kanbo init` writes `.kanbo/` (above) and, for a board file, `.kanbo/board.db`. It writes no instruction file and no agent configuration. With `--connect <agents>` (or the wizard's "Connect them now?") it registers the MCP server the way `kanbo connect` does: in each agent's own settings, none of which contains a secret — `kanbo mcp` reads the board from the binding like every other command. See [agents](agents.md#connecting-agents-kanbo-connect) for the files.

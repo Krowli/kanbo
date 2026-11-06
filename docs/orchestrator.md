@@ -2,54 +2,54 @@
 
 kanbo prescribes no roles and no pipeline. It gives your agents a board and a few hard rules; how they split and hand off work is up to your own instructions. This page shows one way to set up an **orchestrator**: an agent that pulls ready cards, decides whether a card needs subtasks, hands subtasks to sub-agents by card key, and waits for your approval.
 
-Every example assumes the project was set up with `kanbo init` (see [agents](agents.md)) and that agent shells have `KANBO_ACTOR_KIND=agent`.
+Every example assumes the project has a board (`kanbo init`) and that the agents have the kanbo MCP server (`kanbo connect <agent>`, see [agents](agents.md)). Agent shells should have `KANBO_ACTOR_KIND=agent`.
 
 ## An orchestrator instruction file
 
-Use it as the body of a Claude Code subagent, a Codex `AGENTS.md` section, a Cursor rule, or the prompt of your own script. `kanbo instructions orchestrator` prints it (`--copy` puts it on the clipboard).
+Use it as the body of a Claude Code subagent, a Codex `AGENTS.md` section, a Cursor rule, or the prompt of your own script. It is plain Markdown to paste; kanbo does not write it anywhere for you.
 
 ```markdown
 # Orchestrator
 
-You coordinate work on this project's kanbo board. You do not approve work; a person does.
+You coordinate work on this project's kanbo board. You do not approve work; a person does. Use the kanbo MCP tools.
 
 ## Start of every session
-1. Run `kanbo prime` (tool: `kanbo_prime`) and read the column descriptions. On this board the description is the contract, not the name.
-2. Run `kanbo ready` (`kanbo_ready`). If nothing is ready, say so and stop.
-3. Take the first card with `kanbo claim --agent orchestrator` (`kanbo_card_claim`): it starts your run and moves the card out of To Do into the board's first work-in-progress column in one step, so no other agent takes it, and it prints the run id you finish later. If another agent got there first, run `kanbo ready` again.
+1. Call `kanbo_prime` and read the column descriptions. On this board the description is the contract, not the name.
+2. Call `kanbo_ready`. If nothing is ready, say so and stop.
+3. Take the first card with `kanbo_card_claim` (agent: orchestrator): it starts your run and moves the card out of To Do into the board's first work-in-progress column in one step, so no other agent takes it, and it answers with the run id you finish later. If another agent got there first, call `kanbo_ready` again.
 
 ## While working
-- Write a status line (`kanbo card status-line <card> --text "…"`, `kanbo_status_line`) at every step and before and after anything that takes more than a minute. One sentence, present tense.
+- Write a status line (`kanbo_status_line`) at every step and before and after anything that takes more than a minute. One sentence, present tense.
 - Put decisions, numbers and open questions on the card as comments (`kanbo_card_comment`). Your transcript is not the card.
 
 ## Splitting
 Split a card into subtasks only when the person asked for it, or when it has parts that can be done and checked separately — different stages, owners or pull requests. Do not split work you would finish in one go.
-- A subtask is `kanbo card create --parent <card> --column to_do --title "…" --description "…"` (`kanbo_card_create` with `parent`).
+- A subtask is `kanbo_card_create` with `parent` = the card, `column` = `to_do`, a title and a description.
 - Give each subtask a description a sub-agent can act on without asking you: what to change, how to check it, a `- [ ]` checklist when there are several steps.
 
 ## Delegating
 - Hand each subtask to a sub-agent by its key only: "Work APP-014 on the kanbo board." The sub-agent reads the card itself.
-- Wait for the sub-agent to finish. Then read the subtask (`kanbo_card_get`): it should be in the board's review column or a finished one (by the descriptions in `kanbo prime`) with a comment saying what changed. If it is not, write why on the parent card and decide: retry, fix it yourself, or ask the person.
-- Link every pull request to the card it belongs to (`kanbo card pr add <card> <url>`, `kanbo_card_link_pr`).
+- Wait for the sub-agent to finish. Then read the subtask (`kanbo_card_get`): it should be in the board's review column or a finished one (by the descriptions in `kanbo_prime`) with a comment saying what changed. If it is not, write why on the parent card and decide: retry, fix it yourself, or ask the person.
+- Link every pull request to the card it belongs to (`kanbo_card_link_pr`).
 
 ## Handing back
-1. When the card's work is complete, move it to the column this board uses for review (see `kanbo prime`).
-2. Run `kanbo card wait-approval <card> --text "<what the person should look at>"` (`kanbo_wait_approval`).
-3. Finish your run: `kanbo run finish <runId> --state finished` (`kanbo_run_finish`).
+1. When the card's work is complete, move it to the column this board uses for review (see `kanbo_prime`) with `kanbo_card_move`.
+2. Call `kanbo_wait_approval` with a text saying what the person should look at.
+3. Finish your run: `kanbo_run_finish` with state `finished`.
 4. End your turn. Do not approve, do not move the card out of review, do not start the same card again. The person approves with `kanbo approve` or returns it with a reason.
 
 ## When the card comes back
-- Approved: move it to the board's finished column (see `kanbo prime`).
+- Approved: move it to the board's finished column (see `kanbo_prime`).
 - Returned: the reason is the newest comment. The card is back in an earlier column; start a new run and address the reason first.
 
 ## Never
-- Never run `kanbo approve`, `kanbo return`, `kanbo sprint close`, `kanbo run clear-session`, or anything that changes the columns: `kanbo columns add`, `kanbo columns rename`, `kanbo columns move`, `kanbo columns remove`, `kanbo columns template`, `kanbo columns add-standard`, `kanbo columns rules`, `kanbo columns flow`. They are for a person and will fail in your shell anyway.
+- Never run `kanbo approve`, `kanbo return`, `kanbo sprint close`, or anything that changes the columns: `kanbo columns add`, `kanbo columns rename`, `kanbo columns move`, `kanbo columns remove`, `kanbo columns template`, `kanbo columns add-standard`, `kanbo columns rules`, `kanbo columns flow`. They are for a person and will fail in your shell anyway.
 - Never delete or edit the board's database directly.
 ```
 
 ## Claude Code: orchestrator, implementer and reviewer subagents
 
-Three files in `.claude/agents/`. The main session (you) asks the orchestrator to work the board; the orchestrator delegates to the other two. Claude Code allows subagents to start subagents (up to its nesting limit); if yours does not, run the orchestrator as the main session with the instruction file above in `CLAUDE.md`.
+Three files in `.claude/agents/`. The main session (you) asks the orchestrator to work the board; the orchestrator delegates to the other two. Claude Code allows subagents to start subagents (up to its nesting limit); if yours does not, run the orchestrator as the main session with the instruction file above in your own `CLAUDE.md`.
 
 `.claude/agents/kanbo-orchestrator.md`:
 
@@ -108,7 +108,7 @@ Start it from the main session: *"Use the kanbo-orchestrator subagent to work th
 
 ## Codex
 
-Put the orchestrator instruction file in the project's `AGENTS.md` (below the block `kanbo init --instructions agents` wrote), mark shells as agents and register the MCP server in `.codex/config.toml`:
+Put the orchestrator instruction file in the project's `AGENTS.md`, mark shells as agents and register the MCP server (`kanbo connect codex` does it in `~/.codex/config.toml`; for the project only, `kanbo connect codex --project` writes `.codex/config.toml`):
 
 ```toml
 [shell_environment_policy]
@@ -127,235 +127,52 @@ codex exec "Work the next ready card on the kanbo board, following the Orchestra
 
 For sub-agents, start one Codex session per subtask with its own actor id, for example `codex --profile board-worker exec "Work API-003 on the kanbo board."` with the profile from [agents](agents.md#a-codex-profile).
 
-## A plain shell loop
-
-For any CLI agent. It picks the next ready card, gives the key to an agent, and stops when the board has nothing ready or a card waits for you.
-
-```bash
-#!/usr/bin/env bash
-set -euo pipefail
-export KANBO_ACTOR_KIND=agent KANBO_ACTOR_ID=loop
-
-while true; do
-  card=$(kanbo ready --limit 1 --json id | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const a=JSON.parse(s);console.log(a[0]?a[0].id:"")})')
-  if [ -z "$card" ]; then
-    echo "Nothing ready."
-    break
-  fi
-  echo "Working $card"
-  # Replace with your agent: claude -p, codex exec, aider, a script…
-  claude -p "Work $card on the kanbo board. Follow the kanbo block in CLAUDE.md. End with kanbo card wait-approval."
-  waiting=$(kanbo card get "$card" --json waitingFor | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).waitingFor??""))')
-  if [ "$waiting" = "human" ]; then
-    echo "$card is waiting for you: kanbo approve $card  or  kanbo return $card --comment \"…\""
-    break
-  fi
-done
-```
-
-`kanbo ready` never offers a card that has a run going or is waiting for a person, so a card the agent left unfinished is not picked up twice.
-
 ## A worked session
 
-Generated by running these commands against a fresh board file with kanbo 0.2.1. Run ids and paths differ on your machine. Lines starting with `# ──` say whose shell the following commands run in: a person's (no `KANBO_ACTOR_KIND`, or `KANBO_ACTOR_KIND=person` when the terminal itself carries an agent tool's mark — see [Agent shells kanbo recognises](configuration.md#agent-shells-kanbo-recognises)), or an agent's (`KANBO_ACTOR_KIND=agent`, `KANBO_ACTOR_ID` set to the agent's name).
+An illustration of one session, not a recording: the run ids are made up. Lines starting with `# ──` say who acts: a person in a terminal, or an agent calling the kanbo MCP tools.
 
 ```text
 # ── person ──
-$ kanbo init --file --identifier API --instructions none --yes
-This project uses board API — ~/acme-api/.kanbo/binding.json
-Board file: ~/acme-api/.kanbo/board.db
-Columns: Backlog, To Do, In Progress, In Review, Done, Canceled
-Agents don't know about this board yet: kanbo connect <agent>, or kanbo instructions --copy and paste it.
+$ kanbo init --file --key API --yes
+$ kanbo serve                                   # the board page: add the two cards below there
 
-$ kanbo card create --column to_do --title 'Add rate limiting to the public API' --description 'Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.'
-API-001  To Do  worktree
-Add rate limiting to the public API
+# ── orchestrator (MCP) ──
+kanbo_ready {}
+  → API-001 Add rate limiting to the public API · API-002 Fix typo in README
+kanbo_card_claim {"card":"API-001","agent":"orchestrator"}
+  → API-001 moved to in_progress; run 07341411-…; finish it with kanbo_run_finish
+kanbo_status_line {"card":"API-001","text":"Splitting: middleware and load test are reviewed separately"}
+kanbo_card_create {"parent":"API-001","column":"to_do","title":"Token-bucket middleware","description":"- [ ] middleware\n- [ ] unit tests"}
+  → API-003
+kanbo_card_create {"parent":"API-001","column":"to_do","title":"Load test at 100 rps","description":"k6 script in bench/, report p95 latency"}
+  → API-004
+kanbo_card_comment {"card":"API-001","content":"Decision: token bucket per client IP, in-memory store for now. Subtasks API-003 and API-004 go to sub-agents."}
+kanbo_status_line {"card":"API-001","text":"Waiting for sub-agents on API-003 and API-004"}
 
-Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.
-
-$ kanbo card create --column to_do --title 'Fix typo in README' --description 'The install section says npm isntall.'
-API-002  To Do  worktree
-Fix typo in README
-
-The install section says npm isntall.
-
-# ── orchestrator (agent shell) ──
-$ kanbo ready
-API-001  To Do  Add rate limiting to the public API
-API-002  To Do  Fix typo in README
-
-$ kanbo claim API-001 --agent orchestrator
-Claimed API-001: run 07341411-7fab-4104-a7c4-91515d0fec3f started, card moved to In Progress
-When you are done: kanbo run finish 07341411-7fab-4104-a7c4-91515d0fec3f --state finished
-
-$ kanbo card status-line API-001 --text 'Splitting: middleware and load test are reviewed separately'
-API-001  In Progress  worktree
-Add rate limiting to the public API
-
-Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.
-
-status line: Splitting: middleware and load test are reviewed separately
-
-$ kanbo card create --parent API-001 --column to_do --title 'Token-bucket middleware' --description $'- [ ] middleware\n- [ ] unit tests'
-API-003  To Do  worktree
-Token-bucket middleware
-
-- [ ] middleware
-- [ ] unit tests
-
-parent: API-001
-
-$ kanbo card create --parent API-001 --column to_do --title 'Load test at 100 rps' --description 'k6 script in bench/, report p95 latency'
-API-004  To Do  worktree
-Load test at 100 rps
-
-k6 script in bench/, report p95 latency
-
-parent: API-001
-
-$ kanbo card comment API-001 --content 'Decision: token bucket per client IP, in-memory store for now. Subtasks API-003 and API-004 go to sub-agents.'
-Commented on API-001
-
-$ kanbo card status-line API-001 --text 'Waiting for sub-agents on API-003 and API-004'
-API-001  In Progress  worktree
-Add rate limiting to the public API
-
-Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.
-
-status line: Waiting for sub-agents on API-003 and API-004
-
-# ── implementer sub-agent (agent shell), handed API-003 ──
-$ kanbo claim API-003 --agent implementer
-Claimed API-003: run 11f4b723-78da-4865-999d-a341f1756872 started, card moved to In Progress
-When you are done: kanbo run finish 11f4b723-78da-4865-999d-a341f1756872 --state finished
-
-$ kanbo card status-line API-003 --text 'Writing the middleware and its unit tests'
-API-003  In Progress  worktree
-Token-bucket middleware
-
-- [ ] middleware
-- [ ] unit tests
-
-status line: Writing the middleware and its unit tests
-parent: API-001
-
-$ kanbo card update API-003 --description $'- [x] middleware\n- [x] unit tests'
-API-003  In Progress  worktree
-Token-bucket middleware
-
-- [x] middleware
-- [x] unit tests
-
-status line: Writing the middleware and its unit tests
-parent: API-001
-
-$ kanbo card comment API-003 --content 'Done: src/middleware/rate-limit.ts, 12 tests passing.'
-Commented on API-003
-
-$ kanbo card move API-003 done
-API-003  Done  worktree
-Token-bucket middleware
-
-- [x] middleware
-- [x] unit tests
-
-status line: Writing the middleware and its unit tests
-parent: API-001
-
-$ kanbo run finish 11f4b723-78da-4865-999d-a341f1756872 --state finished
-Run 11f4b723-78da-4865-999d-a341f1756872 finished
+# ── implementer sub-agent (MCP), handed API-003 ──
+kanbo_card_claim {"card":"API-003","agent":"implementer"}
+kanbo_status_line {"card":"API-003","text":"Writing the middleware and its unit tests"}
+kanbo_card_update {"card":"API-003","description":"- [x] middleware\n- [x] unit tests"}
+kanbo_card_comment {"card":"API-003","content":"Done: src/middleware/rate-limit.ts, 12 tests passing."}
+kanbo_card_move {"card":"API-003","column":"done"}
+kanbo_run_finish {"run":"11f4b723-…","state":"finished"}
 
 # (API-004 goes the same way with a second sub-agent.)
 
-# ── orchestrator again ──
-$ kanbo card move API-001 in_review
-API-001  In Review  worktree
-Add rate limiting to the public API
-
-Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.
-
-status line: Waiting for sub-agents on API-003 and API-004
-
-$ kanbo card wait-approval API-001 --text 'Both subtasks done; please review the middleware PR'
-API-001  In Review  worktree
-Add rate limiting to the public API
-
-Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.
-
-status line: Both subtasks done; please review the middleware PR
-waiting for a person
-
-$ kanbo approve API-001
-Only a person can approve a card. This shell belongs to an agent (KANBO_ACTOR_KIND=agent): ask a person to approve it on the board page (kanbo serve).
-If you are a person in an editor terminal, run: KANBO_ACTOR_KIND=person kanbo approve API-001
-(exit 4)
-
-$ kanbo card get API-001 --json id,column,statusLine,waitingFor,attemptCount
-{
-  "id": "API-001",
-  "column": "In Review",
-  "statusLine": "Both subtasks done; please review the middleware PR",
-  "waitingFor": "human",
-  "attemptCount": 1
-}
+# ── orchestrator again (MCP) ──
+kanbo_card_move {"card":"API-001","column":"in_review"}
+kanbo_wait_approval {"card":"API-001","text":"Both subtasks done; please review the middleware PR"}
+kanbo_run_finish {"run":"07341411-…","state":"finished"}
+  # No tool approves: the orchestrator ends its turn here.
 
 # ── person ──
 $ kanbo approve API-001 --comment 'Looks good. Ship it.'
 Approved API-001
 
-API-001  In Review  worktree
-Add rate limiting to the public API
-
-Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.
-
-status line: Both subtasks done; please review the middleware PR
-
-# ── orchestrator (agent shell) ──
-$ kanbo card get API-001 --json id,column,waitingFor
-{
-  "id": "API-001",
-  "column": "In Review",
-  "waitingFor": null
-}
-
-$ kanbo card move API-001 done
-API-001  Done  worktree
-Add rate limiting to the public API
-
-Limit anonymous clients to 60 requests per minute. Return 429 with Retry-After.
-
-status line: Both subtasks done; please review the middleware PR
-
-$ kanbo run finish 07341411-7fab-4104-a7c4-91515d0fec3f --state finished
-Run 07341411-7fab-4104-a7c4-91515d0fec3f finished
-
-$ kanbo card list --json id,title,column,parentIssueId
-[
-  {
-    "id": "API-001",
-    "title": "Add rate limiting to the public API",
-    "column": "Done",
-    "parentIssueId": null
-  },
-  {
-    "id": "API-002",
-    "title": "Fix typo in README",
-    "column": "To Do",
-    "parentIssueId": null
-  },
-  {
-    "id": "API-003",
-    "title": "Token-bucket middleware",
-    "column": "Done",
-    "parentIssueId": "API-001"
-  },
-  {
-    "id": "API-004",
-    "title": "Load test at 100 rps",
-    "column": "To Do",
-    "parentIssueId": "API-001"
-  }
-]
+# ── orchestrator, next session (MCP) ──
+kanbo_card_get {"card":"API-001","include":[]}
+  → waitingFor: null, column In Review
+kanbo_card_move {"card":"API-001","column":"done"}
 ```
 
-Note the `exit 4`: the orchestrator cannot approve its own card, whatever it tries. The approval came from the person's shell, and only then did the orchestrator move the card to Done and finish its run.
+An agent that runs `kanbo approve` in its own shell is refused with exit code `4`: the orchestrator cannot approve its own card, whatever it tries. The approval comes from the person's shell, and only then does the orchestrator move the card to Done.

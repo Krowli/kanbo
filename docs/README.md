@@ -2,8 +2,8 @@
 
 - [Getting started](getting-started.md) — a numbered walkthrough: the setup wizard, the home screen, connecting an agent, what it does, approving a card, the board page
 - [Installation](installation.md) — npm, npx, from source, native module notes, upgrading, uninstalling
-- [Using kanbo with agents](agents.md) — global setup, per project, per agent; the agent-vs-person rules
-- [Orchestrator examples](orchestrator.md) — an instruction file, Claude Code subagents, a Codex profile, a shell loop, a worked session
+- [Using kanbo with agents](agents.md) — `kanbo connect`, what the MCP server tells an agent; the agent-vs-person rules
+- [Orchestrator examples](orchestrator.md) — an instruction text to paste, Claude Code subagents, a Codex profile, a worked session
 - [CLI reference](cli.md) — every command and flag, taken from `kanbo <command> --help`
 - [MCP reference](mcp.md) — every `kanbo_*` tool, its inputs and aliases, and what a list answers with
 - [Configuration](configuration.md) — every `KANBO_*` environment variable, the update check, `.kanbo/binding.json`

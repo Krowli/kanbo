@@ -69,29 +69,13 @@ kanbo ticks the ones it found already installed on your machine or in the projec
 
 ```
 ◆  Connect them now?
-│  ● Yes — show exactly which files change, then ask
-│  ○ Not now — set up the board only; no other file is touched (later: kanbo connect)
-│  ○ I'll paste the instructions myself (prints them; nothing is written)
+│  ● Yes — register kanbo's MCP server for them, for every project
+│  ○ Not now — set up the board only (later: kanbo connect)
 ```
 
-Say Yes and it shows exactly which files change, and why, before touching any of them:
+These two questions are asked only when an agent kanbo found has no kanbo registration yet; if every agent it found already has one, it says "Your agents already reach kanbo through its MCP server." and asks nothing.
 
-```
-◆  These files change so your agents know the board. Keep all of them?
-│  ◼ CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs kanbo prime before a task)
-│  ◼ .mcp.json (lets Claude Code call the board's tools in this project)
-```
-
-The section it writes into `CLAUDE.md` (or `AGENTS.md` for Codex and Cursor) is short — a pointer, not the whole rulebook:
-
-```markdown
-<!-- KANBO_START v3 h=38d0418d -->
-## Kanbo board
-
-This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
-Take work with `kanbo claim`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
-<!-- KANBO_END -->
-```
+Say Yes and the plan below shows exactly what is changed before anything is. kanbo registers the MCP server in your own agent settings, so one registration serves every project; it writes nothing into the project's `CLAUDE.md` or `AGENTS.md`, because the server tells the agent the rules itself.
 
 **Add a first card?**
 
@@ -110,8 +94,7 @@ The wizard prints everything it is about to do, then asks once:
 kanbo init will:
   create  .kanbo/board.db (a board file of this project's own, with the columns Backlog, To Do, In Progress, In Review, Done, Canceled)
   write   .kanbo/binding.json (binds this project to WST)
-  write   CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs kanbo prime before a task)
-  write   .mcp.json (lets Claude Code call the board's tools in this project)
+  run     claude mcp add --scope user kanbo -- kanbo mcp
   add     a first card to To Do: Write the README
 Nothing else is changed.
 
@@ -125,8 +108,7 @@ Yes, and it is done:
 ✔ Board: .kanbo/board.db
 ✔ Columns: Backlog, To Do, In Progress, In Review, Done, Canceled
 ✔ Card numbers: WST-001, WST-002, …
-✔ Claude Code: CLAUDE.md (written)
-✔ Claude Code: .mcp.json (written)
+✔ Claude Code: ~/.claude.json (ran claude mcp add --scope user kanbo -- kanbo mcp)
 ✔ First card: WST-001 Write the README
 
 Next: start Claude Code in this folder and say "take the next card from kanbo".
@@ -148,9 +130,8 @@ Agents: Claude Code — not connected
 ◆  What next?
 │  ● Show the board here — kanbo board
 │  ○ Open the board in your browser — kanbo serve
-│  ○ Add a card — kanbo card create
+│  ○ Add a card
 │  ○ Connect an agent — kanbo connect
-│  ○ Get the agent instructions — kanbo instructions
 │  ○ Change columns — kanbo columns
 │  ○ Check the setup — kanbo doctor
 │  ○ Exit
@@ -165,36 +146,33 @@ From the home screen, **Add a card**:
 ```
 ◆  What is the card about? (Enter on an empty line to go back)
 │  Write the README
-WST-001  To Do  worktree
-Write the README
-
-Write the README
+Added WST-001 Write the README to To Do
 ```
 
-The same as `kanbo card create --title "Write the README"` in your own terminal, which lands a card with no `--column` in To Do (an agent's own `kanbo card create` defaults to the board's first column instead — Backlog on a Standard board — so its own follow-up cards are not handed straight to the next `kanbo ready`).
+The card lands in To Do. (An agent's own `kanbo_card_create` defaults to the board's first column instead — Backlog on a Standard board — so its own follow-up cards are not handed straight to the next `kanbo_ready`.)
 
 ## 5. Connecting an agent
 
-If you skipped this in the wizard, run it from the project root:
+If you skipped this in the wizard, run it once from anywhere:
 
 ```bash
 kanbo connect claude --yes
 ```
 
-This is the same two things the wizard's Yes did: the short section in `CLAUDE.md`, and the MCP server registered in `.mcp.json` (so Claude Code can call the board as typed tools, with no shell command needed for the basics). `kanbo connect codex cursor gemini` does the same for the others, and `kanbo connect all --global` sets every agent up for every project on your machine instead of just this one — see [step 8](#8-set-it-up-for-all-projects-instead) below, and [agents](agents.md) for what each client's connection looks like.
+This registers kanbo's MCP server in Claude Code's own settings (`claude mcp add --scope user kanbo -- kanbo mcp`), so Claude Code can call the board as typed tools in every project. `kanbo connect codex cursor gemini` does the same for the others; `--project` writes the project's files instead of your own settings — see [agents](agents.md) for what each client's connection looks like. If an older kanbo wrote a section into your `CLAUDE.md`, `AGENTS.md` or `GEMINI.md`, `kanbo connect` takes it out.
 
 Every change is shown before it is written, same as the wizard. Run `kanbo connect --check` any time to see what is connected.
 
 ## 6. What the agent does
 
-Tell your agent: **"take the next card from kanbo."** With the MCP server connected, it already knows the rules — `kanbo mcp` hands them to the client as its server instructions the moment it connects, before any tool is called. Either way (MCP tools, or the `kanbo` command in its shell) it does roughly this:
+Tell your agent: **"take the next card from kanbo."** `kanbo mcp` hands the rules to the client as its server instructions the moment it connects, before any tool is called. Then the agent does roughly this:
 
-1. Runs `kanbo prime` (or calls `kanbo_prime`) — the board's columns, what each one means, and the rules a card travels by.
-2. Takes the next card with `kanbo claim --agent <name>` (`kanbo_card_claim`) — the first card in To Do that nobody is working on and nobody is waiting on. One step starts its run and moves it to the column this board uses for work in progress. `kanbo ready` (`kanbo_ready`) only lists what is ready.
+1. Calls `kanbo_prime` — the board's columns, what each one means, and the rules a card travels by.
+2. Takes the next card with `kanbo_card_claim` — the first card in To Do that nobody is working on and nobody is waiting on. One step starts its run and moves it to the column this board uses for work in progress. `kanbo_ready` only lists what is ready.
 3. Works the card: writes a status line at every step, puts findings and decisions in comments, splits into subtasks only when the card calls for it, links any pull request it opens.
-4. When it needs you, moves the card to review and runs `kanbo card wait-approval <card> --text "…"` — then stops. It cannot approve or return the card itself: kanbo refuses that in an agent's shell, exit code `4`, whatever it tries.
+4. When it needs you, moves the card to review and calls `kanbo_wait_approval` — then finishes its run (`kanbo_run_finish`) and stops. It cannot approve or return the card itself: kanbo has no tool for that, and refuses it in an agent's shell with exit code `4`, whatever it tries.
 
-See [orchestrator examples](orchestrator.md) for a worked, command-by-command session, and multi-agent setups (a Claude Code orchestrator with sub-agents, a Codex profile, a plain shell loop).
+See [orchestrator examples](orchestrator.md) for a worked session, and multi-agent setups (a Claude Code orchestrator with sub-agents, a Codex profile).
 
 ## 7. Approving
 
@@ -246,21 +224,21 @@ kanbo init will:
 Nothing else is changed.
 ```
 
-Outside a terminal — a script, CI, or if you just run `kanbo init --yes` — kanbo takes this same path automatically: a board file with the Standard columns, and no agent file touched unless `--connect`, `--instructions` or `--mcp` says so. Either way: no `CLAUDE.md`, no `AGENTS.md`, no MCP registration, until you ask for one. Connect an agent later with `kanbo connect <agent>`, or hand it the text yourself with `kanbo instructions --copy`.
+Outside a terminal — a script, CI, or if you just run `kanbo init --yes` — kanbo takes this same path automatically: a board file with the Standard columns, and no agent settings touched unless `--connect` says so (with `--yes`). Either way: no `CLAUDE.md`, no `AGENTS.md`, no MCP registration, until you ask for one. Connect an agent later with `kanbo connect <agent>`.
 
-### Set it up for all projects
+### Connect once for all projects
 
-Rather than repeating step 5 in every project, do it once for every agent you run, everywhere:
+The registration `kanbo connect` makes is already for every project, so do it once per agent, wherever you are:
 
 ```bash
-kanbo connect all --global
+kanbo connect all --yes
 ```
 
-This writes to your own files — `~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.cursor/mcp.json`, and so on — and binds no project and creates no board. The block it writes tells an agent to use kanbo in a project that has a `.kanbo/` folder, and to leave one without alone. A project still gets its own board with a plain `kanbo init` in it; the global setup just means you never register the MCP server or paste instructions again. See [agents](agents.md#1-globally-for-all-your-agents).
+It binds no project and creates no board. A project gets its own board with a plain `kanbo init` in it; in a folder without one, the server still starts and every tool says there is no board here. See [agents](agents.md#connecting-agents-kanbo-connect).
 
 ## Where to next
 
-- [Using kanbo with agents](agents.md) — every client's exact files, Windows notes, the agent-vs-person rules
-- [Orchestrator examples](orchestrator.md) — a full worked session, subagents, a shell loop
+- [Using kanbo with agents](agents.md) — every client's exact settings, Windows notes, the agent-vs-person rules
+- [Orchestrator examples](orchestrator.md) — a full worked session, subagents
 - [CLI reference](cli.md) · [MCP reference](mcp.md) — every command and tool
 - [Troubleshooting](troubleshooting.md) · [FAQ](faq.md)

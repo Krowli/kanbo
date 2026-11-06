@@ -17,7 +17,7 @@ See `Could not load better-sqlite3 …` below.
 Run `kanbo doctor --fix` (or `kanbo migrate`) in the project.
 
 **`columns` warn: `This board has no columns`**
-Boards from kanbo 0.1–0.2 got their columns only with the first card, so `kanbo prime` shows agents none. Run `kanbo doctor --fix` to add the Standard columns, or pick a set yourself: `kanbo columns template simple`.
+Boards from kanbo 0.1–0.2 got their columns only with the first card, so `kanbo_prime` shows agents none. Run `kanbo doctor --fix` to add the Standard columns, or pick a set yourself: `kanbo columns template simple`.
 
 **`install` warn: `kanbo runs from npx's cache`**
 A kanbo run with `npx` is gone once that command ends, so agents cannot start `kanbo mcp`. Install it: `npm install -g kanbo-cli`.
@@ -25,17 +25,17 @@ A kanbo run with `npx` is gone once that command ends, so agents cannot start `k
 **`update` info: `kanbo X is available`**
 Update with `npm install -g kanbo-cli@latest`. See [Update check](configuration.md#update-check) to turn the check off.
 
-**`instructions` warn: `block was written by an older kanbo`**
-Run `kanbo doctor --fix`, or the command in the fix (`kanbo connect claude --project --no-mcp --yes` in the project, or `kanbo connect <agent> --global --no-mcp --yes`). `kanbo init` and `kanbo connect` also refresh it whenever they write that file.
+**`instructions` warn: `an old kanbo section — agents now learn the board from the MCP server`**
+A kanbo up to 0.6 wrote that section into the file; agents no longer need it. Run `kanbo doctor --fix`, or `kanbo connect <agent> --yes`: it takes the section out and keeps the rest of the file.
 
-**`instructions` warn: `you edited the kanbo block`**
-The text between the markers no longer matches what kanbo wrote. kanbo leaves it alone; to replace it, run `kanbo connect claude --project --no-mcp` in a terminal and answer yes.
+**`instructions` warn, with the fix `Delete it yourself, or run kanbo connect --remove`**
+The section was edited, is a text you chose, or was written by a newer kanbo, so kanbo leaves it alone. Delete it yourself, or run `kanbo connect --remove --yes`.
 
 **`instructions` fail: `… has a kanbo start marker without an end`**
 The file's kanbo markers do not pair up (a start without an end, an end without a start, or a start inside another block), so kanbo does not write to it or remove anything from it. Fix the markers by hand — or delete the stray one — then run the command again.
 
-**`instructions` ok: `written by a newer kanbo (vN)`**
-A newer kanbo wrote this block; this one leaves it alone. Update kanbo: `npm install -g kanbo-cli@latest`.
+**`mcp` warn: `No coding agent reaches kanbo: its MCP server is registered nowhere`**
+Run `kanbo connect claude --yes` (or `codex`, `cursor`, `gemini`) once; one registration serves every project.
 
 **`mcp:<client>`: `your own kanbo entry (…) — left as is`**
 The `kanbo` entry is not in a shape kanbo writes (it starts kanbo another way, or has an `env`), so kanbo never changes it. It is a warning only when it cannot start here.

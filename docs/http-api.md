@@ -127,4 +127,4 @@ curl -s -H "authorization: Bearer $T" -H 'content-type: application/json' \
 
 ## What it does not do
 
-It launches and stops no agent, keeps no chat sessions, and serves one workspace — there is no project switcher. An app that launches agents can serve the same routes itself and add those.
+It launches and stops no agent and keeps no chat sessions. An app that launches agents can serve the same routes itself and add those.
