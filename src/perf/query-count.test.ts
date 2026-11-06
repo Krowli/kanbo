@@ -313,13 +313,15 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
   // 0.3.0: two more per list (which cards were returned, and the last comment
   // of the waiting and returned ones), two more per ready (the returned cards
   // listed first) and one more per prime (the same, said first).
+  // 0.5.0: three more per CLI command: the board file's schema guard (the read
+  // guard) runs on every CLI open on SQLite, as the Postgres guard does below.
   sqlite: {
-    'cli card list': 6,
-    'cli card list, filtered': 7,
-    'cli ready': 6,
-    'cli prime': 3,
-    'cli card get': 6,
-    'cli board': 4,
+    'cli card list': 9,
+    'cli card list, filtered': 10,
+    'cli ready': 9,
+    'cli prime': 6,
+    'cli card get': 9,
+    'cli board': 7,
     'ops card get + comments': 5,
     'mcp kanbo_card_list': 5,
     'mcp kanbo_card_list, filtered': 6,
