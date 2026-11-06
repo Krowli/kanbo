@@ -250,4 +250,21 @@ describe('board metrics fix round 1', () => {
 
     expect(nameFor([first, second])).toBe(nameFor([second, first]))
   })
+
+  it('does not count a move between workspaces, or a move from a column deleted since, as a return', () => {
+    // WOR-003's first move (In Progress → In Review) becomes a move from another workspace's column, then from a deleted one, into an earlier column.
+    const otherReview = { ...METRICS_HISTORY.statuses[3]!, id: 'other-review', workspaceId: 'other', name: 'In Review' }
+    const base = computeBoardMetrics(METRICS_HISTORY, METRICS_INPUT, METRICS_NOW).returns.total
+    const backwards = (fromStatusId: string) => ({
+      changeId: 'change-back', issueId: 'WOR-002', workspaceId: 'workspace', fromStatusId, toStatusId: 'status-todo', actorKind: 'user' as const, actorId: '__self__', at: day(6),
+    })
+
+    const crossed = computeBoardMetrics({ ...METRICS_HISTORY, statuses: [...METRICS_HISTORY.statuses, otherReview], entries: [...METRICS_HISTORY.entries, backwards('other-review')] }, METRICS_INPUT, METRICS_NOW)
+    const deleted = computeBoardMetrics({ ...METRICS_HISTORY, entries: [...METRICS_HISTORY.entries, backwards('status-gone')] }, METRICS_INPUT, METRICS_NOW)
+    const control = computeBoardMetrics({ ...METRICS_HISTORY, entries: [...METRICS_HISTORY.entries, backwards('status-review')] }, METRICS_INPUT, METRICS_NOW)
+
+    expect(crossed.returns.total).toBe(base)
+    expect(deleted.returns.total).toBe(base)
+    expect(control.returns.total).toBe(base + 1)
+  })
 })
