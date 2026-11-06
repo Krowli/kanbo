@@ -28,7 +28,7 @@ import type { CliResult } from '../output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
 import type { AgentId } from '../setup/agents'
 import { AGENT_IDS, AGENTS, defaultMcpScope, detectAgents, parseAgentId } from '../setup/agents'
-import { describeManualOutcome, pendingItems, planConnect } from '../setup/connect-plan'
+import { describeManualOutcome, pendingItems, planConnect, readMcpState } from '../setup/connect-plan'
 import { inspectBoardFile, inspectPostgresWorkspace } from '../setup/existing-workspace'
 import type { AppliedInitPlan, InitPlan } from '../setup/init-plan'
 import { applyInitPlan, assertOwnBoardFile } from '../setup/init-plan'
@@ -561,6 +561,11 @@ function warnAboutOwnerAccess(target: BoardTarget, options: InitOptions): void {
   }
 }
 
+/** Has any agent a kanbo MCP registration already, in the project's files or its own settings? Then the tip to connect one is not needed. */
+function someAgentReachesKanbo(projectDir: string): boolean {
+  return AGENT_IDS.some(agent => (['project', 'user'] as const).some(scope => readMcpState(agent, scope, projectDir) !== 'missing'))
+}
+
 export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: InitOptions): CliResult {
   const { workspace, target } = plan
   const lines = [`This project uses board ${workspace.name} — ${applied.bindingPath}`]
@@ -591,7 +596,7 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
   if (launchWarning) {
     lines.push(`Note: ${launchWarning}`)
   }
-  if (!connected) {
+  if (!connected && !someAgentReachesKanbo(plan.projectDir)) {
     lines.push(CONNECT_LATER_TIP)
   }
 

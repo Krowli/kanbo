@@ -11,7 +11,7 @@ import { assertBoardSchema, openBoardDatabase, readBoardFileOwner } from '../sql
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import { readBinding } from './binding'
-import { registerInitCommand } from './commands/init'
+import { CONNECT_LATER_TIP, registerInitCommand } from './commands/init'
 
 /**
  * The one way to interrupt a migration half-way from outside it. Off for every
@@ -227,6 +227,35 @@ describe('kanbo init', () => {
         .toBe('[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
       expect(existsSync(join(projectDir, 'AGENTS.md'))).toBe(false)
       expect(existsSync(join(projectDir, '.cursor'))).toBe(false)
+    })
+
+    /** What `kanbo init --yes` printed on stdout. */
+    async function printedByInit(): Promise<string> {
+      const printed: string[] = []
+      vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
+        printed.push(String(line))
+      })
+      const program = new Command().exitOverride()
+      registerInitCommand(program)
+      await program.parseAsync(['init', '--db', board.path, '--workspace', WORKSPACE_ID, '--yes'], { from: 'user' })
+      return printed.join('\n')
+    }
+
+    it('tells a person with no agent connected how to connect one', async () => {
+      expect(await printedByInit()).toContain(CONNECT_LATER_TIP)
+    })
+
+    it('does not tell a person whose agent already has the kanbo server, in their own settings', async () => {
+      mkdirSync(join(home, '.cursor'))
+      writeFileSync(join(home, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } } }))
+
+      expect(await printedByInit()).not.toContain(CONNECT_LATER_TIP)
+    })
+
+    it('does not tell a person whose project already has the kanbo server', async () => {
+      writeFileSync(join(projectDir, '.mcp.json'), JSON.stringify({ mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } } }))
+
+      expect(await printedByInit()).not.toContain(CONNECT_LATER_TIP)
     })
 
     it('does nothing to the agents without a yes, and says how to connect them', async () => {
