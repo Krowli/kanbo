@@ -4,6 +4,31 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+kanbo 0.7 gives agents one way onto the board: the MCP server. The terminal keeps the person's commands. No board migration.
+
+### Removed
+
+- **Breaking:** the commands `kanbo claim`, `ready`, `prime`, `run` (all subcommands), `card` (all subcommands), `capabilities` and `instructions`. Agents use the MCP server's tools; people use the board page (`kanbo serve`) and the commands that stay (`init`, `connect`, `doctor`, `uninstall`, `board`, `columns`, `approve`, `return`, `sprint`, `stats`, `serve`, `mcp`, `migrate`, `roles`).
+- **Breaking:** `kanbo init --instructions`, `--mcp` and `--global`, and `kanbo connect --no-instructions` and `--no-mcp`. kanbo writes no instruction block anywhere any more. `kanbo init --json` no longer has the `instructions` and `mcp` fields; `kanbo connect --check --json` rows lose `instructions` and gain `oldSections`.
+- **Breaking:** the library exports `KANBO_TOOL_CLI_EQUIVALENTS` and `KanboToolCliEquivalent`, and the `cli` field of each tool in the capabilities manifest (manifest version 4). The 17 tool names, their inputs, `buildKanboTools`, `createHttpTransport` and `includeRunTools` are unchanged.
+
+### Changed
+
+- `kanbo connect` registers only the MCP server, in your own configuration by default (so one registration serves every project; `--project` writes the project's files), and removes the kanbo section older versions wrote into `CLAUDE.md`, `AGENTS.md` and `GEMINI.md`. A section you edited is kept, with a note.
+- `kanbo init` writes no agent file, and asks about agents only when one found here has no kanbo MCP registration; with `--connect` it registers the MCP server as `kanbo connect` does.
+- `kanbo doctor` warns about old kanbo sections (and `--fix` removes them) and about a machine where no agent has the MCP server registered, instead of warning that no section exists.
+- The MCP instructions tell an agent to finish the run it claimed with `kanbo_run_finish`, and to leave the board alone in a folder that has none.
+- A plain `kanbo init` makes the project's own board even when `KANBO_DB_PATH` is set; `kanbo init --db <path>` binds a project to an app's database.
+
+### Fixed
+
+- `kanbo connect --check` called kanbo's own Claude Code registration "yours": Claude Code adds an empty `env` to the entry it writes, which now counts as kanbo's own (an `env` with a variable is still yours).
+- `kanbo mcp` stopped at startup when `KANBO_DB_PATH` named a database it could not use (older than this kanbo, or with no project for the folder). It now starts, and each tool says why.
+
+### Upgrading
+
+Run `kanbo connect <agent>` or `kanbo doctor --fix` once to take the old kanbo section out of `CLAUDE.md`, `AGENTS.md` and `GEMINI.md`. Agents that used `kanbo prime`, `kanbo claim` or `kanbo card …` in a shell use the MCP tools instead; register the server with `kanbo connect`.
+
 ## [0.6.0] — 2026-11-06
 
 kanbo 0.6 measures how work flows on a board. No board migration: 0.5.0's index is all the metrics need.
