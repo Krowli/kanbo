@@ -190,10 +190,9 @@ Every change is shown before it is written, same as the wizard. Run `kanbo conne
 Tell your agent: **"take the next card from kanbo."** With the MCP server connected, it already knows the rules — `kanbo mcp` hands them to the client as its server instructions the moment it connects, before any tool is called. Either way (MCP tools, or the `kanbo` command in its shell) it does roughly this:
 
 1. Runs `kanbo prime` (or calls `kanbo_prime`) — the board's columns, what each one means, and the rules a card travels by.
-2. Runs `kanbo ready` (`kanbo_ready`) — the cards in To Do that nobody is working on and nobody is waiting on. Takes the first one.
-3. Records that it started (`kanbo run start <card> --agent <name>`), then moves the card to the column this board uses for work in progress.
-4. Works the card: writes a status line at every step, puts findings and decisions in comments, splits into subtasks only when the card calls for it, links any pull request it opens.
-5. When it needs you, moves the card to review and runs `kanbo card wait-approval <card> --text "…"` — then stops. It cannot approve or return the card itself: kanbo refuses that in an agent's shell, exit code `4`, whatever it tries.
+2. Takes the next card with `kanbo claim --agent <name>` (`kanbo_card_claim`) — the first card in To Do that nobody is working on and nobody is waiting on. One step starts its run and moves it to the column this board uses for work in progress. `kanbo ready` (`kanbo_ready`) only lists what is ready.
+3. Works the card: writes a status line at every step, puts findings and decisions in comments, splits into subtasks only when the card calls for it, links any pull request it opens.
+4. When it needs you, moves the card to review and runs `kanbo card wait-approval <card> --text "…"` — then stops. It cannot approve or return the card itself: kanbo refuses that in an agent's shell, exit code `4`, whatever it tries.
 
 See [orchestrator examples](orchestrator.md) for a worked, command-by-command session, and multi-agent setups (a Claude Code orchestrator with sub-agents, a Codex profile, a plain shell loop).
 

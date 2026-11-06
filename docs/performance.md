@@ -161,12 +161,12 @@ a read that asks once per card (an N+1) — or changes from the numbers here.
 
 | read | SQLite | Postgres | before (SQLite / Postgres) |
 | --- | ---: | ---: | --- |
-| `kanbo card list` | 6 | 8 | 4 / 6 |
-| `kanbo card list` with every filter | 7 | 9 | 5 / 7 |
-| `kanbo ready` | 6 | 8 | 4 / 6 |
-| `kanbo prime` | 3 | 5 | 2 / 4 |
-| `kanbo card get` (now with comments and sub-cards) | 6 | 8 | 4 / 6 |
-| `kanbo board` | 4 | 6 | same |
+| `kanbo card list` | 9 | 8 | 4 / 6 |
+| `kanbo card list` with every filter | 10 | 9 | 5 / 7 |
+| `kanbo ready` | 9 | 8 | 4 / 6 |
+| `kanbo prime` | 6 | 5 | 2 / 4 |
+| `kanbo card get` (now with comments and sub-cards) | 9 | 8 | 4 / 6 |
+| `kanbo board` | 7 | 6 | same |
 | a card with its comments (`ops`) | 5 | 5 | same |
 | `kanbo_card_list` | 5 | 5 | 3 / 3 |
 | `kanbo_card_list` with every filter | 6 | 6 | 4 / 4 |
@@ -186,8 +186,9 @@ returned cards they name first, and `kanbo_prime` one. At 1,000 cards on SQLite
 (p50): `kanbo_card_list` 1.78 → 2.49 ms, `kanbo_ready` 0.78 → 1.75 ms,
 `kanbo_prime` 0.08 → 0.89 ms.
 
-A command on Postgres runs two more than on SQLite: the check that the database
-holds a board this build can write to. A filter adds no statement — it is part
+A command runs a check on the board it opens: on SQLite the file's schema guard
+(three statements, the read guard), on Postgres the check that the database
+holds a board this build can write to (two). A filter adds no statement — it is part
 of the one that reads the cards; naming a parent card adds the one that finds
 it. `kanbo_card_get` costs one statement per part it brings (sub-cards,
 comments, runs, history, pull requests) and saves the agent a call per part.

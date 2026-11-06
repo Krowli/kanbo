@@ -259,7 +259,6 @@ export interface KanboRunStartInput {
   session?: string
 }
 
-/** How `kanbo_run_finish` says a run ended. */
 /** What `kanbo_card_claim` hands back: the card where it now is, the run it started, and the column it went to. */
 export interface KanboClaimResult {
   card: KanboCardResult
@@ -267,6 +266,7 @@ export interface KanboClaimResult {
   column: KanboColumnResult
 }
 
+/** How `kanbo_run_finish` says a run ended. */
 export interface KanboRunFinishInput {
   run: string
   state: 'finished' | 'failed' | 'stopped'

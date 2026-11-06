@@ -24,9 +24,10 @@ export const SCHEMA_NOT_INSTALLED_MESSAGE
  * caller's own risk but never written to — a write shaped by this build's idea
  * of the schema is how a person's board gets a column full of nothing. A file
  * of this package's own is this package's to migrate, so the same refusal
- * points at `kanbo migrate` instead of at the app. Reads stay open either way,
- * because a person who cannot migrate right now should still be able to look at
- * their cards.
+ * points at `kanbo migrate` instead of at the app. Reads are held to the lesser
+ * bar of `assertReadableBoard`: a file only a stamp behind is still read, so a
+ * person who cannot migrate right now can look at their cards, but one missing
+ * a table or column this build reads is refused with the same sentence.
  */
 export function assertWritableBoard(database: SqliteDatabase, owner: BoardFileOwner): void {
   try {
