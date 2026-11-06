@@ -17,18 +17,18 @@ prefix and puts that first on `PATH` — the agent runs the build under test, no
 `kanbo` you may have installed.
 
 ```bash
-node evals/agent-eval.mjs                                   # every scenario, 3 variants, 3 runs each, Claude Code
-node evals/agent-eval.mjs --scenarios take-next --n 1       # one scenario, one run per variant
-node evals/agent-eval.mjs --agents claude,codex --variants full
+node evals/agent-eval.mjs                                   # every scenario, 3 runs each, Claude Code
+node evals/agent-eval.mjs --scenarios take-next --n 1       # one scenario, one run
+node evals/agent-eval.mjs --agents claude,codex
 node evals/agent-eval.mjs --summary evals/results/2026-09-28.json   # the markdown tables again
 ```
 
 | Option | Meaning |
 | --- | --- |
 | `--agents` | `claude`, `codex`, or both, comma-separated (default `claude`). |
-| `--variants` | How kanbo is connected: `full` (`kanbo connect <agent> --project`: instructions and MCP), `mcp` (MCP only, `--no-instructions`), `instructions` (instructions only, `--no-mcp`; the agent uses `kanbo` through its shell). Default all three. |
+| `--variants` | How kanbo is connected. There is one: `mcp` (`kanbo connect <agent> --project --yes`, the MCP server only; the agent has no `kanbo` command line to use). Kept as an option so older results files still read. |
 | `--scenarios` | Comma-separated names from the table below (default all). |
-| `--n` | Runs per scenario per variant per agent (default 3). |
+| `--n` | Runs per scenario per agent (default 3). |
 | `--model` | Claude Code model (default `sonnet`). `--codex-model` for Codex (default: Codex's own). |
 | `--timeout` | Seconds per run before it is killed (default 360). |
 | `--budget` | Claude Code `--max-budget-usd` per run (default 1.5). |

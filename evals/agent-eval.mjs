@@ -15,7 +15,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const KEY = 'TST'
@@ -154,15 +154,16 @@ export function slugify(text) {
 
 // ---------------------------------------------------------------- scenarios
 //
-// seed(k) runs as a person (KANBO_ACTOR_KIND=person) and returns the facts the
-// scorer needs. score(ctx) returns { checks: {name: boolean}, notes }.
+// seed(b) runs as a person, through the board operations (the card commands an agent
+// used are gone, and some of it — a card created straight into Done — is a person's),
+// and returns the facts the scorer needs. score(ctx) returns { checks: {name: boolean}, notes }.
 
 const SCENARIOS = {
   'take-next': {
     prompt: 'Take the next card from kanbo and do it.',
-    seed(k, dir) {
-      k('card', 'create', '--title', 'Dark mode', '--description', 'Idea: a dark theme for the docs site.', '--column', 'backlog')
-      k('card', 'create', '--title', 'Add slugify(text)', '--execution-mode', 'main', '--column', 'to_do', '--description', 'Add `slugify(text)` to src/strings.js: lower-case, words joined by single dashes, no characters other than a-z, 0-9 and dashes (slugify("Hello World!") is "hello-world"). Export it and add a test in test/strings.test.js.')
+    async seed(b, dir) {
+      await b.create({ title: 'Dark mode', description: 'Idea: a dark theme for the docs site.', column: 'backlog' })
+      await b.create({ title: 'Add slugify(text)', executionMode: 'main', column: 'to_do', description: 'Add `slugify(text)` to src/strings.js: lower-case, words joined by single dashes, no characters other than a-z, 0-9 and dashes (slugify("Hello World!") is "hello-world"). Export it and add a test in test/strings.test.js.' })
       return { target: `${KEY}-002`, other: `${KEY}-001`, dir }
     },
     score(ctx) {
@@ -187,22 +188,22 @@ const SCENARIOS = {
 
   'whats-waiting': {
     prompt: 'Look at the board and tell me what\'s waiting for me.',
-    seed(k) {
-      k('card', 'create', '--title', 'Rate limiting for the API', '--column', 'backlog')
-      k('card', 'create', '--title', 'Add truncate(text, n)', '--column', 'to_do')
-      k('card', 'create', '--title', 'Add padStart helper', '--column', 'to_do')
-      k('card', 'create', '--title', 'Refactor reverse() for emoji', '--column', 'in_progress')
-      k('card', 'status-line', `${KEY}-004`, '--text', 'Running the tests after the refactor')
-      k('card', 'create', '--title', 'Add wordCount(text)', '--column', 'in_progress')
-      k('card', 'move', `${KEY}-005`, 'in_review')
-      k('card', 'wait-approval', `${KEY}-005`, '--text', 'wordCount added with tests — please review')
-      k('card', 'create', '--title', 'Document capitalize()', '--column', 'in_progress')
-      k('card', 'move', `${KEY}-006`, 'in_review')
-      k('card', 'wait-approval', `${KEY}-006`, '--text', 'Should the docs cover Unicode? Need your decision')
-      k('card', 'create', '--title', 'Set up CI', '--column', 'in_progress')
-      k('card', 'move', `${KEY}-007`, 'in_review')
-      k('card', 'status-line', `${KEY}-007`, '--text', 'Reviewer bot is checking the workflow')
-      k('card', 'create', '--title', 'Initial commit', '--column', 'done')
+    async seed(b) {
+      await b.create({ title: 'Rate limiting for the API', column: 'backlog' })
+      await b.create({ title: 'Add truncate(text, n)', column: 'to_do' })
+      await b.create({ title: 'Add padStart helper', column: 'to_do' })
+      await b.create({ title: 'Refactor reverse() for emoji', column: 'in_progress' })
+      await b.statusLine(`${KEY}-004`, 'Running the tests after the refactor')
+      await b.create({ title: 'Add wordCount(text)', column: 'in_progress' })
+      await b.move(`${KEY}-005`, 'in_review')
+      await b.waitApproval(`${KEY}-005`, 'wordCount added with tests — please review')
+      await b.create({ title: 'Document capitalize()', column: 'in_progress' })
+      await b.move(`${KEY}-006`, 'in_review')
+      await b.waitApproval(`${KEY}-006`, 'Should the docs cover Unicode? Need your decision')
+      await b.create({ title: 'Set up CI', column: 'in_progress' })
+      await b.move(`${KEY}-007`, 'in_review')
+      await b.statusLine(`${KEY}-007`, 'Reviewer bot is checking the workflow')
+      await b.create({ title: 'Initial commit', column: 'done' })
       return { waiting: [`${KEY}-005`, `${KEY}-006`], notWaiting: [`${KEY}-002`, `${KEY}-003`, `${KEY}-004`, `${KEY}-007`] }
     },
     score(ctx) {
@@ -220,9 +221,9 @@ const SCENARIOS = {
 
   'plan-big': {
     prompt: `Card ${KEY}-001 is big; plan it.`,
-    seed(k) {
-      k('card', 'create', '--title', 'String helpers for the 2.0 release', '--execution-mode', 'main', '--column', 'to_do', '--description', 'Three independent pieces, each its own change and test:\n1. slugify(text) — URL slugs.\n2. truncate(text, n) — cut to n characters with an ellipsis.\n3. wordCount(text) — number of words, Unicode-aware.\nThey can be reviewed and shipped separately.')
-      k('card', 'create', '--title', 'Dark mode', '--column', 'backlog')
+    async seed(b) {
+      await b.create({ title: 'String helpers for the 2.0 release', executionMode: 'main', column: 'to_do', description: 'Three independent pieces, each its own change and test:\n1. slugify(text) — URL slugs.\n2. truncate(text, n) — cut to n characters with an ellipsis.\n3. wordCount(text) — number of words, Unicode-aware.\nThey can be reviewed and shipped separately.' })
+      await b.create({ title: 'Dark mode', column: 'backlog' })
       return { target: `${KEY}-001`, before: 2 }
     },
     score(ctx) {
@@ -242,8 +243,8 @@ const SCENARIOS = {
 
   'plan-small': {
     prompt: `Plan card ${KEY}-001.`,
-    seed(k) {
-      k('card', 'create', '--title', 'Fix typo in README', '--execution-mode', 'main', '--column', 'to_do', '--description', 'README says "charaters" somewhere — should be "characters".')
+    async seed(b) {
+      await b.create({ title: 'Fix typo in README', executionMode: 'main', column: 'to_do', description: 'README says "charaters" somewhere — should be "characters".' })
       return { target: `${KEY}-001`, before: 1 }
     },
     score(ctx) {
@@ -258,18 +259,19 @@ const SCENARIOS = {
 
   'returned': {
     prompt: 'Continue the card that was returned to you.',
-    seed(k, dir) {
+    async seed(b, dir) {
       writeFileSync(join(dir, 'src/strings.js'), SAMPLE['src/strings.js'] + SLUGIFY_FIRST_TRY)
       run('git', ['commit', '-qam', 'Add slugify'], { cwd: dir })
-      k('card', 'create', '--title', 'Remove the typo in README', '--column', 'done')
-      k('card', 'create', '--title', 'Add slugify(text)', '--execution-mode', 'main', '--column', 'to_do', '--description', 'Add `slugify(text)` to src/strings.js: lower-case, words joined by single dashes. Export it and test it.')
-      k('card', 'move', `${KEY}-002`, 'in_progress')
-      k('card', 'status-line', `${KEY}-002`, '--text', 'Writing slugify')
-      k('card', 'comment', `${KEY}-002`, '--content', 'Added slugify to src/strings.js.')
-      k('card', 'move', `${KEY}-002`, 'in_review')
-      k('card', 'wait-approval', `${KEY}-002`, '--text', 'slugify is in — please review')
-      k('return', `${KEY}-002`, '--comment', 'slugify("!!!") returns "-", and "  Hi  " gives "-hi-". Strip dashes at both ends, and add a test for both cases.')
-      k('card', 'create', '--title', 'Add truncate(text, n)', '--column', 'to_do')
+      await b.create({ title: 'Remove the typo in README', column: 'done' })
+      await b.create({ title: 'Add slugify(text)', executionMode: 'main', column: 'to_do', description: 'Add `slugify(text)` to src/strings.js: lower-case, words joined by single dashes. Export it and test it.' })
+      await b.move(`${KEY}-002`, 'in_progress')
+      await b.statusLine(`${KEY}-002`, 'Writing slugify')
+      await b.comment(`${KEY}-002`, 'Added slugify to src/strings.js.')
+      await b.move(`${KEY}-002`, 'in_review')
+      await b.waitApproval(`${KEY}-002`, 'slugify is in — please review')
+      // Sending a card back is a person's: it runs as one.
+      await b.sendBack(`${KEY}-002`, 'slugify("!!!") returns "-", and "  Hi  " gives "-hi-". Strip dashes at both ends, and add a test for both cases.')
+      await b.create({ title: 'Add truncate(text, n)', column: 'to_do' })
       return { target: `${KEY}-002`, other: `${KEY}-003` }
     },
     score(ctx) {
@@ -484,7 +486,7 @@ function runAgent(cmd, args, prompt, cwd, env, timeoutSec) {
 
 // bins.test is the build under test (the agent's PATH and `kanbo connect`, which
 // writes that version's instructions); bins.tool seeds and reads the board.
-function makeProject(bins, scenario, variant, agent) {
+async function makeProject(bins, scenario, variant, agent) {
   const dir = mkdtempSync(join(tmpdir(), `kanbo-eval-${scenario}-`))
   for (const [path, text] of Object.entries(SAMPLE)) {
     mkdirSync(dirname(join(dir, path)), { recursive: true })
@@ -498,7 +500,14 @@ function makeProject(bins, scenario, variant, agent) {
   run('git', ['config', 'user.email', 'eval@example.com'], { cwd: dir })
   const k = (...args) => run('kanbo', args, { cwd: dir, env: personEnv })
   k('init', '--yes', '--columns', 'standard', '--key', KEY)
-  const facts = SCENARIOS[scenario].seed(k, dir)
+  const seeder = await openSeeder(dir)
+  let facts
+  try {
+    facts = await SCENARIOS[scenario].seed(seeder, dir)
+  }
+  finally {
+    seeder.close()
+  }
   const connect = ['connect', agent, '--project', '--yes']
   run('kanbo', connect, { cwd: dir, env: cleanEnv(bins.test, { KANBO_ACTOR_KIND: 'person' }) })
   run('git', ['add', '-A'], { cwd: dir })
@@ -506,13 +515,54 @@ function makeProject(bins, scenario, variant, agent) {
   return { dir, facts }
 }
 
-function boardState(dir, binDir) {
+// Reads the board the way the agent's own client does: the columns and the board
+// from the person's commands that stay, each card in full from the MCP server.
+async function boardState(dir, binDir) {
   const env = cleanEnv(binDir, { KANBO_ACTOR_KIND: 'person' })
   const k = (...args) => JSON.parse(run('kanbo', [...args, '--json'], { cwd: dir, env }).stdout)
   const columns = k('columns', 'list')
-  const cards = k('card', 'list', '--all')
-  const details = Object.fromEntries(cards.map(c => [c.id, k('card', 'get', c.id, '--include', 'comments,subCards,history', '--comments', '50')]))
-  return { columns, cards, details }
+  const cards = k('board', '--all').flatMap(section => section.cards)
+  const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
+  const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js')
+  const client = new Client({ name: 'kanbo-eval', version: '0.0.0' })
+  await client.connect(new StdioClientTransport({ command: 'kanbo', args: ['mcp'], env, cwd: dir, stderr: 'ignore' }))
+  try {
+    const details = {}
+    for (const c of cards) {
+      const result = await client.callTool({ name: 'kanbo_card_get', arguments: { card: c.id, include: ['comments', 'subCards', 'history'], commentLimit: 50 } })
+      const text = (result.content ?? []).map(part => part.text ?? '').join('\n')
+      if (result.isError)
+        throw new Error(`kanbo_card_get ${c.id} failed: ${text}`)
+      details[c.id] = { ...c, ...JSON.parse(text) }
+    }
+    return { columns, cards, details }
+  }
+  finally {
+    await client.close().catch(() => {})
+  }
+}
+
+// Seeds a board as a person, through the built library of this checkout: the same
+// operations the board page uses, with the actor kinds a person's terminal files.
+async function openSeeder(dir) {
+  const lib = await import(pathToFileURL(join(REPO, 'dist', 'lib', 'index.mjs')).href)
+  const sqlite = await import(pathToFileURL(join(REPO, 'dist', 'lib', 'sqlite', 'index.mjs')).href)
+  const binding = JSON.parse(readFileSync(join(dir, '.kanbo', 'binding.json'), 'utf8'))
+  const board = await sqlite.openBoardDatabase(join(dir, '.kanbo', 'board.db'))
+  const ops = lib.createBoardOps(sqlite.createSqliteBoardStore({ database: () => board.database }))
+  const workspace = { id: binding.workspaceId, identifier: binding.identifier, name: binding.identifier }
+  // A person's placement: a column's entry rules warn instead of refusing.
+  const placing = { kind: 'external', id: 'eval-person', name: 'eval', placesForPerson: true }
+  const person = { kind: 'user', id: 'eval-person' }
+  return {
+    create: async ({ title, description, column, executionMode, parent }) => await ops.createCard({ workspace, title, description, statusName: column, executionMode, parentIssueId: parent }, placing),
+    statusLine: async (id, text) => await ops.setStatusLine(id, text, placing),
+    comment: async (id, content) => await ops.addComment({ issueId: id, content }, placing),
+    move: async (id, column) => await ops.moveCard(id, column, placing),
+    waitApproval: async (id, text) => await ops.waitApproval(id, { statusLine: text }, placing),
+    sendBack: async (id, comment) => await ops.returnCard(id, { comment }, person),
+    close: () => board.close(),
+  }
 }
 
 function scoreRun(scenario, dir, binDir, facts, parsed, before, after) {
@@ -548,14 +598,14 @@ function scoreRun(scenario, dir, binDir, facts, parsed, before, after) {
 }
 
 async function oneRun(o, bins, agent, variant, scenario, index) {
-  const { dir, facts } = makeProject(bins, scenario, variant, agent)
-  const before = boardState(dir, bins.tool)
+  const { dir, facts } = await makeProject(bins, scenario, variant, agent)
+  const before = await boardState(dir, bins.tool)
   const { cmd, args } = agent === 'claude' ? claudeCommand(o, dir, variant) : codexCommand(o, dir, variant)
   const res = await runAgent(cmd, args, SCENARIOS[scenario].prompt, dir, cleanEnv(bins.test), o.timeout)
   const parsed = parseTranscript(agent, res.out)
   let scored
   try {
-    const after = boardState(dir, bins.tool)
+    const after = await boardState(dir, bins.tool)
     scored = scoreRun(scenario, dir, bins.tool, facts, parsed, before, after)
   }
   catch (e) {
