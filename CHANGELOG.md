@@ -4,6 +4,10 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-11-06
+
+kanbo 0.6 measures how work flows on a board. No board migration: 0.5.0's index is all the metrics need.
+
 ### Added
 
 - `kanbo stats`: how work flows on the board over a range — cycle and lead time as p50 and p85, cards finished per ISO week, work in progress against each column's limit, aging cards, time in column, returns (moves back into an earlier unstarted or started column, by anyone, split by people, agents and outside writers), first-pass approval, attempts, and one line per agent and per person; `--from`, `--to`, `--sprint <id>`, and `--json` with the cumulative flow by day. Canceled cards are counted apart.
@@ -216,6 +220,7 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
+[0.6.0]: https://github.com/Krowli/kanbo/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Krowli/kanbo/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Krowli/kanbo/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Krowli/kanbo/releases/tag/v0.3.0
