@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { writeRecordingBin } from '../testing/fake-bin'
 import { createPromptDriver } from '../testing/prompt-driver'
+import { registerConnectCommand } from './commands/connect'
 import { registerInitCommand } from './commands/init'
 import { registerUninstallCommand } from './commands/uninstall'
 import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK } from './setup/instructions'
@@ -16,7 +17,7 @@ import { setUiForTests } from './ui/ui'
 const prompts = { confirm: vi.fn() }
 
 /**
- * `kanbo uninstall` on a project and a home directory set up by `kanbo init`,
+ * `kanbo uninstall` on a project and a home directory set up by `kanbo init` and `kanbo connect`,
  * with the person's own content around everything kanbo wrote. `HOME`,
  * `CODEX_HOME` and `PATH` point into a temporary folder; the `claude` on that
  * PATH only writes down what it was asked.
@@ -58,8 +59,13 @@ describe('kanbo uninstall', () => {
     writeFileSync(join(home, '.claude', 'CLAUDE.md'), '# Mine\n')
     writeFileSync(join(codexHome, 'config.toml'), 'model = "o3"\n')
 
-    await runInit(['--file', '--instructions', 'claude', '--mcp', 'claude,codex,cursor', '--yes'])
-    await runInit(['--global', '--mcp', 'codex,cursor', '--yes'])
+    await runInit(['--file', '--yes'])
+    await runConnect(['claude', 'codex', 'cursor', '--project', '--yes'])
+    await runConnect(['codex', 'cursor', '--global', '--yes'])
+    // The sections older versions wrote, which `kanbo connect` above would have taken out.
+    writeFileSync(join(projectDir, 'CLAUDE.md'), `# Project notes\n\n${INSTRUCTION_BLOCK}\n`)
+    writeFileSync(join(home, '.claude', 'CLAUDE.md'), `# Mine\n\n${GLOBAL_INSTRUCTION_BLOCK}\n`)
+    writeFileSync(join(codexHome, 'AGENTS.md'), `${GLOBAL_INSTRUCTION_BLOCK}\n`)
 
     // Claude Code's user-scope registration, as `claude mcp add` leaves it.
     writeFileSync(join(home, '.claude.json'), JSON.stringify({ mcpServers: { kanbo: { command: 'kanbo', args: ['mcp'] } } }))
@@ -77,6 +83,12 @@ describe('kanbo uninstall', () => {
     const program = new Command().exitOverride()
     registerInitCommand(program)
     await program.parseAsync(['init', ...argv], { from: 'user' })
+  }
+
+  async function runConnect(argv: string[]): Promise<void> {
+    const program = new Command().exitOverride()
+    registerConnectCommand(program)
+    await program.parseAsync(['connect', ...argv], { from: 'user' })
   }
 
   async function uninstall(argv: string[]): Promise<void> {
@@ -155,7 +167,7 @@ describe('kanbo uninstall', () => {
     expect(existsSync(board)).toBe(true)
 
     // The binding is gone now, so the board is found the way the binding named it — write it back.
-    await runInit(['--file', '--instructions', 'none', '--mcp', '', '--yes'])
+    await runInit(['--file', '--yes'])
     prompts.confirm.mockResolvedValueOnce(true)
     await uninstall(['--project', '--purge', '--yes'])
     expect(existsSync(board)).toBe(false)

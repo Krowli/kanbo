@@ -33,7 +33,6 @@ vi.mock('./setup/agents', async (importOriginal) => {
   const { join: joinPath } = await import('node:path')
   return {
     ...original,
-    defaultMcpScope: (agent: keyof typeof original.AGENTS) => original.AGENTS[agent].mcpScope,
     detectAgents: (): AgentDetection[] => original.AGENT_IDS.map(agent => ({
       agent,
       detected: machine.detected.includes(agent),

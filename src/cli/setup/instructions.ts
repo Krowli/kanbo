@@ -16,18 +16,17 @@ import { LEGACY_BLOCK_BODIES } from './legacy-blocks'
 import { planTextFile, readTextFile } from './text-file'
 
 /**
- * The instruction block kanbo writes into an agent's standing instructions,
- * and the three things done to it: written, found again, taken out.
+ * The instruction blocks kanbo wrote into agents' standing instructions in
+ * 0.5 and 0.6 (version 3), and how to recognise and take them out.
  *
- * The block is a pointer, not the rules: it tells an agent the project is on a
- * board and to run `kanbo prime`, which prints the board's columns, its rules
- * and — from the command line — the commands. The rules can then change
- * without every project's `CLAUDE.md` going out of date.
+ * kanbo writes no block any more: agents learn the board from the MCP server's
+ * own instructions. These stay so a file carrying one — or one from an older
+ * kanbo — is recognised and the block removed by `kanbo connect`,
+ * `kanbo doctor --fix` and `kanbo uninstall`.
  *
  * Two versions of the block exist. The project block says "this project is on
  * a board"; the global one, for a person's user-level file, says "a project
- * with `.kanbo/` is on a board" and binds nothing — one user file serves every
- * project, and most of them have no board.
+ * with `.kanbo/` is on a board" and binds nothing.
  *
  * The start marker carries the block's version and a hash of its body
  * (`<!-- KANBO_START v3 h=1a2b3c4d -->`), so a block a person changed by hand
@@ -35,12 +34,11 @@ import { planTextFile, readTextFile } from './text-file'
  * start with a bare `<!-- KANBO_START -->`, and are told apart by their body
  * (`legacy-blocks.ts`). A block `kanbo instructions <kind> --markers` printed
  * says which text it is (`k=orchestrator`): only the pointer blocks
- * (`k=short`, `k=global`, or no `k`) are kanbo's to replace.
+ * (`k=short`, `k=global`, or no `k`) are kanbo's to remove without asking.
  *
- * kanbo changes only a block it wrote itself, in exactly the shape it wrote it;
+ * kanbo removes only a block it wrote itself, in exactly the shape it wrote it;
  * any other block is the person's, and is shown and asked about, never
- * silently rewritten or removed. A file whose markers do not pair up is not
- * touched at all.
+ * silently removed. A file whose markers do not pair up is not touched at all.
  */
 
 /** The version of the block this build writes. */
@@ -59,7 +57,7 @@ const INSTRUCTION_END_PATTERN = /<!-- KANBO_END\s*-->/g
 const POINTER_KINDS = new Set(['short', 'global'])
 
 /**
- * What a block found in a file is, next to the one this build writes there:
+ * What a block found in a file is, next to the latest one kanbo wrote there:
  * - `current` — the same block;
  * - `outdated` — written by kanbo (an older one, or for the other scope) and not changed since;
  * - `legacy` — written word for word by kanbo 0.1–0.2, whose marker says nothing more;
@@ -182,10 +180,10 @@ export function wrapInstructionBlock(body: string, version = INSTRUCTION_BLOCK_V
   return `<!-- KANBO_START v${version}${kind ? ` k=${kind}` : ''} h=${hashBody(body)} -->\n${body}\n${INSTRUCTION_END}`
 }
 
-/** The block `kanbo init --instructions …` writes into a project's own file. */
+/** The project block kanbo 0.5–0.6 wrote into a project's own file. */
 export const INSTRUCTION_BLOCK = wrapInstructionBlock(PROJECT_BODY)
 
-/** The block `kanbo init --global` writes into a person's user-level file. */
+/** The global block kanbo 0.5–0.6 wrote into a person's user-level file. */
 export const GLOBAL_INSTRUCTION_BLOCK = wrapInstructionBlock(GLOBAL_BODY)
 
 /**
@@ -243,59 +241,11 @@ export function newerBlockMessage(label: string, version: number | null): string
     + 'Update kanbo: npm install -g kanbo-cli@latest'
 }
 
-/**
- * The block in that file, once.
- *
- * A file that already carries the markers has its block replaced rather than
- * appended to, so a current block changes nothing at all and an outdated one is
- * brought forward. Everything outside the markers is the person's own writing
- * and is never touched.
- */
-export function planInstructionBlock(path: string, block: string): FileChange {
-  return planTextFile(path, existing => withBlock(existing, block))
-}
-
-/** A planned block, and what the person is told when their own edit was kept. */
+/** A planned block removal, and what the person is told when their own edit was kept. */
 export interface PlannedInstructionBlock {
   change: FileChange
   /** Set when the file keeps a block the person changed. */
   note?: string
-}
-
-/**
- * The same, minding a block that is not kanbo's to replace: one the person
- * changed is replaced only when they say so at a terminal, and the default
- * answer is no. `--yes` is not that answer — it agrees to kanbo's own changes,
- * not to losing theirs. A block of a text the person chose, one a newer kanbo
- * wrote, and a file whose markers do not pair up are left as they are.
- */
-export async function planInstructionBlockAsking(
-  path: string,
-  block: string,
-  options: { yes?: boolean, /** How the file is named to the person; the path itself by default. */ label?: string },
-): Promise<PlannedInstructionBlock> {
-  const inspection = readInstructionBlockInspection(path, block)
-  const label = options.label ?? path
-  const keep = (note: string): PlannedInstructionBlock => ({ change: { path, next: null }, note })
-  switch (inspection?.state) {
-    case 'damaged':
-      return keep(damagedBlockMessage(label, inspection.damage!))
-    case 'newer':
-      return keep(newerBlockMessage(label, inspection.version))
-    case 'chosen':
-      return keep(`${label}: you chose the ${inspection.kind} text for the kanbo section — kept.`)
-    case 'edited': {
-      const replace = !options.yes && canPrompt() && await getUi().confirm({
-        message: `You changed the kanbo section in ${label}. Replace it with the current one?`,
-        initialValue: false,
-      })
-      return replace
-        ? { change: planInstructionBlock(path, block) }
-        : keep(`${label}: you changed the kanbo section, so it was left as it is.`)
-    }
-    default:
-      return { change: planInstructionBlock(path, block) }
-  }
 }
 
 /**
@@ -370,20 +320,6 @@ export function readInstructionBlockState(path: string, current: string): Instru
 export function readInstructionBlockInspection(path: string, current: string): InstructionBlockInspection | null {
   const text = readTextFile(path)?.text
   return text === undefined ? null : inspectBlock(text, current)
-}
-
-function withBlock(existing: string | null, block: string): string | null {
-  if (existing === null || !existing.trim()) {
-    return `${block}\n`
-  }
-  const bounds = findBlock(existing)
-  if (bounds && 'damage' in bounds) {
-    return null
-  }
-  if (bounds) {
-    return existing.slice(0, bounds.start) + block + existing.slice(bounds.end)
-  }
-  return `${existing.replace(/\s*$/, '')}\n\n${block}\n`
 }
 
 interface BlockBounds {

@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { writeFakeBin, writeRecordingBin } from '../../testing/fake-bin'
 
-import { planInstructionBlock, planInstructionBlockRemoval } from './instructions'
+import { planInstructionBlockRemoval } from './instructions'
 import type { McpEntry } from './mcp-config'
 import {
   isOwnMcpEntry,
@@ -183,9 +183,7 @@ describe('taking kanbo back out of a configuration file', () => {
   })
 
   it('takes the instruction block out and joins what was around it', () => {
-    const path = file('CLAUDE.md', '# Mine\n\nbefore\n')
-    const withBlock = planInstructionBlock(path, '<!-- KANBO_START -->\nx\n<!-- KANBO_END -->').next!
-    writeFileSync(path, `${withBlock}\nafter\n`)
+    const path = file('CLAUDE.md', '# Mine\n\nbefore\n\n<!-- KANBO_START -->\nx\n<!-- KANBO_END -->\n\nafter\n')
 
     expect(planInstructionBlockRemoval(path).next).toBe('# Mine\n\nbefore\n\nafter\n')
   })

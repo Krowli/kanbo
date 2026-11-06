@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { delimiter, dirname, join } from 'node:path'
@@ -19,6 +19,7 @@ import type { RunningServe } from '../cli/commands/serve'
 import { startServe } from '../cli/commands/serve'
 import { openMcpBoard } from '../cli/mcp-board'
 import { overridePostgresOpenerForTests } from '../cli/postgres-board'
+import { INSTRUCTION_BLOCK } from '../cli/setup/instructions'
 import { KANBO_CAPABILITIES_MARKDOWN_RESOURCE_URI, KANBO_CAPABILITIES_RESOURCE_URI } from '../mcp/resources'
 import { createKanboMcpServer } from '../mcp/server'
 import { APPROVED_COMMENT } from '../ops/approval'
@@ -506,16 +507,17 @@ const CASES: MatrixCase[] = [
       // `init` made this board (beforeEach); the binding it wrote is what every other door found it by.
       expect(existsSync(join(b.projectDir, '.kanbo', 'binding.json'))).toBe(true)
 
+      // A section an older kanbo wrote: connect takes it out, and registers the server instead.
+      const claudeMd = join(b.projectDir, 'CLAUDE.md')
+      writeFileSync(claudeMd, `# Mine\n\n${INSTRUCTION_BLOCK}\n`)
       await b.cli(['connect', 'claude', '--project', '--yes'])
       const mcp = JSON.parse(readFileSync(join(b.projectDir, '.mcp.json'), 'utf8'))
       expect(mcp.mcpServers.kanbo.args).toContain('mcp')
-      const block = await b.cli(['instructions', 'short'])
-      expect(readFileSync(join(b.projectDir, 'CLAUDE.md'), 'utf8')).toContain(block.trim())
+      expect(readFileSync(claudeMd, 'utf8')).toBe('# Mine\n')
       expect(await b.cli(['connect', '--check'])).toMatch(/claude/i)
 
       const { findings } = await b.cliJson<{ findings: { check: string, status: string, detail: string }[] }>(['doctor', '--json'])
       expect(findings.filter(finding => finding.status === 'fail')).toEqual([])
-      expect(findings).toContainEqual(expect.objectContaining({ check: 'instructions', status: 'ok' }))
       expect(findings).toContainEqual(expect.objectContaining({ check: 'mcp:claude', status: 'ok' }))
       expect(findings).toContainEqual(expect.objectContaining({ check: 'mcp:handshake', status: 'ok' }))
 
@@ -523,8 +525,6 @@ const CASES: MatrixCase[] = [
       expect(existsSync(join(b.projectDir, '.mcp.json'))
         ? JSON.parse(readFileSync(join(b.projectDir, '.mcp.json'), 'utf8')).mcpServers?.kanbo
         : undefined).toBeUndefined()
-      const claudeMd = join(b.projectDir, 'CLAUDE.md')
-      expect(existsSync(claudeMd) ? readFileSync(claudeMd, 'utf8') : '').not.toContain(block.trim())
     },
   },
   {

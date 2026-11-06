@@ -8,10 +8,11 @@ import type { FileChange } from './file-change'
 import { applyFileChange } from './file-change'
 import type { InstructionBlockState } from './instructions'
 import {
-  GLOBAL_INSTRUCTION_BLOCK,
+  damagedBlockMessage,
   INSTRUCTION_BLOCK,
-  planInstructionBlockAsking,
+  planInstructionBlockRemoval,
   planInstructionBlockRemovalAsking,
+  readInstructionBlockInspection,
   readInstructionBlockState,
 } from './instructions'
 import { isNpxScript, NOT_INSTALLED_FIX } from './launch-warning'
@@ -38,8 +39,9 @@ import { mcpLaunchSpec } from './mcp-launch'
  * worked out in full before anything is written.
  *
  * `kanbo connect` builds one of these from the agents and scopes it was given,
- * `kanbo init --instructions/--mcp` and `kanbo init --global` build theirs the
- * same way, and all of them show it, ask, and apply it here. Each item is one
+ * `kanbo init --connect` builds its the same way, and both show it, ask, and
+ * apply it here. kanbo writes only the MCP server into an agent's settings; the
+ * `instructions` items take out the section older versions wrote. Each item is one
  * file (or one `claude mcp` command) with what changes in it; an item whose
  * file already says it has `next: null` and is reported `unchanged`.
  */
@@ -59,11 +61,20 @@ export function ownMcpEntryNote(label: string, path: string): string {
   return `${label}: ${path} has your own kanbo entry — left as is.`
 }
 
-/** What one agent should get, and where: `null` leaves that part alone. */
+/** What one agent should be disconnected from, and where: `null` leaves that part alone. */
 export interface AgentRequest {
   agent: AgentId
   instructions: McpScope | null
   mcp: McpScope | null
+}
+
+/**
+ * What one agent should get, and where: `null` leaves that part alone.
+ * `instructions` names where an old kanbo section is taken out of the agent's
+ * file — `both` is the project's file and the person's own.
+ */
+export interface ConnectRequest extends Omit<AgentRequest, 'instructions'> {
+  instructions: McpScope | 'both' | null
 }
 
 export type ConnectItem =
@@ -113,36 +124,50 @@ export interface ConnectOutcome {
 }
 
 /**
- * The plan that connects these agents. Asks only one question, and only at a
- * terminal: whether to replace an instruction block the person changed.
+ * The plan that connects these agents: their MCP server registered, and the
+ * kanbo section older versions wrote into their instruction files taken out.
+ * Asks nothing: a section a person changed (or chose, or a newer kanbo wrote)
+ * is kept and named in a note, never removed without their say.
  */
 export async function planConnect(
-  requests: AgentRequest[],
+  requests: ConnectRequest[],
   context: { projectDir: string, yes?: boolean, platform?: NodeJS.Platform },
 ): Promise<ConnectPlan> {
   const plan: ConnectPlan = { projectDir: context.projectDir, items: [], notes: [] }
   const planned = new Set<string>()
 
-  for (const { agent, instructions: scope } of requests) {
-    if (scope === null) {
+  for (const { agent, instructions } of requests) {
+    if (instructions === null) {
       continue
     }
-    const path = AGENTS[agent].instructionPath(scope, context.projectDir)
-    if (path === null) {
-      plan.notes.push(AGENTS[agent].noInstructionFile ?? `${AGENTS[agent].label} has no instruction file for this scope.`)
-      continue
+    for (const scope of instructions === 'both' ? ['project', 'user'] as const : [instructions]) {
+      const path = AGENTS[agent].instructionPath(scope, context.projectDir)
+      if (path === null) {
+        continue
+      }
+      const existing = plan.items.find(item => item.kind === 'instructions' && item.change.path === path)
+      if (existing?.kind === 'instructions') {
+        existing.agents.push(agent)
+        continue
+      }
+      const label = displayPath(plan, path)
+      const inspection = readInstructionBlockInspection(path, INSTRUCTION_BLOCK)
+      switch (inspection?.state) {
+        case undefined:
+          break
+        case 'damaged':
+          plan.notes.push(damagedBlockMessage(label, inspection.damage!))
+          break
+        case 'edited':
+        case 'chosen':
+        case 'newer':
+          plan.notes.push(`${label}: an old kanbo section is still there; kanbo no longer uses it. `
+            + 'Delete it yourself, or run kanbo connect --remove.')
+          break
+        default:
+          plan.items.push({ kind: 'instructions', agents: [agent], scope, change: planInstructionBlockRemoval(path) })
+      }
     }
-    const existing = plan.items.find(item => item.kind === 'instructions' && item.change.path === path)
-    if (existing?.kind === 'instructions') {
-      existing.agents.push(agent)
-      continue
-    }
-    const block = scope === 'project' ? INSTRUCTION_BLOCK : GLOBAL_INSTRUCTION_BLOCK
-    const asked = await planInstructionBlockAsking(path, block, { yes: context.yes, label: displayPath(plan, path) })
-    if (asked.note) {
-      plan.notes.push(asked.note)
-    }
-    plan.items.push({ kind: 'instructions', agents: [agent], scope, change: asked.change })
   }
 
   for (const { agent, mcp: scope } of requests) {
@@ -307,13 +332,10 @@ export function readMcpState(agent: AgentId, scope: McpScope, projectDir: string
   return isStaleMcpEntry(entry, scope, platform) ? 'stale' : 'ok'
 }
 
-/** What the instruction block for one agent in one scope is; `null` when that scope has no file for it. */
-export function readInstructionState(agent: AgentId, scope: McpScope, projectDir: string): InstructionBlockState | 'missing' | null {
+/** The file that still carries a kanbo section from an older version, in one agent's scope; none when it carries none. */
+export function readOldSectionPaths(agent: AgentId, scope: McpScope, projectDir: string): string[] {
   const path = AGENTS[agent].instructionPath(scope, projectDir)
-  if (path === null) {
-    return null
-  }
-  return readInstructionBlockState(path, scope === 'project' ? INSTRUCTION_BLOCK : GLOBAL_INSTRUCTION_BLOCK) ?? 'missing'
+  return path !== null && readInstructionBlockState(path, INSTRUCTION_BLOCK) !== null ? [path] : []
 }
 
 /** The items that change something. */
@@ -334,7 +356,7 @@ export function explainItem(item: ConnectItem, removal = false): string {
       const one = item.agents.length === 1
       return removal
         ? `the kanbo section ${readers} read${one ? 's' : ''} ${where}`
-        : `the kanbo section: ${readers} read${one ? 's' : ''} it ${where} and run${one ? 's' : ''} kanbo prime before a task`
+        : 'the old kanbo section: agents now learn the board from the MCP server'
     }
     case 'mcp':
       return removal
@@ -350,10 +372,10 @@ export function describeConnectPlan(plan: ConnectPlan, title: string, removal = 
   return [title, ...describeConnectItems(plan, removal), ...plan.notes.map(note => `Note: ${note}`), 'Nothing else is changed.'].join('\n')
 }
 
-/** One line per change the plan makes: `  write  CLAUDE.md (what it is for)`. */
+/** One line per change the plan makes: `  write  .mcp.json (what it is for)`. */
 export function describeConnectItems(plan: ConnectPlan, removal = false): string[] {
   return pendingItems(plan).map((item) => {
-    const verb = item.kind === 'claude-cli' ? 'run  ' : removal ? 'edit ' : 'write'
+    const verb = item.kind === 'claude-cli' ? 'run  ' : item.kind === 'instructions' ? 'remove' : removal ? 'edit ' : 'write'
     return item.kind === 'claude-cli'
       ? `  ${verb}  ${explainItem(item, removal)}`
       : `  ${verb}  ${displayPath(plan, itemPath(item))} (${explainItem(item, removal)})`

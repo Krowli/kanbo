@@ -8,8 +8,9 @@ import { claudeConfigDir, codexHome, findOnPath, geminiDir, globalInstructionPat
 
 /**
  * The agent tools kanbo can connect a project — or a person — to, and for
- * each one: how to tell it is here, which file it reads its standing
- * instructions from, and where it keeps its MCP servers.
+ * each one: how to tell it is here, which file an older kanbo wrote
+ * its instruction block into (kept to take that block out again), and where it
+ * keeps its MCP servers.
  *
  * `kanbo connect`, `kanbo init`, `kanbo uninstall` and `kanbo doctor` all read
  * this one table, so a file one of them writes is a file the others find.
@@ -40,19 +41,10 @@ export interface AgentDefinition {
   label: string
   /** The command it is started with. */
   binary: string
-  /** The file its instructions go in, for one project or for every one; `null` when there is none kanbo can write. */
+  /** The file an older kanbo wrote its instruction block into, for one project or for every one; `null` when there is none. */
   instructionPath: (scope: McpScope, projectDir: string) => string | null
   /** Where its MCP servers are registered, for one project or for every one. */
   mcpTarget: (scope: McpScope, projectDir: string) => McpTarget
-  /**
-   * Where the MCP server is registered when nothing says: the project, which
-   * travels with it, unless the tool reads a project's file only in some cases
-   * — Codex loads `.codex/config.toml` only for projects it trusts. On Windows
-   * every tool defaults to the person's own configuration (`defaultMcpScope`).
-   */
-  mcpScope: McpScope
-  /** What the person is told when a scope has no instruction file kanbo can write. */
-  noInstructionFile?: string
 }
 
 /** The instruction files a project's agents read. Codex and Cursor share `AGENTS.md`. */
@@ -67,7 +59,6 @@ export const AGENTS: Record<AgentId, AgentDefinition> = {
     mcpTarget: (scope, projectDir) => (scope === 'project'
       ? { format: 'json', path: join(projectDir, '.mcp.json'), withType: true }
       : { format: 'claude-cli', path: globalMcpConfigPath('claude') }),
-    mcpScope: 'project',
   },
   codex: {
     id: 'codex',
@@ -78,7 +69,6 @@ export const AGENTS: Record<AgentId, AgentDefinition> = {
       format: 'toml',
       path: scope === 'project' ? join(projectDir, '.codex', 'config.toml') : globalMcpConfigPath('codex'),
     }),
-    mcpScope: 'user',
   },
   cursor: {
     id: 'cursor',
@@ -90,9 +80,6 @@ export const AGENTS: Record<AgentId, AgentDefinition> = {
       path: scope === 'project' ? join(projectDir, '.cursor', 'mcp.json') : globalMcpConfigPath('cursor'),
       withType: true,
     }),
-    mcpScope: 'project',
-    noInstructionFile: 'Cursor keeps its rules for every project in its settings, not in a file: paste the kanbo block '
-      + 'into Cursor Settings → Rules → User Rules yourself.',
   },
   gemini: {
     id: 'gemini',
@@ -104,13 +91,16 @@ export const AGENTS: Record<AgentId, AgentDefinition> = {
       path: scope === 'project' ? join(projectDir, '.gemini', 'settings.json') : join(geminiDir(), 'settings.json'),
       withType: false,
     }),
-    mcpScope: 'project',
   },
 }
 
-/** Where the MCP server goes when no scope is named: on Windows always the person's own configuration. */
-export function defaultMcpScope(agent: AgentId, platform: NodeJS.Platform = process.platform): McpScope {
-  return platform === 'win32' ? 'user' : AGENTS[agent].mcpScope
+/**
+ * Where the MCP server goes when no scope is named: the person's own
+ * configuration, for every agent. One registration serves every project —
+ * `kanbo mcp` finds the board from the folder the client starts it in.
+ */
+export function defaultMcpScope(): McpScope {
+  return 'user'
 }
 
 /** The agent's name as typed on the command line, or `null` when it is none of them. */

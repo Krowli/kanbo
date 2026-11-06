@@ -287,7 +287,7 @@ async function describeKept(target: BoardTarget, workspace: BoardWorkspaceIdenti
 /** Connect these agents the way `kanbo connect <agents>` does: the kanbo section in the project, the MCP server where each agent reads it. */
 async function planAgents(projectDir: string, agents: AgentId[], options: InitOptions): Promise<InitPlan['connect']> {
   return await planConnect(
-    agents.map(agent => ({ agent, instructions: 'project', mcp: defaultMcpScope(agent) })),
+    agents.map(agent => ({ agent, instructions: 'both', mcp: defaultMcpScope() })),
     { projectDir, yes: options.yes },
   )
 }

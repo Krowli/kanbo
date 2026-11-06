@@ -51,7 +51,8 @@ Get started:
   init [options]                       Set up a board for this project and
                                        connect your agents (asks step by step)
   connect|setup [options] [agents...]  Connect your coding agents to the board:
-                                       instructions and MCP server
+                                       its MCP server, for every project
+                                       (--project: this project only)
   instructions [options] [kind]        Print the instructions to give your agent
                                        (to paste yourself)
   doctor [options]                     Check that kanbo, this project's board

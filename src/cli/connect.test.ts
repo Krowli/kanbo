@@ -12,7 +12,6 @@ import { detectAgents } from './setup/agents'
 import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK, wrapInstructionBlock } from './setup/instructions'
 import { claudeUserAddArgv, displayCommand, readCodexMcpEntry } from './setup/mcp-config'
 import { mcpLaunchSpec } from './setup/mcp-launch'
-import { ORCHESTRATOR_GUIDE } from './setup/orchestrator-guide'
 import { CancelledError, setUiForTests } from './ui/ui'
 
 /** A project's `CLAUDE.md` exactly as `kanbo init --instructions claude` 0.2.1 left it. */
@@ -133,23 +132,22 @@ describe('kanbo connect', () => {
     })
   })
 
-  it.skipIf(process.platform === 'win32')('connect claude --yes writes the kanbo section into CLAUDE.md and the server into .mcp.json', async () => {
-    writeFileSync(join(projectDir, 'CLAUDE.md'), '# Notes\n')
+  it('connect claude --yes registers the server for the user with claude mcp add, and writes no CLAUDE.md', async () => {
+    const calls = join(root, 'claude-calls')
+    writeRecordingBin(bin, 'claude', calls)
+    vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
 
     await connect('claude', '--yes')
 
-    expect(read(projectDir, 'CLAUDE.md')).toBe(`# Notes\n\n${INSTRUCTION_BLOCK}\n`)
-    expect(JSON.parse(read(projectDir, '.mcp.json'))).toEqual({
-      mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
-    })
-    expect(existsSync(join(home, '.claude.json'))).toBe(false)
+    expect(readFileSync(calls, 'utf8')).toBe('mcp add --scope user kanbo -- kanbo mcp\n')
+    expect(existsSync(join(projectDir, 'CLAUDE.md'))).toBe(false)
+    expect(readdirSync(projectDir)).toEqual([])
   })
 
-  it('on Windows registers every agent in the person\'s own settings by default, as this Node and this script', async () => {
-    onPlatform('win32')
-    const launch = mcpLaunchSpec({ scope: 'user', platform: 'win32' })
+  it('registers every agent in the person\'s own settings by default, as this Node and this script', async () => {
+    const launch = mcpLaunchSpec({ scope: 'user' })
 
-    const printed = await connect('cursor', 'gemini', 'codex', 'claude', '--no-instructions', '--yes')
+    const printed = await connect('cursor', 'gemini', 'codex', 'claude', '--yes')
 
     expect(JSON.parse(read(home, '.cursor', 'mcp.json'))).toEqual({ mcpServers: { kanbo: { type: 'stdio', ...launch } } })
     expect(JSON.parse(read(home, '.gemini', 'settings.json'))).toEqual({ mcpServers: { kanbo: launch } })
@@ -159,31 +157,58 @@ describe('kanbo connect', () => {
     expect(readdirSync(projectDir)).toEqual([])
   })
 
-  it('says Cursor\'s rules note once: with the plan, not again after it', async () => {
-    const printed = await connect('cursor', '--global', '--yes')
+  it('--project writes the project\'s own files: .cursor/mcp.json, and no AGENTS.md', async () => {
+    await connect('cursor', '--project', '--yes')
 
-    expect(printed.split('Cursor keeps its rules for every project in its settings')).toHaveLength(2)
-    expect(printed).toContain('Cursor: ')
+    expect(JSON.parse(read(projectDir, '.cursor', 'mcp.json'))).toEqual({
+      mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
+    })
+    expect(existsSync(join(projectDir, 'AGENTS.md'))).toBe(false)
   })
 
-  it('says the note after the outcome when nothing was left to change, so no plan said it', async () => {
-    await connect('cursor', '--global', '--yes')
-    const printed = await connect('cursor', '--global', '--yes')
+  it('takes the v3 section out of a project\'s CLAUDE.md and of the global one, keeping the rest of each file byte for byte', async () => {
+    const claudeDir = join(root, 'claude-config')
+    mkdirSync(claudeDir)
+    vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
+    writeFileSync(join(projectDir, 'CLAUDE.md'), `# Notes\n\nbefore\n\n${INSTRUCTION_BLOCK}\n\nafter\n`)
+    writeFileSync(join(claudeDir, 'CLAUDE.md'), `# Mine\n\n${GLOBAL_INSTRUCTION_BLOCK}\n\nMore of mine.\n`)
 
-    expect(printed).not.toContain('kanbo connect will:')
-    expect(printed.split('Cursor keeps its rules for every project in its settings')).toHaveLength(2)
+    const printed = await connect('claude', '--yes')
+
+    expect(read(projectDir, 'CLAUDE.md')).toBe('# Notes\n\nbefore\n\nafter\n')
+    expect(read(claudeDir, 'CLAUDE.md')).toBe('# Mine\n\nMore of mine.\n')
+    expect(printed).toContain('CLAUDE.md (the old kanbo section: agents now learn the board from the MCP server)')
   })
 
-  it('says two agents sharing a file read it and run kanbo prime', async () => {
-    const printed = await connect('codex', 'cursor', '--no-mcp', '--dry-run')
+  it('keeps a section the person edited, and says kanbo no longer uses it', async () => {
+    const edited = `# Mine\n\n${INSTRUCTION_BLOCK.replace('Take work with', 'Pick work with')}\n`
+    writeFileSync(join(projectDir, 'CLAUDE.md'), edited)
 
-    expect(printed).toContain('(the kanbo section: Codex and Cursor read it in this project and run kanbo prime before a task)')
+    const printed = await connect('claude', '--yes')
+
+    expect(read(projectDir, 'CLAUDE.md')).toBe(edited)
+    expect(printed).toContain('CLAUDE.md: an old kanbo section is still there; kanbo no longer uses it. Delete it yourself, or run kanbo connect --remove.')
+  })
+
+  it('says what it removes before it does: the old section, once for two agents that share AGENTS.md', async () => {
+    writeFileSync(join(projectDir, 'AGENTS.md'), `${INSTRUCTION_BLOCK}\n`)
+
+    const printed = await connect('codex', 'cursor', '--dry-run')
+
+    expect(printed).toContain('remove  AGENTS.md (the old kanbo section: agents now learn the board from the MCP server)')
+    expect(printed.split('remove  AGENTS.md')).toHaveLength(2)
+    expect(read(projectDir, 'AGENTS.md')).toBe(`${INSTRUCTION_BLOCK}\n`)
+  })
+
+  it('no longer takes --no-instructions or --no-mcp', async () => {
+    await expect(connect('claude', '--no-instructions', '--yes')).rejects.toThrowError(expect.objectContaining({ exitCode: 1 }))
+    await expect(connect('claude', '--no-mcp', '--yes')).rejects.toThrowError(expect.objectContaining({ exitCode: 1 }))
   })
 
   it('keeps the shared AGENTS.md section while Codex still uses it, and removes it with the last one', async () => {
     await connect('codex', 'cursor', '--yes')
-    expect(read(projectDir, 'AGENTS.md')).toBe(`${INSTRUCTION_BLOCK}\n`)
-    const cursorMcp = process.platform === 'win32' ? join(home, '.cursor', 'mcp.json') : join(projectDir, '.cursor', 'mcp.json')
+    writeFileSync(join(projectDir, 'AGENTS.md'), `${INSTRUCTION_BLOCK}\n`)
+    const cursorMcp = join(home, '.cursor', 'mcp.json')
     expect(read(cursorMcp)).toContain('"kanbo"')
 
     await connect('cursor', '--remove', '--yes')
@@ -198,21 +223,6 @@ describe('kanbo connect', () => {
     expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toBeUndefined()
   })
 
-  it('keeps AGENTS.md\'s section for Cursor, connected with --no-mcp, when only Codex is removed', async () => {
-    await connect('cursor', '--no-mcp', '--yes')
-    await connect('codex', '--yes')
-
-    const printed = await connect('codex', '--remove', '--yes')
-
-    expect(read(projectDir, 'AGENTS.md')).toBe(`${INSTRUCTION_BLOCK}\n`)
-    expect(printed).toContain('AGENTS.md section kept — Cursor also reads it. Remove it with: kanbo connect cursor --remove')
-    expect(readCodexMcpEntry(join(codexHome, 'config.toml'))).toBeUndefined()
-
-    await connect('--remove', '--yes')
-
-    expect(read(projectDir, 'AGENTS.md')).toBe('')
-  })
-
   describe('--check', () => {
     async function check(...argv: string[]): Promise<Record<string, unknown>[]> {
       return JSON.parse(await connect(...argv, '--check', '--json')) as Record<string, unknown>[]
@@ -222,7 +232,7 @@ describe('kanbo connect', () => {
       await connect('claude', '--project', '--yes')
 
       expect(await check('claude')).toEqual([
-        { agent: 'claude', instructions: 'current', mcp: 'ok', scope: 'project', connected: true },
+        { agent: 'claude', mcp: 'ok', scope: 'project', connected: true, oldSections: [] },
       ])
       const all = await check()
       expect(all.map(row => [row.agent, row.connected])).toEqual([['claude', true], ['codex', false], ['cursor', false], ['gemini', false]])
@@ -240,18 +250,18 @@ describe('kanbo connect', () => {
       expect(rows.find(row => row.agent === 'claude')).toMatchObject({ mcp: 'ok', scope: 'user' })
     })
 
-    it('tells an old block, an edited one and a registration that no longer starts from a current one', async () => {
+    it('tells a registration that no longer starts from a current one, and lists the files with an old section', async () => {
       writeFileSync(join(projectDir, 'CLAUDE.md'), CLAUDE_MD_0_2_1)
       writeFileSync(join(projectDir, '.mcp.json'), JSON.stringify({
         mcpServers: { kanbo: { command: join(root, 'old-node', 'node'), args: [join(root, 'gone', 'kanbo-cli', 'dist', 'cli.cjs'), 'mcp'] } },
       }))
       await connect('gemini', '--project', '--yes')
-      writeFileSync(join(projectDir, 'GEMINI.md'), read(projectDir, 'GEMINI.md').replace('Take work', 'Pick work'))
 
       const rows = await check('--project')
 
-      expect(rows.find(row => row.agent === 'claude')).toMatchObject({ instructions: 'legacy', mcp: 'stale path', connected: false })
-      expect(rows.find(row => row.agent === 'gemini')).toMatchObject({ instructions: 'edited', mcp: 'ok', connected: true })
+      expect(rows.find(row => row.agent === 'claude')).toMatchObject({ mcp: 'stale path', connected: false, oldSections: [join(projectDir, 'CLAUDE.md')] })
+      expect(rows.find(row => row.agent === 'gemini')).toMatchObject({ mcp: 'ok', connected: true, oldSections: [] })
+      expect(await connect('--project', '--check')).toContain(`old kanbo section in ${join(projectDir, 'CLAUDE.md')} — kanbo connect removes it`)
     })
   })
 
@@ -274,8 +284,8 @@ describe('kanbo connect', () => {
     const own = { mcpServers: { kanbo: { command: 'my-kanbo', args: ['mcp', '--verbose'] } } }
     writeFileSync(join(projectDir, '.cursor', 'mcp.json'), JSON.stringify(own))
 
-    await connect('claude', 'cursor', '--project', '--no-instructions', '--yes')
-    await connect('codex', '--global', '--no-instructions', '--yes')
+    await connect('claude', 'cursor', '--project', '--yes')
+    await connect('codex', '--global', '--yes')
 
     expect(JSON.parse(read(projectDir, '.mcp.json'))).toEqual({
       mcpServers: { other: { command: 'other' }, kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
@@ -298,15 +308,6 @@ describe('kanbo connect', () => {
       theme: 'Dracula',
       mcpServers: { kanbo: { command: 'kanbo', args: ['mcp'] } },
     })
-    expect(read(projectDir, 'GEMINI.md')).toBe(`${INSTRUCTION_BLOCK}\n`)
-  })
-
-  it('--global writes the global section into each agent\'s own file, and tells how to add it to Cursor', async () => {
-    const printed = await connect('claude', 'cursor', '--global', '--no-mcp', '--yes')
-
-    expect(read(home, '.claude', 'CLAUDE.md')).toBe(`${GLOBAL_INSTRUCTION_BLOCK}\n`)
-    expect(printed).toContain('Cursor Settings → Rules')
-    expect(readdirSync(projectDir)).toEqual([])
   })
 
   it('without agents and without a terminal, names the agents it knows instead of asking', async () => {
@@ -334,7 +335,7 @@ describe('kanbo connect', () => {
       const before = snapshot(root)
       onPlatform('win32')
 
-      const printed = await connect('codex', 'cursor', 'claude', '--no-instructions', '--yes')
+      const printed = await connect('codex', 'cursor', 'claude', '--yes')
 
       expect(snapshot(root)).toEqual(before)
       expect(existsSync(calls)).toBe(false)
@@ -346,16 +347,16 @@ describe('kanbo connect', () => {
       writeFakeBin(bin, 'npx', 'process.exit(0)', 'win32')
       vi.stubEnv('PATHEXT', '.COM;.EXE;.BAT;.CMD')
       vi.stubEnv('PATH', bin)
-      const checked = await connect('cursor', '--global', '--no-instructions', '--check')
+      const checked = await connect('cursor', '--global', '--check')
       expect(checked).toContain(`Cursor: ${join(home, '.cursor', 'mcp.json')} has your own kanbo entry — left as is.`)
     })
 
     it('knows the entry this very kanbo wrote, wherever it runs from, and reports it unchanged', async () => {
       onPlatform('win32')
-      await connect('cursor', '--global', '--no-instructions', '--yes')
+      await connect('cursor', '--global', '--yes')
       const before = read(home, '.cursor', 'mcp.json')
 
-      const printed = await connect('cursor', '--global', '--no-instructions', '--yes')
+      const printed = await connect('cursor', '--global', '--yes')
 
       expect(read(home, '.cursor', 'mcp.json')).toBe(before)
       expect(printed).toContain(`Cursor: ${join(home, '.cursor', 'mcp.json')} (unchanged)`)
@@ -367,7 +368,7 @@ describe('kanbo connect', () => {
       writeFileSync(join(home, '.cursor', 'mcp.json'), JSON.stringify({ mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } } }))
       onPlatform('win32')
 
-      await connect('cursor', '--no-instructions', '--yes')
+      await connect('cursor', '--yes')
 
       expect(JSON.parse(read(home, '.cursor', 'mcp.json'))).toEqual({ mcpServers: { kanbo: { type: 'stdio', ...mcpLaunchSpec({ scope: 'user', platform: 'win32' }) } } })
     })
@@ -379,7 +380,7 @@ describe('kanbo connect', () => {
       writeFakeBin(bin, 'claude', 'if (process.argv[3] === "add") { process.stderr.write("add broke\\n"); process.exit(1) }')
       vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
 
-      const printed = await connect('claude', '--global', '--no-instructions', '--yes')
+      const printed = await connect('claude', '--global', '--yes')
 
       const add = displayCommand(claudeUserAddArgv(mcpLaunchSpec({ scope: 'user' })))
       expect(printed).toContain(`Claude Code: the old kanbo entry was removed, but adding the new one failed (claude exited 1: add broke). Add it yourself:\n  ${add}`)
@@ -392,15 +393,15 @@ describe('kanbo connect', () => {
       const newer = `# Mine\n\n${wrapInstructionBlock('## Kanbo board\n\nNewer words.', 4)}\n`
       writeFileSync(join(projectDir, 'CLAUDE.md'), newer)
 
-      const printed = await connect('claude', '--no-mcp', '--yes')
+      const printed = await connect('claude', '--yes')
       expect(read(projectDir, 'CLAUDE.md')).toBe(newer)
-      expect(printed).toContain('CLAUDE.md: the kanbo section was written by a newer kanbo (v4) — kept. Update kanbo: npm install -g kanbo-cli@latest')
+      expect(printed).toContain('CLAUDE.md: an old kanbo section is still there; kanbo no longer uses it. Delete it yourself, or run kanbo connect --remove.')
 
-      const kept = await connect('claude', '--no-mcp', '--remove', '--dry-run')
+      const kept = await connect('claude', '--remove', '--dry-run')
       expect(read(projectDir, 'CLAUDE.md')).toBe(newer)
-      expect(kept).not.toContain('edit  CLAUDE.md')
+      expect(kept).not.toContain('remove  CLAUDE.md')
 
-      await connect('claude', '--no-mcp', '--remove', '--yes')
+      await connect('claude', '--remove', '--yes')
       expect(read(projectDir, 'CLAUDE.md')).toBe('# Mine\n')
     })
 
@@ -408,23 +409,23 @@ describe('kanbo connect', () => {
       const damaged = '# Mine\n\n<!-- KANBO_START v2 h=4842e336 -->\n## Kanbo board\n\nMy notes after the marker.\r\n'
       writeFileSync(join(projectDir, 'CLAUDE.md'), damaged)
 
-      const printed = await connect('claude', '--no-mcp', '--yes')
+      const printed = await connect('claude', '--yes')
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe(damaged)
       expect(printed).toContain('CLAUDE.md has a kanbo start marker without an end — fix it by hand, then run again.')
 
-      const removed = await connect('claude', '--no-mcp', '--remove', '--yes')
+      const removed = await connect('claude', '--remove', '--yes')
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe(damaged)
       expect(removed).toContain('CLAUDE.md has a kanbo start marker without an end')
     })
 
-    it('keeps a block of a text the person chose (instructions orchestrator --markers)', async () => {
-      const chosen = `${wrapInstructionBlock(ORCHESTRATOR_GUIDE, 2, 'orchestrator')}\n`
+    it('keeps a block of a text the person chose (an orchestrator text pasted between the markers)', async () => {
+      const chosen = `${wrapInstructionBlock('Any orchestrator words.', 2, 'orchestrator')}\n`
       writeFileSync(join(projectDir, 'CLAUDE.md'), chosen)
 
-      const printed = await connect('claude', '--no-mcp', '--yes')
+      const printed = await connect('claude', '--yes')
 
       expect(read(projectDir, 'CLAUDE.md')).toBe(chosen)
-      expect(printed).toContain('CLAUDE.md: you chose the orchestrator text for the kanbo section — kept.')
+      expect(printed).toContain('CLAUDE.md: an old kanbo section is still there; kanbo no longer uses it.')
     })
 
     it('refuses to register this kanbo by full path while it runs from the npx cache', async () => {
@@ -434,7 +435,7 @@ describe('kanbo connect', () => {
       vi.spyOn(process, 'argv', 'get').mockReturnValue([process.execPath, script, 'connect'])
       onPlatform('win32')
 
-      const printed = await connect('cursor', '--global', '--no-instructions', '--yes')
+      const printed = await connect('cursor', '--global', '--yes')
 
       expect(existsSync(join(home, '.cursor', 'mcp.json'))).toBe(false)
       expect(printed).toContain('Install kanbo first so agents can start it: npm install -g kanbo-cli')
@@ -449,22 +450,27 @@ describe('kanbo connect', () => {
       }
     })
 
-    it('picks agents, lets a file be unticked, and writes the rest after a yes', async () => {
+    it('picks agents, lets a change be unticked, and makes the rest after a yes', async () => {
+      writeFileSync(join(projectDir, 'CLAUDE.md'), `# Notes\n\n${INSTRUCTION_BLOCK}\n`)
+      const calls = join(root, 'claude-calls')
+      writeRecordingBin(bin, 'claude', calls)
+      vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
       const driver = createPromptDriver()
       setUiForTests(driver.ui)
       const running = connect()
 
       await driver.waitFor('Which agents do you use?')
-      driver.press('space', 'enter')
+      // Claude is ticked already: CLAUDE.md is in the project.
+      driver.press('enter')
       await driver.waitFor('Which of these should kanbo change?')
       driver.press('down', 'space', 'enter')
       await driver.waitFor('Make these changes?')
       driver.press('enter')
       await running.catch((error) => { throw new Error(`${String(error)}\n${driver.transcript()}`) })
 
-      expect(read(projectDir, 'CLAUDE.md')).toBe(`${INSTRUCTION_BLOCK}\n`)
+      expect(read(projectDir, 'CLAUDE.md')).toBe('# Notes\n')
+      expect(existsSync(calls)).toBe(false)
       expect(existsSync(join(projectDir, '.mcp.json'))).toBe(false)
-      expect(existsSync(join(home, '.claude.json'))).toBe(false)
     })
 
     it('leaves every file byte for byte as it was when stopped at the last question', async () => {

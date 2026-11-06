@@ -6,7 +6,7 @@ import { CliError, printResult } from '../output'
 import type { AgentId } from '../setup/agents'
 import { AGENT_IDS, AGENTS, defaultMcpScope, detectAgents, parseAgentId } from '../setup/agents'
 import { confirmPlan } from '../setup/confirm'
-import type { AgentRequest, ConnectOutcome, ConnectPlan, McpState } from '../setup/connect-plan'
+import type { ConnectOutcome, ConnectPlan, ConnectRequest, McpState } from '../setup/connect-plan'
 import {
   applyConnectPlan,
   describeConnectPlan,
@@ -18,21 +18,21 @@ import {
   pendingItems,
   planConnect,
   planDisconnect,
-  readInstructionState,
+  readOldSectionPaths,
   readMcpEntry,
   readMcpState,
 } from '../setup/connect-plan'
-import { GLOBAL_INSTRUCTION_BLOCK, INSTRUCTION_BLOCK } from '../setup/instructions'
 import { canStartMcpEntry } from '../setup/mcp-config'
 import type { McpScope } from '../setup/mcp-launch'
 import { canPrompt } from '../ui/environment'
 import { getUi } from '../ui/ui'
 
 /**
- * `kanbo connect` — tell the agent tools a person uses about kanbo: the kanbo
- * section in the file each one reads its instructions from, and the board's
- * MCP server in its configuration. Also checks what is connected (`--check`)
- * and takes it out again (`--remove`).
+ * `kanbo connect` — tell the agent tools a person uses about kanbo: the board's
+ * MCP server, registered in each one's configuration (the person's own by
+ * default, so it serves every project). It also takes out the kanbo section
+ * older versions wrote into the agents' instruction files. `--check` shows what
+ * is connected and `--remove` takes kanbo out again.
  *
  * Every change is worked out first (`setup/connect-plan.ts`) and shown; nothing
  * is written until the person says yes, or said `--yes`.
@@ -40,10 +40,6 @@ import { getUi } from '../ui/ui'
 export interface ConnectOptions {
   project?: boolean
   global?: boolean
-  /** `--no-instructions` sets this to false. */
-  instructions?: boolean
-  /** `--no-mcp` sets this to false. */
-  mcp?: boolean
   check?: boolean
   remove?: boolean
   dryRun?: boolean
@@ -62,13 +58,11 @@ export function registerConnectCommand(program: Command): void {
     .command('connect')
     .alias('setup')
     .argument('[agents...]', `the agents to connect: ${AGENT_LIST}`)
-    .description('Connect your coding agents to the board: instructions and MCP server')
+    .description('Connect your coding agents to the board: its MCP server, for every project (--project: this project only)')
     .option('--project', 'write into this project\'s files only')
-    .option('--global', 'write into your own files, for every project')
-    .option('--no-instructions', 'leave the agents\' instruction files alone')
-    .option('--no-mcp', 'leave the agents\' MCP settings alone')
+    .option('--global', 'write into your own files, for every project (the default)')
     .option('--check', 'show what is connected; exits 1 when a named agent is not')
-    .option('--remove', 'disconnect: take kanbo out of their instructions and MCP settings')
+    .option('--remove', 'disconnect: take kanbo out of their MCP settings and instruction files')
     .option('--dry-run', 'show what would change, and change nothing')
     .option('--yes', 'make the changes without asking')
     .option('--json [fields]', 'print the result as JSON; name comma-separated fields to print only those')
@@ -111,7 +105,7 @@ async function connect(names: string[], options: ConnectOptions): Promise<void> 
     return
   }
 
-  const requests = agents.map(agent => request(agent, scope, options))
+  const requests = agents.map(agent => request(agent, scope))
   const plan = await planConnect(requests, { projectDir, yes: options.yes || options.dryRun })
   const machine = options.json !== undefined
   if (options.dryRun) {
@@ -137,21 +131,21 @@ async function connect(names: string[], options: ConnectOptions): Promise<void> 
   printResult(describeOutcomes('connect', agents, applyConnectPlan(plan), plan, false, previewed), outputOptions(options))
 }
 
-/** What one agent gets: its instructions where the scope says, and its MCP server where the scope — or the agent — says. */
-function request(agent: AgentId, scope: ScopeFlag, options: ConnectOptions): AgentRequest {
-  return {
-    agent,
-    instructions: options.instructions === false ? null : scope ?? 'project',
-    mcp: options.mcp === false ? null : scope ?? defaultMcpScope(agent),
-  }
+/**
+ * What one agent gets: its MCP server where the scope says (the person's own
+ * configuration by default), and the old kanbo section taken out of its
+ * instruction file in the same scope — in both files when none is named.
+ */
+function request(agent: AgentId, scope: ScopeFlag): ConnectRequest {
+  return { agent, instructions: scope ?? 'both', mcp: scope ?? defaultMcpScope() }
 }
 
 async function disconnect(agents: AgentId[], scope: ScopeFlag, projectDir: string, options: ConnectOptions): Promise<void> {
   const scopes: McpScope[] = scope ? [scope] : ['project', 'user']
   const requests = scopes.flatMap(each => agents.map(agent => ({
     agent,
-    instructions: options.instructions === false ? null : each,
-    mcp: options.mcp === false ? null : each,
+    instructions: each,
+    mcp: each,
   })))
   const plan = await planDisconnect(requests, { projectDir, yes: options.yes, prompt: !options.dryRun })
   const machine = options.json !== undefined
@@ -188,16 +182,12 @@ async function askAgents(projectDir: string): Promise<AgentId[]> {
 }
 
 /**
- * Show the section the agents get, let the person untick any file, then show
- * what is left and ask once. Unticked files are dropped from the plan.
+ * Let the person untick any change, then show what is left and ask once.
+ * Unticked changes are dropped from the plan.
  */
 async function chooseAndConfirm(plan: ConnectPlan): Promise<void> {
   const ui = getUi()
   const pending = pendingItems(plan)
-  const section = pending.find(item => item.kind === 'instructions')
-  if (section) {
-    console.log(`The kanbo section your agents get:\n\n${section.scope === 'project' ? INSTRUCTION_BLOCK : GLOBAL_INSTRUCTION_BLOCK}\n`)
-  }
   const keys = pending.map((_, index) => `${index}`)
   const kept = new Set(await ui.multiselect<string>({
     message: 'Which of these should kanbo change?',
@@ -263,25 +253,28 @@ function describeOutcomes(action: 'connect' | 'remove', agents: AgentId[], outco
 /** One row of `--check`. */
 export interface CheckRow {
   agent: AgentId
-  instructions: string
   mcp: string
   scope: string
   connected: boolean
+  /** The files that still carry a kanbo section from an older version. */
+  oldSections: string[]
 }
 
 function runCheck(agents: AgentId[], named: boolean, flag: ScopeFlag, projectDir: string, options: ConnectOptions): void {
-  const checked = agents.map(agent => checkAgent(agent, flag, projectDir, options))
+  const checked = agents.map(agent => checkAgent(agent, flag, projectDir))
   const rows = checked.map(({ row }) => row)
   const text = [
-    ['agent', 'instructions', 'MCP', 'scope'],
-    ...rows.map(row => [row.agent, row.instructions, row.mcp, row.scope]),
+    ['agent', 'MCP', 'scope'],
+    ...rows.map(row => [row.agent, row.mcp, row.scope]),
   ]
   const widths = text[0]!.map((_, column) => Math.max(...text.map(line => line[column]!.length)))
   const notes = checked.flatMap(({ notes }) => notes)
+  const oldSections = [...new Set(rows.flatMap(row => row.oldSections))]
   printResult({
     value: rows,
     text: [
       ...text.map(line => line.map((cell, column) => cell.padEnd(widths[column]!)).join('  ').trimEnd()),
+      ...oldSections.map(path => `old kanbo section in ${path} — kanbo connect removes it`),
       ...notes.map(note => `Note: ${note}`),
     ].join('\n'),
   }, outputOptions(options))
@@ -292,53 +285,36 @@ function runCheck(agents: AgentId[], named: boolean, flag: ScopeFlag, projectDir
 }
 
 /**
- * Where an agent stands: its kanbo section and its MCP entry, looked for in the
- * scope named — or, when none was, in the project first and then the person's
- * own files. Connected means both are there (or were not asked about) and the
- * MCP entry still starts. An MCP entry of the person's own is theirs: it is
- * reported, left as it is, and counts as connected when it can start.
+ * Where an agent stands: its MCP entry, looked for in the scope named — or,
+ * when none was, in the project first and then the person's own files.
+ * Connected means the entry is there and still starts. An MCP entry of the
+ * person's own is theirs: it is reported, left as it is, and counts as
+ * connected when it can start. Files that still carry a kanbo section from an
+ * older version are listed, for `kanbo connect` to take out.
  */
-export function checkAgent(agent: AgentId, flag: ScopeFlag, projectDir: string, options: ConnectOptions): { row: CheckRow, notes: string[] } {
+export function checkAgent(agent: AgentId, flag: ScopeFlag, projectDir: string): { row: CheckRow, notes: string[] } {
   const scopes: McpScope[] = flag ? [flag] : ['project', 'user']
-  const found: McpScope[] = []
   const notes: string[] = []
 
-  let instructions = 'skipped'
-  if (options.instructions !== false) {
-    const states = scopes.map(scope => ({ scope, state: readInstructionState(agent, scope, projectDir) }))
-    const present = states.find(({ state }) => state !== null && state !== 'missing')
-    instructions = present?.state ?? (states.every(({ state }) => state === null) ? 'no file' : 'missing')
-    if (present) {
-      found.push(present.scope)
-    }
+  const states = scopes.map(scope => ({ scope, state: readMcpState(agent, scope, projectDir) }))
+  const present = states.find(({ state }) => state === 'ok')
+    ?? states.find(({ state }) => state === 'own')
+    ?? states.find(({ state }) => state === 'stale')
+  let mcp = present ? MCP_CELLS[present.state as Exclude<McpState, 'missing'>] : 'missing'
+  if (present?.state === 'own') {
+    const target = AGENTS[agent].mcpTarget(present.scope, projectDir)
+    const startable = canStartMcpEntry(readMcpEntry(target)!)
+    mcp = startable ? 'yours' : 'yours, won\'t start'
+    notes.push(`${ownMcpEntryNote(AGENTS[agent].label, target.path)}${startable ? '' : ' It can\'t start here: its command is not found.'}`)
   }
 
-  let mcp = 'skipped'
-  if (options.mcp !== false) {
-    const states = scopes.map(scope => ({ scope, state: readMcpState(agent, scope, projectDir) }))
-    const present = states.find(({ state }) => state === 'ok')
-      ?? states.find(({ state }) => state === 'own')
-      ?? states.find(({ state }) => state === 'stale')
-    mcp = present ? MCP_CELLS[present.state as Exclude<McpState, 'missing'>] : 'missing'
-    if (present?.state === 'own') {
-      const target = AGENTS[agent].mcpTarget(present.scope, projectDir)
-      const startable = canStartMcpEntry(readMcpEntry(target)!)
-      mcp = startable ? 'yours' : 'yours, won\'t start'
-      notes.push(`${ownMcpEntryNote(AGENTS[agent].label, target.path)}${startable ? '' : ' It can\'t start here: its command is not found.'}`)
-    }
-    if (present) {
-      found.push(present.scope)
-    }
-  }
-
-  const where = [...new Set(found)]
   return {
     row: {
       agent,
-      instructions,
       mcp,
-      scope: where.length > 0 ? where.join('+') : (flag ?? defaultMcpScope(agent)),
-      connected: instructions !== 'missing' && instructions !== 'damaged' && (mcp === 'skipped' || mcp === 'ok' || mcp === 'yours'),
+      scope: present ? present.scope : (flag ?? defaultMcpScope()),
+      connected: mcp === 'ok' || mcp === 'yours',
+      oldSections: scopes.flatMap(scope => readOldSectionPaths(agent, scope, projectDir)),
     },
     notes,
   }

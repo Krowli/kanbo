@@ -86,9 +86,6 @@ interface HomeBoard {
   waiting: CardView[]
 }
 
-/** The `--check` instruction cells that mean a kanbo section is there and readable. */
-const INSTRUCTION_BLOCK_PRESENT = new Set(['current', 'outdated', 'legacy', 'edited', 'newer', 'chosen'])
-
 type MenuChoice = 'review' | 'board' | 'serve' | 'card' | 'connect' | 'instructions' | 'columns' | 'doctor' | 'update' | 'exit'
 
 /**
@@ -411,16 +408,11 @@ function describeAgents(): string {
   const projectDir = findKanboProject(process.cwd())?.root ?? process.cwd()
   const detected = new Set(detectAgents({ projectDir }).filter(found => found.detected).map(found => found.agent))
   const parts = AGENT_IDS.flatMap((agent) => {
-    const { row } = checkAgent(agent, null, projectDir, {})
-    const instructions = INSTRUCTION_BLOCK_PRESENT.has(row.instructions)
-    const mcp = row.mcp === 'ok' || row.mcp === 'yours'
-    if (!instructions && !mcp && !detected.has(agent)) {
+    const { row } = checkAgent(agent, null, projectDir)
+    if (!row.connected && !detected.has(agent)) {
       return []
     }
-    const how = instructions && mcp
-      ? '✓ instructions + MCP'
-      : instructions ? '✓ instructions only' : mcp ? '✓ MCP only' : '— not connected'
-    return [`${AGENTS[agent].label} ${how}`]
+    return [`${AGENTS[agent].label} ${row.connected ? '✓ connected' : '— not connected'}`]
   })
   return parts.length > 0 ? `Agents: ${parts.join(' · ')}` : 'Agents: none found — kanbo connect <agent>'
 }
