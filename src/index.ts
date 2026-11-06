@@ -147,6 +147,28 @@ export type { BoardPullRequestStanding } from './ops/pull-requests'
 export type { CreateRelationInput, IssueRelationCounterpart, IssueRelationView } from './ops/relations'
 export type { AttachRunExecutionInput, BoardRunView, FinishRunInput, StartRunInput } from './ops/runs'
 export type { BoardSprint, CloseSprintResult, CreateMilestoneInput, UpdateMilestoneInput } from './ops/sprints'
+export {
+  type BoardMetrics,
+  type BoardMetricsAgent,
+  type BoardMetricsAgingCard,
+  type BoardMetricsCard,
+  type BoardMetricsColumn,
+  type BoardMetricsColumnTime,
+  type BoardMetricsDurations,
+  type BoardMetricsFinishedCard,
+  type BoardMetricsFlowDay,
+  type BoardMetricsHistory,
+  type BoardMetricsInput,
+  type BoardMetricsPerson,
+  type BoardMetricsReturns,
+  type BoardMetricsWeek,
+  type BoardMetricsWip,
+  boardMetricsAgentKey,
+  boardMetricsRuns,
+  computeBoardMetrics,
+  nearestRank,
+} from './ops/board-metrics'
+export { type IsoWeek, isoWeekOf, utcDayLabel } from './domain/iso-week'
 export { BOARD_ACTOR, type BoardActor } from './ops/types'
 export { BOARD_ERROR_RESPONSES, type BoardErrorResponse } from './serve/board-error-responses'
 export type {

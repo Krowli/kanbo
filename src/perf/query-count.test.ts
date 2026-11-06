@@ -156,6 +156,7 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
     await measure('cli prime', async () => await kanbo('prime'))
     await measure('cli card get', async () => await kanbo('card', 'get', PARENT_KEY))
     await measure('cli board', async () => await kanbo('board'))
+    // Task 5: await measure('cli stats', async () => await kanbo('stats'))
 
     // The same board's operations, the way a host calls them: a card with its comments.
     const ops = createBoardOps(board.store)
@@ -167,6 +168,7 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
         ops.listComments(card!.id),
       ])
     })
+    await measure('ops board metrics', async () => await ops.boardMetrics({ workspaceIds: [SEED_WORKSPACE.id], from: 0, to: 2_000_000_000 }))
 
     // The MCP tools, through a client on the other end of an in-memory pipe.
     const transport = await createDbTransport({
@@ -323,6 +325,7 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
     'cli card get': 9,
     'cli board': 7,
     'ops card get + comments': 5,
+    'ops board metrics': 6,
     'mcp kanbo_card_list': 5,
     'mcp kanbo_card_list, filtered': 6,
     'mcp kanbo_ready': 5,
@@ -342,6 +345,7 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
     'cli card get': 8,
     'cli board': 6,
     'ops card get + comments': 5,
+    'ops board metrics': 6,
     'mcp kanbo_card_list': 5,
     'mcp kanbo_card_list, filtered': 6,
     'mcp kanbo_ready': 5,

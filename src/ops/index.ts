@@ -5,6 +5,8 @@ import type { Issue } from '../sqlite/schema'
 import type { IssueActivityResolver } from './activity'
 import { listActivity, listFieldChanges } from './activity'
 import { readApproval, readCardAttention } from './approval'
+import type { BoardMetricsInput } from './board-metrics'
+import { boardMetrics, readBoardMetricsHistory } from './board-metrics-read'
 import type { BulkUpdateCardsInput } from './card-batch'
 import { bulkUpdateCards, reorderCards } from './card-batch'
 import type { AddCommentInput, CreateCardInput, CreateCommentOnceInput, UpdateCardInput } from './cards'
@@ -228,6 +230,8 @@ export function createBoardOps<TStore extends BoardStore>(store: TStore) {
     queryReady: async (input: { workspaceId: string, limit?: number, offset?: number }) => await queryReady(store, input),
     listColumnEntries: async (input: ListColumnEntriesInput) => await listColumnEntries(store, input),
     buildPrimeText: async (workspaceId: string) => await buildPrimeText(store, workspaceId),
+    readBoardMetricsHistory: async (workspaceIds: readonly string[]) => await readBoardMetricsHistory(store, workspaceIds),
+    boardMetrics: async (input: BoardMetricsInput, now?: number) => await boardMetrics(store, input, now),
   }
 }
 
