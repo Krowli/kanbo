@@ -49,9 +49,9 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
   }),
   board_column_ready_protected: details => ({
     text: details.newName === undefined
-      ? `${named(details.statusName)} can't be removed: agents take work from To Do, and agents would find no cards to take.`
-      : `${named(details.statusName)} can't be renamed to "${named(details.newName)}": agents take work from To Do, `
-        + 'and agents would find no cards to take. Another spelling of To Do (To-do, TO DO) is fine.',
+      ? `${named(details.statusName)} can't be removed: agents take work from To Do and would find no cards to take.`
+      : `${named(details.statusName)} can't be renamed to "${named(details.newName)}": agents take work from To Do `
+        + 'and would find no cards to take. Another spelling of To Do (To-do, TO DO) is fine.',
   }),
   board_column_remove_target_invalid: details => ({
     text: `Cards can't move into ${named(details.statusName)}: it is the column being removed.`,
