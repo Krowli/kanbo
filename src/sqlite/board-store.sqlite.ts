@@ -461,6 +461,18 @@ function createSqliteBoardStoreCore(resolveDatabase: () => SqliteDatabase): Sqli
         .where(eq(issueComments.issueId, issueId))
         .orderBy(asc(issueComments.createdAt), COMMENT_INSERTION_ORDER)
         .all(),
+      listByWorkspaces: (workspaceIds, authorKinds) => {
+        if (workspaceIds.length === 0 || authorKinds.length === 0) {
+          return []
+        }
+        return resolveDatabase()
+          .select(getTableColumns(issueComments))
+          .from(issueComments)
+          .innerJoin(issues, eq(issues.id, issueComments.issueId))
+          .where(and(inArray(issues.workspaceId, [...workspaceIds]), inArray(issueComments.authorKind, [...authorKinds])))
+          .orderBy(asc(issueComments.createdAt), COMMENT_INSERTION_ORDER)
+          .all()
+      },
       listLatestByIssues: (issueIds, authorKinds) => {
         if (issueIds.length === 0 || authorKinds?.length === 0) {
           return []
@@ -553,6 +565,18 @@ function createSqliteBoardStoreCore(resolveDatabase: () => SqliteDatabase): Sqli
         .where(and(eq(issueRuns.state, 'running'), isNotNull(issueRuns.chatSessionId)))
         .orderBy(asc(issueRuns.startedAt), RUN_INSERTION_ORDER)
         .all(),
+      listByWorkspaces: (workspaceIds) => {
+        if (workspaceIds.length === 0) {
+          return []
+        }
+        return resolveDatabase()
+          .select(getTableColumns(issueRuns))
+          .from(issueRuns)
+          .innerJoin(issues, eq(issues.id, issueRuns.issueId))
+          .where(inArray(issues.workspaceId, [...workspaceIds]))
+          .orderBy(asc(issueRuns.startedAt), RUN_INSERTION_ORDER)
+          .all()
+      },
       findById: runId => resolveDatabase().select().from(issueRuns).where(eq(issueRuns.id, runId)).get() ?? null,
       findByChatSessionId: chatSessionId => resolveDatabase()
         .select()
@@ -784,6 +808,7 @@ export function createSqliteBoardStore(options: { database: () => SqliteDatabase
     comments: {
       listByIssue: async issueId => core.comments.listByIssue(issueId),
       listLatestByIssues: async (issueIds, authorKinds) => core.comments.listLatestByIssues(issueIds, authorKinds),
+      listByWorkspaces: async (workspaceIds, authorKinds) => core.comments.listByWorkspaces(workspaceIds, authorKinds),
       findById: async commentId => core.comments.findById(commentId),
       findByDedupeKey: async (issueId, dedupeKey) => core.comments.findByDedupeKey(issueId, dedupeKey),
       listByDedupeKeyPrefix: async (issueId, prefix) => core.comments.listByDedupeKeyPrefix(issueId, prefix),
@@ -796,6 +821,7 @@ export function createSqliteBoardStore(options: { database: () => SqliteDatabase
       listByIssue: async issueId => core.runs.listByIssue(issueId),
       listRunning: async issueId => core.runs.listRunning(issueId),
       listRunningWithSession: async () => core.runs.listRunningWithSession(),
+      listByWorkspaces: async workspaceIds => core.runs.listByWorkspaces(workspaceIds),
       findById: async runId => core.runs.findById(runId),
       findByChatSessionId: async chatSessionId => core.runs.findByChatSessionId(chatSessionId),
       countByIssue: async issueId => core.runs.countByIssue(issueId),

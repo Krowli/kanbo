@@ -437,6 +437,17 @@ function createStoreOver(database: BoardPostgresDatabase): BoardStore {
         .from(issueComments)
         .where(eq(issueComments.issueId, issueId))
         .orderBy(asc(issueComments.createdAt), asc(issueComments.seq))).map(toIssueComment),
+      listByWorkspaces: async (workspaceIds, authorKinds) => {
+        if (workspaceIds.length === 0 || authorKinds.length === 0) {
+          return []
+        }
+        return (await database
+          .select(getTableColumns(issueComments))
+          .from(issueComments)
+          .innerJoin(issues, eq(issues.id, issueComments.issueId))
+          .where(and(inArray(issues.workspaceId, [...workspaceIds]), inArray(issueComments.authorKind, [...authorKinds])))
+          .orderBy(asc(issueComments.createdAt), asc(issueComments.seq))).map(toIssueComment)
+      },
       listLatestByIssues: async (issueIds, authorKinds) => {
         if (issueIds.length === 0 || authorKinds?.length === 0) {
           return []
@@ -524,6 +535,17 @@ function createStoreOver(database: BoardPostgresDatabase): BoardStore {
         .from(issueRuns)
         .where(and(eq(issueRuns.state, 'running'), isNotNull(issueRuns.chatSessionId)))
         .orderBy(asc(issueRuns.startedAt), asc(issueRuns.seq))).map(toIssueRun),
+      listByWorkspaces: async (workspaceIds) => {
+        if (workspaceIds.length === 0) {
+          return []
+        }
+        return (await database
+          .select(getTableColumns(issueRuns))
+          .from(issueRuns)
+          .innerJoin(issues, eq(issues.id, issueRuns.issueId))
+          .where(inArray(issues.workspaceId, [...workspaceIds]))
+          .orderBy(asc(issueRuns.startedAt), asc(issueRuns.seq))).map(toIssueRun)
+      },
       findById: async (runId) => {
         const [row] = await database.select().from(issueRuns).where(eq(issueRuns.id, runId)).limit(1)
         return row ? toIssueRun(row) : null

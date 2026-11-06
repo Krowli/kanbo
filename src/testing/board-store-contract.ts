@@ -493,6 +493,26 @@ export function runBoardStoreContract(name: string, makeStore: () => Promise<Boa
         expect(await store.comments.listByDedupeKeyPrefix(issue.id, 'ci:my_org/app#7@')).toEqual([first, second])
         expect(await store.comments.listByDedupeKeyPrefix(issue.id, 'pr-merged:')).toEqual([])
       })
+
+      it('lists the comments of some kinds on the cards of several workspaces, oldest first', async () => {
+        const issue = await createIssue({ id: 'issue-1', number: 1 })
+        const other = await createIssue({ id: 'issue-2', number: 1, workspaceId: secondWorkspaceId })
+        await store.comments.create({ id: 'approved', issueId: issue.id, content: 'Approved', authorKind: 'system.approved', authorId: '__self__', createdAt: 2_000 })
+        await store.comments.create({ id: 'returned', issueId: issue.id, content: 'Fix it', authorKind: 'system.returned', authorId: '__self__', createdAt: 1_000 })
+        await store.comments.create({ id: 'said', issueId: issue.id, content: 'Looks fine', authorKind: 'user', createdAt: 1_500 })
+        await store.comments.create({ id: 'returned-elsewhere', issueId: other.id, content: 'No', authorKind: 'system.returned', createdAt: 1_200 })
+        // Same second as `approved`: insertion order separates them.
+        await store.comments.create({ id: 'approved-again', issueId: issue.id, content: 'Approved', authorKind: 'system.approved', authorId: '__self__', createdAt: 2_000 })
+
+        expect((await store.comments.listByWorkspaces([workspaceId], ['system.approved', 'system.returned'])).map(comment => comment.id))
+          .toEqual(['returned', 'approved', 'approved-again'])
+        expect((await store.comments.listByWorkspaces([workspaceId, secondWorkspaceId], ['system.returned'])).map(comment => comment.id))
+          .toEqual(['returned', 'returned-elsewhere'])
+        expect((await store.comments.listByWorkspaces([workspaceId], ['system.returned']))[0])
+          .toEqual(await store.comments.findById('returned'))
+        expect(await store.comments.listByWorkspaces([workspaceId], [])).toEqual([])
+        expect(await store.comments.listByWorkspaces([], ['system.returned'])).toEqual([])
+      })
     })
 
     describe('runs', () => {
@@ -618,6 +638,24 @@ export function runBoardStoreContract(name: string, makeStore: () => Promise<Boa
         expect(await store.runs.project({ issueIds: [launchedOnce.id] }))
           .toEqual([{ issueId: launchedOnce.id, attemptCount: 1, activeRun: null }])
         expect(await store.runs.project({ issueIds: [] })).toEqual([])
+      })
+
+      it('lists the runs of the cards of several workspaces, oldest first, in insertion order within one second', async () => {
+        const issue = await createIssue({ id: 'issue-1', number: 1 })
+        const other = await createIssue({ id: 'issue-2', number: 1, workspaceId: secondWorkspaceId })
+        await store.runs.create({ id: 'run-second', issueId: issue.id, agentName: 'Claude', startedAt: 2_000 })
+        await store.runs.create({ id: 'run-elsewhere', issueId: other.id, agentName: 'Codex', startedAt: 1_500 })
+        await store.runs.create({ id: 'run-first', issueId: issue.id, agentName: 'Claude', startedAt: 1_000 })
+        // Same second as `run-second`: insertion order separates them.
+        await store.runs.create({ id: 'run-third', issueId: issue.id, agentName: 'Codex', startedAt: 2_000 })
+
+        expect((await store.runs.listByWorkspaces([workspaceId])).map(run => run.id))
+          .toEqual(['run-first', 'run-second', 'run-third'])
+        expect((await store.runs.listByWorkspaces([workspaceId, secondWorkspaceId])).map(run => run.id))
+          .toEqual(['run-first', 'run-elsewhere', 'run-second', 'run-third'])
+        // The same row `findById` reads: nothing of the engine's own (Postgres `seq`) leaks.
+        expect((await store.runs.listByWorkspaces([workspaceId]))[0]).toEqual(await store.runs.findById('run-first'))
+        expect(await store.runs.listByWorkspaces([])).toEqual([])
       })
     })
 

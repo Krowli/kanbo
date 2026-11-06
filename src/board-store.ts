@@ -185,6 +185,12 @@ export interface IssueCommentStore {
    * is absent. "Latest" is the order `listByIssue` lists them in, its last.
    */
   listLatestByIssues: (issueIds: readonly string[], authorKinds?: readonly IssueComment['authorKind'][]) => Promise<IssueComment[]>
+  /**
+   * The comments of these kinds on the cards of these workspaces, oldest first
+   * (insertion order within one second), in one statement — what the board's
+   * metrics read for every approval. An empty list of either reads nothing.
+   */
+  listByWorkspaces: (workspaceIds: readonly string[], authorKinds: readonly IssueComment['authorKind'][]) => Promise<IssueComment[]>
   findById: (commentId: string) => Promise<IssueComment | null>
   /**
    * The comment on that issue carrying `dedupeKey`, or `null` — one read of the
@@ -228,6 +234,12 @@ export interface IssueRunStore {
    * nothing about, and is still going for all the board can tell.
    */
   listRunningWithSession: () => Promise<IssueRun[]>
+  /**
+   * Every run of the cards of these workspaces, oldest first (insertion order
+   * within one second), in one statement — what the board's metrics read. An
+   * empty list reads nothing.
+   */
+  listByWorkspaces: (workspaceIds: readonly string[]) => Promise<IssueRun[]>
   findById: (runId: string) => Promise<IssueRun | null>
   /** The newest run driving that chat session, across every issue. */
   findByChatSessionId: (chatSessionId: string) => Promise<IssueRun | null>
