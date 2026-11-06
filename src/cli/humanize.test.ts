@@ -26,6 +26,7 @@ const EXPECTED: Record<BoardErrorCode, [Record<string, unknown>, string]> = {
   board_column_structure_requires_user: [{ actorKind: 'agent' }, 'Only a person can change the board\'s columns.\n  Next: run it in your own terminal, or on the board page (kanbo serve)'],
   board_entry_rule_invalid: [{ rules: ['green'], allowed: ['ci_green', 'approved'] }, 'Unknown column rule: green. Use any of ci_green, approved.'],
   board_execution_mode_locked: [{ issueId: 'MYA-1', executionMode: 'worktree' }, 'MYA-1 has been started, so where it is worked (worktree) can\'t change now.'],
+  board_metrics_range_invalid: [{ from: 2, to: 1 }, 'The range starts after it ends: --from is later than --to.'],
   board_flow_rule_invalid: [{ statusId: 's1', wipLimit: 0 }, 'A column holds at least 1 card; 0 is not a limit. Use none for no limit.'],
   board_nothing_ready: [{ workspaceId: 'w1' }, 'No card in To Do is ready to take: each one is taken or waits for a person, or there is none.\n  Next: kanbo ready'],
   board_pull_request_invalid: [{ value: 'nope' }, '"nope" is not a GitHub pull request. Give its link or owner/repo#number.'],
