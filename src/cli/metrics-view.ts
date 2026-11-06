@@ -78,6 +78,9 @@ export function describeMetrics(metrics: BoardMetrics, sprint: BoardSprint | nul
   if (sprint) {
     lines.push(`${sanitizeTerminalText(sprint.title)}: ${sprint.cards.open + sprint.cards.done} planned · ${sprint.cards.done} done`)
   }
+  if (metrics.range.from > metrics.range.to) {
+    return [...lines, 'Nothing measured yet: the range starts after now.'].join('\n')
+  }
   lines.push(
     ...block('Cycle time', [`p50 ${formatDuration(metrics.cycleTime.p50)} · p85 ${formatDuration(metrics.cycleTime.p85)} (${count(metrics.cycleTime.cards, 'card')})`]),
     ...block('Lead time', [`p50 ${formatDuration(metrics.leadTime.p50)} · p85 ${formatDuration(metrics.leadTime.p85)}`]),

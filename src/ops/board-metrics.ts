@@ -151,7 +151,7 @@ export interface BoardMetricsPerson {
  * out of everything else.
  */
 export interface BoardMetrics {
-  /** The range read; `to` is never later than `now`. */
+  /** The range read; `to` is cut at now, so a range starting after now has `from` after `to` and empty series. */
   range: { from: number, to: number }
   now: number
   milestoneId: string | null

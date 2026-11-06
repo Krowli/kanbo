@@ -643,6 +643,12 @@ describe('board commands', () => {
       expect(printed).toEqual({ cycleTime: { cards: 5, p50: 226_799, p85: 604_800 }, canceled: 1 })
     })
 
+    it('says nothing is measured yet when the range starts after now', async () => {
+      const text = await run(['stats', '--from', '2026-02-01', '--to', '2026-02-10'])
+
+      expect(text.split('\n')).toEqual(['2026-02-01 → 2026-01-22', 'Nothing measured yet: the range starts after now.'])
+    })
+
     it('says a sprint the board has not got, and a range that runs backwards', async () => {
       vi.stubEnv('KANBO_DEBUG', '')
       const missing = await run(['stats', '--sprint', 'nope']).then(() => undefined, (error: unknown) => error)
