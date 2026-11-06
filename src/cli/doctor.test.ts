@@ -13,6 +13,7 @@ import { writeFakeBin } from '../testing/fake-bin'
 import { createPromptDriver } from '../testing/prompt-driver'
 import type { KanboProgramContext } from './commands'
 import { DOCTOR_FIX_YES_HINT, registerDoctorCommand } from './commands/doctor'
+import { registerConnectCommand } from './commands/connect'
 import { registerInitCommand } from './commands/init'
 import type { DoctorFinding } from './doctor'
 import { collectDoctorFindings } from './doctor'
@@ -67,10 +68,9 @@ describe('kanbo doctor', () => {
 
     const program = new Command().exitOverride()
     registerInitCommand(program)
-    await program.parseAsync(
-      ['init', '--file', '--instructions', 'claude', '--mcp', 'claude,codex,cursor', '--yes'],
-      { from: 'user' },
-    )
+    registerConnectCommand(program)
+    await program.parseAsync(['init', '--file', '--yes'], { from: 'user' })
+    await program.parseAsync(['connect', 'claude', 'codex', 'cursor', '--project', '--yes'], { from: 'user' })
   })
 
   afterEach(() => {
@@ -125,7 +125,6 @@ describe('kanbo doctor', () => {
       'settings',
       'sqlite',
       'board',
-      'instructions',
       'mcp:claude',
       'mcp:codex',
       'mcp:cursor',
@@ -153,35 +152,58 @@ describe('kanbo doctor', () => {
     const instructions = finding(await doctor(), 'instructions')
 
     expect(instructions.status).toBe('warn')
-    expect(instructions.detail).toContain('older kanbo')
-    expect(instructions.fix).toContain('kanbo connect claude --project --no-mcp --yes')
+    expect(instructions.detail).toBe(`${path}: an old kanbo section — agents now learn the board from the MCP server.`)
+    expect(instructions.fix).toBe('Run kanbo doctor --fix (or kanbo connect claude --yes) to remove it.')
+    expect(instructions.repair).toBeDefined()
+  })
+
+  it('has no instruction finding for a project whose agents have no old section', async () => {
+    installKanbo('process.exit(1)')
+
+    expect((await doctor()).some(entry => entry.check === 'instructions')).toBe(false)
+  })
+
+  it('warns when no coding agent has the kanbo server registered anywhere', async () => {
+    installKanbo('process.exit(1)')
+    for (const path of [join(projectDir, '.mcp.json'), join(projectDir, '.cursor', 'mcp.json'), join(projectDir, '.codex', 'config.toml')]) {
+      rmSync(path)
+    }
+
+    const findings = await doctor()
+
+    expect(finding(findings, 'mcp')).toMatchObject({
+      status: 'warn',
+      detail: 'No coding agent reaches kanbo: its MCP server is registered nowhere.',
+      fix: 'kanbo connect claude --yes (or codex, cursor, gemini)',
+    })
   })
 
   it('warns about a block the person edited, without offering --yes', async () => {
     installKanbo('process.exit(1)')
     const path = join(projectDir, 'CLAUDE.md')
-    writeFileSync(path, readFileSync(path, 'utf8').replace('Take work with', 'Pick work with'))
+    writeFileSync(path, `# Notes\n\n${INSTRUCTION_BLOCK.replace('Take work with', 'Pick work with')}\n`)
 
     const instructions = finding(await doctor(), 'instructions')
 
     expect(instructions.status).toBe('warn')
-    expect(instructions.detail).toContain('you edited')
-    expect(instructions.fix).not.toContain('--yes')
+    expect(instructions.detail).toContain('an old kanbo section')
+    expect(instructions.fix).toBe('Delete it yourself, or run kanbo connect --remove.')
+    expect(instructions.repair).toBeUndefined()
   })
 
-  it('is fine with a block a newer kanbo wrote or a text the person chose, and fails a start marker without an end', async () => {
+  it('warns about a block a newer kanbo wrote or a text the person chose, and fails a start marker without an end', async () => {
     installKanbo('process.exit(1)')
     const path = join(projectDir, 'CLAUDE.md')
 
     writeFileSync(path, `${wrapInstructionBlock('## Kanbo board\n\nNewer words.', 4)}\n`)
     const newer = finding(await doctor(), 'instructions')
-    expect(newer.status).toBe('ok')
-    expect(newer.detail).toContain('written by a newer kanbo (v4) — update kanbo: npm install -g kanbo-cli@latest')
+    expect(newer.status).toBe('warn')
+    expect(newer.fix).toBe('Delete it yourself, or run kanbo connect --remove.')
 
     writeFileSync(path, `${wrapInstructionBlock('Coordinate the agents.', 2, 'orchestrator')}\n`)
     const chosen = finding(await doctor(), 'instructions')
-    expect(chosen.status).toBe('ok')
-    expect(chosen.detail).toContain('you chose the orchestrator text')
+    expect(chosen.status).toBe('warn')
+    expect(chosen.fix).toBe('Delete it yourself, or run kanbo connect --remove.')
 
     writeFileSync(path, '# Notes\n\n<!-- KANBO_START -->\nMine.\n')
     const damaged = finding(await doctor(), 'instructions')
@@ -241,12 +263,12 @@ describe('kanbo doctor', () => {
       'mcp:codex',
     )
 
-    // What `kanbo init --mcp codex` writes: the bare name, which on Windows finds npm's kanbo.cmd.
+    // What `kanbo connect codex --project` writes: the bare name, which on Windows finds npm's kanbo.cmd.
     const bare = await onWindows()
     expect(bare.status).toBe('warn')
     // A project entry: take it out of the project, then register kanbo for the person — two commands, two lines.
     expect(bare.fix).toBe('Codex on Windows can\'t start a .cmd. Remove the project entry, then register kanbo for your user:\n'
-      + '  kanbo connect codex --project --remove --no-instructions\n'
+      + '  kanbo connect codex --project --remove\n'
       + '  kanbo connect codex')
 
     const shim = join(bin, 'kanbo.cmd')
@@ -400,25 +422,25 @@ describe('kanbo doctor', () => {
       return edited
     }
 
-    it('rewrites an old block with --yes, leaves an edited one alone, and deletes nothing', async () => {
+    it('removes an old block with --yes, leaves an edited one alone, and deletes nothing', async () => {
       const edited = oldAndEditedBlocks()
       const before = listing()
 
       await run('--fix', '--yes')
 
-      expect(readFileSync(claudeMd(), 'utf8')).toBe(`# Notes\n\n${INSTRUCTION_BLOCK}\n`)
+      expect(readFileSync(claudeMd(), 'utf8')).toBe('# Notes\n')
       expect(readFileSync(agentsMd(), 'utf8')).toBe(edited)
       const after = listing()
       expect(after.filter(path => !before.includes(path))).toEqual([])
       expect(before.filter(path => !after.includes(path))).toEqual([])
       const output = printed.join('\n')
-      expect(output).toContain('kanbo doctor --fix will:\n  write  CLAUDE.md (the kanbo section: Claude Code reads it in this project and runs kanbo prime before a task)')
+      expect(output).toContain('kanbo doctor --fix will:\n  remove  CLAUDE.md (the old kanbo section: agents now learn the board from the MCP server)')
       expect(output).toContain('Nothing is deleted, and nothing else is changed.')
       expect(output).toContain('  written CLAUDE.md')
-      // Checked again: the rewritten block is current; the edited one is still only a warning, with no fix of --fix's.
+      // Checked again: the removed block is gone; the edited one is still only a warning, with no fix of --fix's.
       const again = output.split('Checked again:')[1]!
-      expect(again).toContain(`ok    instructions   ${claudeMd()}: block is current.`)
-      expect(again).toContain(`warn  instructions   ${agentsMd()}: you edited the kanbo block`)
+      expect(again).not.toContain(claudeMd())
+      expect(again).toContain(`warn  instructions   ${agentsMd()}: an old kanbo section`)
     })
 
     /** `kanbo doctor` as the binary runs it: through `runKanbo`, which starts the run's update check. */
@@ -499,7 +521,7 @@ describe('kanbo doctor', () => {
       driver.press('enter')
       await running
 
-      expect(readFileSync(claudeMd(), 'utf8')).toBe(`# Notes\n\n${INSTRUCTION_BLOCK}\n`)
+      expect(readFileSync(claudeMd(), 'utf8')).toBe('# Notes\n')
     })
 
     it('gives a board with no columns the Standard ones', async () => {

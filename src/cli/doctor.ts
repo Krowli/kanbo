@@ -387,9 +387,11 @@ async function checkPostgresBoard(url: string, workspaceId: string): Promise<Doc
 }
 
 /**
- * Every instruction block kanbo could have written, compared with the one this
- * build writes. Only files that carry a block are reported: a file without one
- * is not a fault, but having no block anywhere is worth a warning.
+ * Every instruction block an older kanbo could have written, in the project's
+ * and the person's own agent files. kanbo writes none any more, so a file
+ * without one is as it should be, and a file with one is worth a warning: the
+ * agent learns the board from the MCP server and the block is dead text. Only
+ * files that carry a block are reported.
  */
 async function checkInstructions(root: string | null): Promise<DoctorFinding[]> {
   const findings: DoctorFinding[] = []
@@ -398,64 +400,37 @@ async function checkInstructions(root: string | null): Promise<DoctorFinding[]> 
     for (const { path, agents } of instructionPaths(scope, folder)) {
       const inspection = readInstructionBlockInspection(path, block)
       if (inspection !== null) {
-        const command = `kanbo connect ${agents[0]} ${scope === 'project' ? '--project' : '--global'} --no-mcp`
-        const finding = blockFinding(path, inspection, scope === 'project' ? `cd ${folder} && ${command}` : command)
-        if (inspection.state === 'outdated' || inspection.state === 'legacy') {
-          // `kanbo connect`'s own plan for this file, so the rewrite is exactly the one it would make.
+        const finding = blockFinding(path, inspection, agents[0]!)
+        if (inspection.state === 'current' || inspection.state === 'outdated' || inspection.state === 'legacy') {
+          // `kanbo connect`'s own plan for this file, so the removal is exactly the one it would make.
           finding.repair = connectRepair(await planConnect([{ agent: agents[0]!, instructions: scope, mcp: null }], { projectDir: folder, yes: true }))
         }
         findings.push(finding)
       }
     }
   }
-  if (findings.length === 0) {
-    findings.push({
-      check: 'instructions',
-      status: 'warn',
-      detail: 'No kanbo instruction block in this project\'s or your own agent files: agents learn the rules only from the MCP server.',
-      fix: 'Run kanbo connect in the project (kanbo connect claude --yes, say), or kanbo connect claude --global.',
-    })
-  }
   return findings
 }
 
 /**
- * A block kanbo wrote and nobody changed is only out of date: it still sends
- * the agent to `kanbo prime`, so it is a warning, and `--yes` rewrites it. A
- * block the person changed is theirs, and only they can say to replace it; a
- * text they chose, or a block a newer kanbo wrote, is fine as it is. A file
- * whose markers do not pair up is one kanbo will not touch until it is fixed.
+ * A block kanbo wrote and nobody changed is only dead text: it is a warning,
+ * and `--fix` removes it. A block the person changed or chose, or one a newer
+ * kanbo wrote, is theirs to delete. A file whose markers do not pair up is one
+ * kanbo will not touch until it is fixed.
  */
-function blockFinding(path: string, inspection: InstructionBlockInspection, command: string): DoctorFinding {
+function blockFinding(path: string, inspection: InstructionBlockInspection, agent: AgentId): DoctorFinding {
+  const detail = `${path}: an old kanbo section — agents now learn the board from the MCP server.`
   switch (inspection.state) {
-    case 'current':
-      return { check: 'instructions', status: 'ok', detail: `${path}: block is current.` }
-    case 'chosen':
-      return { check: 'instructions', status: 'ok', detail: `${path}: you chose the ${inspection.kind} text for the kanbo section; kanbo leaves it alone.` }
-    case 'newer':
-      return {
-        check: 'instructions',
-        status: 'ok',
-        detail: `${path}: written by a newer kanbo (v${inspection.version}) — update kanbo: npm install -g kanbo-cli@latest`,
-      }
     case 'damaged': {
       const message = damagedBlockMessage(path, inspection.damage!)
       return { check: 'instructions', status: 'fail', detail: message, fix: message }
     }
     case 'edited':
-      return {
-        check: 'instructions',
-        status: 'warn',
-        detail: `${path}: you edited the kanbo block, so kanbo leaves it alone.`,
-        fix: `Keep it, or run ${command} in a terminal and answer yes to replace it with the current one.`,
-      }
+    case 'chosen':
+    case 'newer':
+      return { check: 'instructions', status: 'warn', detail, fix: 'Delete it yourself, or run kanbo connect --remove.' }
     default:
-      return {
-        check: 'instructions',
-        status: 'warn',
-        detail: `${path}: block was written by an older kanbo.`,
-        fix: `Run kanbo doctor --fix, or ${command} --yes to rewrite it.`,
-      }
+      return { check: 'instructions', status: 'warn', detail, fix: `Run kanbo doctor --fix (or kanbo connect ${agent} --yes) to remove it.` }
   }
 }
 
@@ -480,8 +455,8 @@ async function checkRegistrations(registrations: Registration[], platform: NodeJ
     return [{
       check: 'mcp',
       status: 'warn',
-      detail: 'No MCP client has the kanbo server registered.',
-      fix: 'Run kanbo connect in the project (kanbo connect claude --yes, say), or kanbo connect claude --global.',
+      detail: 'No coding agent reaches kanbo: its MCP server is registered nowhere.',
+      fix: 'kanbo connect claude --yes (or codex, cursor, gemini)',
     }]
   }
   const findings: DoctorFinding[] = []
@@ -571,7 +546,7 @@ function isAbsoluteOn(platform: NodeJS.Platform, path: string): boolean {
  * there, so the fix is two commands, each on its own line.
  */
 const CODEX_PROJECT_CMD_FIX = 'Codex on Windows can\'t start a .cmd. Remove the project entry, then register kanbo for your user:\n'
-  + '  kanbo connect codex --project --remove --no-instructions\n'
+  + '  kanbo connect codex --project --remove\n'
   + '  kanbo connect codex'
 
 /**
