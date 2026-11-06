@@ -6,7 +6,8 @@
 //
 // With --upgrade it checks an upgrade instead: the published kanbo-cli@0.2.1
 // sets up a project and fills its board, then the tarball is installed over
-// it and has to find everything where 0.2.1 left it (needs the npm registry).
+// it and has to find everything where 0.2.1 left it, read through `kanbo board`
+// and the MCP tools, and take 0.2.1's instruction block out (needs the npm registry).
 //
 //   node scripts/smoke.mjs                  # packs this checkout first (runs the build through prepack)
 //   node scripts/smoke.mjs --upgrade        # from kanbo-cli@0.2.1 to this checkout
@@ -197,8 +198,8 @@ function readTomlServer(text) {
   return { command: strings(command[1])[0], args: argsLine ? strings(argsLine[1]) : [] }
 }
 
-/** Start the server as a client would from its registration, shake hands, call kanbo_ready and find `card` in it. */
-async function mcpHandshake(label, launch, card = `${KEY}-001`) {
+/** Start the server as a client would from its registration, shake hands, and hand the connected client to `use`. */
+async function withMcpClient(label, launch, use) {
   note(`${label}: ${launch.command} ${launch.args.join(' ')}`)
   // The SDK the installed kanbo depends on — what a user's machine has.
   const require = createRequire(join(packageDir, 'package.json'))
@@ -214,14 +215,27 @@ async function mcpHandshake(label, launch, card = `${KEY}-001`) {
     check(info?.name === 'kanbo', `${label}: serverInfo.name is ${JSON.stringify(info?.name)}, expected "kanbo"`, stderr)
     const instructions = client.getInstructions()
     check(typeof instructions === 'string' && instructions.trim().length > 0, `${label}: the server sent no instructions`)
-    const ready = await withTimeout(client.callTool({ name: 'kanbo_ready', arguments: {} }), 60_000, `${label}: kanbo_ready did not answer`)
-    const text = (ready.content ?? []).map(part => part.text ?? '').join('\n')
-    check(!ready.isError && text.includes(card), `${label}: kanbo_ready does not list ${card}`, text)
-    note(`${label}: serverInfo ${info.name} ${info.version}, ${instructions.length} chars of instructions, kanbo_ready lists ${card}`)
+    note(`${label}: serverInfo ${info.name} ${info.version}, ${instructions.length} chars of instructions`)
+    const call = async (name, args = {}) => {
+      const result = await withTimeout(client.callTool({ name, arguments: args }), 60_000, `${label}: ${name} did not answer`)
+      const text = (result.content ?? []).map(part => part.text ?? '').join('\n')
+      check(!result.isError, `${label}: ${name} was refused`, text)
+      return text
+    }
+    await use(call)
   }
   finally {
     await client.close().catch(() => {})
   }
+}
+
+/** The handshake, then kanbo_ready has to list `card`. */
+async function mcpHandshake(label, launch, card = `${KEY}-001`) {
+  await withMcpClient(label, launch, async (call) => {
+    const text = await call('kanbo_ready')
+    check(text.includes(card), `${label}: kanbo_ready does not list ${card}`, text)
+    note(`${label}: kanbo_ready lists ${card}`)
+  })
 }
 
 function withTimeout(promise, ms, message) {
@@ -503,29 +517,37 @@ async function upgradeMain() {
   kanbo(['connect', '--help'])
   note(`${newVersion}, and kanbo connect exists`)
 
-  step('u4b. the board is a migration behind: a write asks for kanbo migrate, and kanbo migrate brings it forward')
-  const unread = kanbo(['card', 'list'], { expectCode: 3 })
+  step('u4b. the board is a migration behind: a read (kanbo board) and a write (kanbo approve) ask for kanbo migrate, and kanbo migrate brings it forward')
+  const unread = kanbo(['board'], { expectCode: 3 })
   check(unread.all.includes('Run kanbo migrate'), 'a read of the old board does not ask for kanbo migrate', unread.all)
-  const refused = kanbo(['card', 'create', '--title', 'Written before kanbo migrate'], { expectCode: 3 })
+  const refused = kanbo(['approve', `${UPGRADE_KEY}-001`], { expectCode: 3 })
   check(refused.all.includes('Run kanbo migrate'), 'a write to the old board does not ask for kanbo migrate', refused.all)
   kanbo(['migrate'])
 
   step('u5. every card, comment, run and change is where it was')
-  const cardsAfter = JSON.parse(kanbo(['card', 'list', '--json', cardFields]).stdout)
-  check(JSON.stringify(cardsAfter) === JSON.stringify(cardsBefore), 'kanbo card list differs after the upgrade', `before ${JSON.stringify(cardsBefore)}\nafter  ${JSON.stringify(cardsAfter)}`)
+  // The same cards, by key and title, through the board the new build shows (0.2.1's own list is the "before").
+  const byKey = (a, b) => a.id.localeCompare(b.id)
+  const cardsAfter = JSON.parse(kanbo(['board', '--all', '--json']).stdout).flatMap(section => section.cards)
+  const keysBefore = cardsBefore.map(({ id, title }) => ({ id, title })).sort(byKey)
+  const keysAfter = cardsAfter.map(({ id, title }) => ({ id, title })).sort(byKey)
+  check(JSON.stringify(keysAfter) === JSON.stringify(keysBefore), 'kanbo board shows other cards than the old kanbo listed', `before ${JSON.stringify(keysBefore)}\nafter  ${JSON.stringify(keysAfter)}`)
   const columnsAfter = JSON.parse(kanbo(['columns', 'list', '--json', 'name,slug,description']).stdout)
   check(JSON.stringify(columnsAfter) === JSON.stringify(columnsBefore), 'kanbo columns list differs after the upgrade', `before ${JSON.stringify(columnsBefore)}\nafter  ${JSON.stringify(columnsAfter)}`)
   const differences = compareBoardTables(tablesBefore, readBoardTables(boardFile))
   check(differences.length === 0, 'the board file changed in the upgrade', differences.join('\n'))
   note(`${cardsAfter.length} cards and ${Object.keys(tablesBefore).length} tables the same, row for row`)
 
-  step('u6. prime, ready and card list on the old board')
-  const prime = kanbo(['prime'])
-  check(prime.stdout.includes('A person checks it here'), 'kanbo prime does not show the column description written by the old kanbo', prime.all)
-  const ready = JSON.parse(kanbo(['ready', '--json', 'id']).stdout)
-  check(ready.some(card => card.id === `${UPGRADE_KEY}-002`), `kanbo ready does not list ${UPGRADE_KEY}-002`, JSON.stringify(ready))
-  const waiting = JSON.parse(kanbo(['card', 'get', `${UPGRADE_KEY}-001`, '--json', 'waitingFor,statusLine']).stdout)
-  check(waiting.waitingFor === 'human' && waiting.statusLine === 'please look', `${UPGRADE_KEY}-001 is no longer waiting`, JSON.stringify(waiting))
+  step('u6. kanbo_prime, kanbo_ready and kanbo_card_get over MCP on the old board')
+  // The installed package started directly, so this runs the same way on every OS.
+  const launch = { command: process.execPath, args: [join(packageDir, 'dist', 'cli.cjs'), 'mcp'] }
+  await withMcpClient('the upgraded board', launch, async (call) => {
+    const prime = await call('kanbo_prime')
+    check(prime.includes('A person checks it here'), 'kanbo_prime does not show the column description written by the old kanbo', prime)
+    const ready = await call('kanbo_ready')
+    check(ready.includes(`${UPGRADE_KEY}-002`), `kanbo_ready does not list ${UPGRADE_KEY}-002`, ready)
+    const waiting = JSON.parse(await call('kanbo_card_get', { card: `${UPGRADE_KEY}-001`, include: [] }))
+    check(waiting.waitingFor === 'human' && waiting.statusLine === 'please look', `${UPGRADE_KEY}-001 is no longer waiting`, JSON.stringify(waiting))
+  })
 
   step(`u7. MCP handshake from the .mcp.json entry ${OLD_VERSION} wrote`)
   if (WINDOWS) {
@@ -536,7 +558,7 @@ async function upgradeMain() {
     await mcpHandshake('.mcp.json from 0.2.1', oldMcpEntry, `${UPGRADE_KEY}-002`)
   }
 
-  step(`u8. kanbo doctor sees the ${OLD_VERSION} block as older, and --fix brings it up to date`)
+  step(`u8. kanbo doctor sees the ${OLD_VERSION} block as an old section, and --fix removes it`)
   const doctorBefore = kanbo(['doctor', '--json'], { expectCode: null })
   const findingsBefore = JSON.parse(doctorBefore.stdout).findings
   const failsBefore = findingsBefore.filter(f => f.status === 'fail')
@@ -546,14 +568,12 @@ async function upgradeMain() {
   note(`instructions: ${instructionsBefore.status} — ${instructionsBefore.detail}`)
   kanbo(['doctor', '--fix', '--yes'])
   const claudeMd = readText(claudeMdPath)
-  const newBlock = BLOCK_PATTERN.exec(claudeMd)
-  check(newBlock !== null && /(^|\s)v3(\s|$)/.test(newBlock[1]), 'CLAUDE.md has no v3 kanbo block after doctor --fix', claudeMd)
-  check(claudeMd.startsWith(TEXT_BEFORE) && claudeMd.endsWith(TEXT_AFTER), 'doctor --fix changed the text outside the kanbo block', claudeMd)
-  check(claudeMd.split('KANBO_START').length === 2, 'CLAUDE.md has more than one kanbo block', claudeMd)
+  check(!claudeMd.includes('KANBO_START'), 'CLAUDE.md still has the kanbo block after doctor --fix', claudeMd)
+  // Removing the block joins what was before and after it with one blank line.
+  check(claudeMd === `${TEXT_BEFORE.trimEnd()}\n\n${TEXT_AFTER.trim()}\n`, 'doctor --fix changed the text outside the kanbo block', claudeMd)
   const doctorAfter = kanbo(['doctor', '--json'], { expectCode: null })
   const findingsAfter = JSON.parse(doctorAfter.stdout).findings
-  const instructionsAfter = findingsAfter.find(f => f.check === 'instructions')
-  check(instructionsAfter?.status === 'ok' && doctorAfter.code === 0, 'kanbo doctor still reports the block or a failure after --fix', JSON.stringify(findingsAfter, null, 2))
+  check(!findingsAfter.some(f => f.check === 'instructions') && doctorAfter.code === 0, 'kanbo doctor still reports the block or a failure after --fix', JSON.stringify(findingsAfter, null, 2))
   for (const finding of findingsAfter.filter(f => f.status === 'warn')) {
     warnings.push(`doctor warn ${finding.check}: ${finding.detail}`)
     note(warnings.at(-1))
