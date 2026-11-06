@@ -3,8 +3,7 @@ import type { Command } from 'commander'
 import { BoardError } from '../../domain/errors'
 import { requireHumanActor, typedWords } from '../actor'
 import type { BoardCommandOptions } from '../command'
-import { runBoardCommand, withBoardOptions } from '../command'
-import { CliError } from '../output'
+import { parseCalendarDay, runBoardCommand, withBoardOptions } from '../command'
 import { describeSprints, projectSprint, SPRINT_VIEW_FIELDS } from '../view'
 
 interface CreateOptions extends BoardCommandOptions {
@@ -16,24 +15,6 @@ interface CreateOptions extends BoardCommandOptions {
 
 interface CloseOptions extends BoardCommandOptions {
   carryTo?: string
-}
-
-const DAY_SECONDS = 86_400
-
-/**
- * A date as the command line takes it: `YYYY-MM-DD`, read as a UTC day, or a
- * unix-seconds number taken as it is. `end` turns a day into its last second,
- * so a sprint due on a day is still current throughout that day.
- */
-function parseDate(value: string, end: boolean): number {
-  if (/^\d+$/.test(value)) {
-    return Number(value)
-  }
-  const day = /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : Number.NaN
-  if (Number.isNaN(day)) {
-    throw new CliError(1, `Expected a date as YYYY-MM-DD or unix seconds, got "${value}".`)
-  }
-  return day / 1000 + (end ? DAY_SECONDS - 1 : 0)
 }
 
 /**
@@ -63,8 +44,8 @@ export function registerSprintCommands(program: Command): void {
     .command('create')
     .description('Start a sprint with a first and a last day')
     .requiredOption('--title <title>', 'what the sprint is called')
-    .requiredOption('--start <date>', 'first day, as YYYY-MM-DD (UTC) or unix seconds', value => parseDate(value, false))
-    .requiredOption('--due <date>', 'last day, as YYYY-MM-DD (UTC, through its end) or unix seconds', value => parseDate(value, true))
+    .requiredOption('--start <date>', 'first day, as YYYY-MM-DD (UTC) or unix seconds', value => parseCalendarDay(value, false))
+    .requiredOption('--due <date>', 'last day, as YYYY-MM-DD (UTC, through its end) or unix seconds', value => parseCalendarDay(value, true))
     .option('--description <text>', 'what the sprint is for'))
     .action(async (options: CreateOptions) => {
       await runBoardCommand(options, 'write', async (session) => {

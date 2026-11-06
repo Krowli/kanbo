@@ -219,6 +219,24 @@ export function parseCount(value: string): number {
   return count
 }
 
+const DAY_SECONDS = 86_400
+
+/**
+ * A date as the command line takes it: `YYYY-MM-DD`, read as a UTC day, or a
+ * unix-seconds number taken as it is. `end` turns a day into its last second,
+ * so a range or a sprint ending on a day runs through that day.
+ */
+export function parseCalendarDay(value: string, end: boolean): number {
+  if (/^\d+$/.test(value)) {
+    return Number(value)
+  }
+  const day = /^\d{4}-\d{2}-\d{2}$/.test(value) ? Date.parse(`${value}T00:00:00Z`) : Number.NaN
+  if (Number.isNaN(day)) {
+    throw new CliError(1, `Expected a date as YYYY-MM-DD or unix seconds, got "${value}".`)
+  }
+  return day / 1000 + (end ? DAY_SECONDS - 1 : 0)
+}
+
 /**
  * The card a caller named, in the workspace the command is about.
  *

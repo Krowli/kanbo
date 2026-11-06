@@ -74,6 +74,9 @@ Your board:
   prime [options]                      Print the board's columns and rules for
                                        an agent to read first
   sprint                               Group cards into time-boxed sprints
+  stats [options]                      How work flows on this board: cycle time,
+                                       throughput, work in progress, returns,
+                                       agents
   serve [options]                      Open the board in your browser
 
 For agents and integrations:

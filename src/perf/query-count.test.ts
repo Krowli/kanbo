@@ -156,7 +156,7 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
     await measure('cli prime', async () => await kanbo('prime'))
     await measure('cli card get', async () => await kanbo('card', 'get', PARENT_KEY))
     await measure('cli board', async () => await kanbo('board'))
-    // Task 5: await measure('cli stats', async () => await kanbo('stats'))
+    await measure('cli stats', async () => await kanbo('stats'))
 
     // The same board's operations, the way a host calls them: a card with its comments.
     const ops = createBoardOps(board.store)
@@ -325,6 +325,7 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
     'cli prime': 6,
     'cli card get': 9,
     'cli board': 7,
+    'cli stats': 10,
     'ops card get + comments': 5,
     'ops board metrics': 6,
     'ops board metrics, 2 workspaces': 9,
@@ -346,6 +347,7 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
     'cli prime': 5,
     'cli card get': 8,
     'cli board': 6,
+    'cli stats': 9,
     'ops card get + comments': 5,
     'ops board metrics': 6,
     'ops board metrics, 2 workspaces': 9,

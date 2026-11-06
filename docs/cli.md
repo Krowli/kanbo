@@ -30,7 +30,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 
 ## Commands
 
-`kanbo --help` lists them in four groups: *Get started* (`init`, `connect`, `instructions`, `doctor`, `uninstall`), *Your board* (`board`, `card`, `columns`, `approve`, `return`, `ready`, `prime`, `sprint`, `serve`), *For agents and integrations* (`mcp`, `run`, `capabilities`) and *Shared Postgres boards* (`migrate`, `roles`).
+`kanbo --help` lists them in four groups: *Get started* (`init`, `connect`, `instructions`, `doctor`, `uninstall`), *Your board* (`board`, `card`, `columns`, `approve`, `return`, `ready`, `prime`, `sprint`, `stats`, `serve`), *For agents and integrations* (`mcp`, `run`, `capabilities`) and *Shared Postgres boards* (`migrate`, `roles`).
 
 | Command | What it does |
 | --- | --- |
@@ -76,6 +76,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 | `kanbo sprint list` | List sprints by start date; the current one is marked `*`. |
 | `kanbo sprint create` | Start a sprint with a first and a last day. |
 | `kanbo sprint close <id>` | Close a sprint and move its unfinished cards on to another open sprint. **Person only.** |
+| `kanbo stats` | How work flows on this board over a range: cycle and lead time, cards finished per week, work in progress, aging cards, time in column, returns, attempts, and one line per agent and per person. `--json` adds the cumulative flow by day. |
 | `kanbo migrate` | Create or update the board's tables after an upgrade — a board file or a shared Postgres board. |
 | `kanbo roles print` | Print the SQL that creates the Postgres logins that keep agents from approving their own work, and their rights. |
 | `kanbo roles apply` | Run that SQL on the shared board, as its owner. |
@@ -424,6 +425,26 @@ Fields `--json` can name on a run: `id`, `issueId`, `agentName`, `state`, `execu
 | `sprint list` | — |
 | `sprint create` | `--title <title>` (required); `--start <date>` (required) first day, `YYYY-MM-DD` (UTC) or unix seconds; `--due <date>` (required) last day, `YYYY-MM-DD` (UTC, through its end) or unix seconds; `--description <text>`. |
 | `sprint close <id>` | `--carry-to <id>` the open sprint unfinished cards move to; without it they leave the sprint. Person only. |
+
+## `kanbo stats`
+
+| Option | Meaning |
+| --- | --- |
+| `--from <date>` | First day, `YYYY-MM-DD` (UTC) or unix seconds. Left out: the Monday that makes the range the last 12 ISO weeks, this one included. |
+| `--to <date>` | Last day, `YYYY-MM-DD` (UTC, through its end) or unix seconds. Left out, or later than now: now. |
+| `--sprint <id>` | Only the cards of this sprint (`kanbo sprint list`), over its own dates unless `--from` or `--to` says otherwise; prints planned against done. |
+
+Reading only, so an agent may run it. `--json` prints the whole `BoardMetrics` value (`--json cycleTime,throughput` picks fields). The cumulative flow, cards per column at the end of each UTC day, is in `--json` only.
+
+What the numbers mean:
+
+- **Started**: a card's first move into a `started` column, or its creation when it was created in one. **Finished**: its latest move into a `completed` column, for a card still in one. A card reopened since is not finished.
+- **Cycle time** = finished − started, **lead time** = finished − created, over the cards finished in the range. They are shown as p50 and p85, by nearest rank: p85 of 20 cards is the 17th shortest.
+- **Throughput**: cards finished per ISO week (Monday 00:00 UTC). **In progress**: cards in `started` columns now, against each column's limit (`kanbo column flow`). **Aging**: those cards, oldest first, marked when older than the range's cycle-time p85.
+- **Time in column**: the time the finished cards spent in each column before they finished. A column deleted since is left out.
+- **Returns** are moves back to an earlier column that is unstarted or started (To Do, In Progress, In Review on the standard board), by anyone: a person's `kanbo return`, an agent sending a card back, an outside script reopening one. They are split by people, agents and outside writers. A move back into Backlog is not a return. **First pass** = finished cards never returned ÷ finished cards. **Attempts** = runs per finished card.
+- **Canceled** cards (in a `canceled` column now) are counted on their own line and left out of every other number.
+- **Agents**: runs started in the range and how they ended, the median run, the finished cards each one ran, and how many of those came back. **People**: cards created, approvals, returns and moves in the range (creating a card is not a move).
 
 ## `kanbo migrate`
 

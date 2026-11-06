@@ -4,6 +4,12 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- `kanbo stats`: how work flows on the board over a range — cycle and lead time as p50 and p85, cards finished per ISO week, work in progress against each column's limit, aging cards, time in column, returns (moves back into an earlier unstarted or started column, by anyone, split by people, agents and outside writers), first-pass approval, attempts, and one line per agent and per person; `--from`, `--to`, `--sprint <id>`, and `--json` with the cumulative flow by day. Canceled cards are counted apart.
+- For applications that use kanbo as a library: `computeBoardMetrics(history, input, now)` and the `BoardMetrics` types, `createBoardOps(store).boardMetrics(input)` and `.readBoardMetricsHistory(workspaceIds)` (a host with workspaces on several boards puts their rows together and computes once), `boardMetricsRuns` (the counted runs, and the canceled cards' apart), `boardMetricsAgentKey`, `nearestRank`, `isoWeekOf`. `BoardErrorCode` gains `board_metrics_range_invalid` (`400`).
+- `BoardStore` gains `runs.listByWorkspaces(workspaceIds)` and `comments.listByWorkspaces(workspaceIds, authorKinds)`; an application that implements `BoardStore` itself must add both.
+
 ## [0.5.0] — 2026-11-06
 
 **Run `kanbo migrate` after upgrading** (on a board file `kanbo doctor --fix` does it too; on a shared Postgres board run `kanbo roles apply` after it, as after every migration). 0.5.0 adds two columns to `issue_statuses` and an index to `issue_field_changes`. Until the board is migrated, a read or a write is refused (exit 3, "Run kanbo migrate"). An app that keeps the board in its own database adds the same migration and pins this exact version.

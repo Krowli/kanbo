@@ -21,6 +21,7 @@ import { registerRolesCommands } from './roles'
 import { registerRunCommands } from './run'
 import { registerServeCommand } from './serve'
 import { registerSprintCommands } from './sprint'
+import { registerStatsCommand } from './stats'
 import { registerUninstallCommand } from './uninstall'
 
 /**
@@ -53,6 +54,7 @@ export function registerKanboCommands(program: Command, context: KanboProgramCon
   registerReadyCommand(program)
   registerPrimeCommand(program)
   registerSprintCommands(program)
+  registerStatsCommand(program)
   registerServeCommand(program)
 
   program.commandsGroup('For agents and integrations:')

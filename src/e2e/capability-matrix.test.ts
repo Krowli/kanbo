@@ -369,6 +369,14 @@ const CASES: MatrixCase[] = [
     },
   },
   {
+    name: 'stats: a person and an agent\'s shell both read how work flows, as text and as JSON',
+    covers: ['stats'],
+    run: async (b) => {
+      expect(await b.cli(['stats'], { agent: true })).toContain('Cycle time')
+      expect((await b.cliJson(['stats', '--json', 'throughput'])).throughput).toHaveLength(12)
+    },
+  },
+  {
     name: 'columns: a person changes them in the terminal, the agent reads every change, an agent\'s shell is refused',
     covers: [
       'columns list',

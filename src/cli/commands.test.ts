@@ -16,11 +16,13 @@ import type { BoardActor } from '../ops/types'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
+import { METRICS_HISTORY, METRICS_NOW, writeMetricsHistory } from '../testing/fixtures/board-metrics'
 import { writeBinding } from './binding'
 import { registerCardCommands } from './commands/card'
 import { registerReadyCommand } from './commands/ready'
 import { registerRunCommands } from './commands/run'
 import { registerSprintCommands } from './commands/sprint'
+import { registerStatsCommand } from './commands/stats'
 import { describeFailure } from './failure'
 
 const WORKSPACE: BoardWorkspaceIdentity = { id: 'workspace', identifier: 'WOR', name: 'Workspace' }
@@ -64,6 +66,7 @@ describe('board commands', () => {
     registerReadyCommand(program)
     registerRunCommands(program)
     registerSprintCommands(program)
+    registerStatsCommand(program)
     await program.parseAsync([...argv, '--db', board.path], { from: 'user' })
     return printed.join('\n')
   }
@@ -580,6 +583,72 @@ describe('board commands', () => {
 
       const refusal = expect.objectContaining({ exitCode: 2, message: expect.stringContaining('alpha, beta') })
       await expect(runUnscoped(['card', 'list', '--workspace', 'Shared'])).rejects.toThrowError(refusal)
+    })
+  })
+
+  describe('kanbo stats', () => {
+    beforeEach(async () => {
+      await writeMetricsHistory(store, METRICS_HISTORY)
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(METRICS_NOW * 1000)
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('prints how work flowed over a range, cut at now', async () => {
+      const text = await run(['stats', '--from', '2025-12-29', '--to', '2026-01-25'])
+
+      expect(text.split('\n')).toEqual([
+        '2025-12-29 → 2026-01-22',
+        'Cycle time      p50 2.6d · p85 7d (5 cards)',
+        'Lead time       p50 3.6d · p85 8d',
+        'Throughput      2026-W01 1 · 2026-W02 2 · 2026-W03 2 · 2026-W04 0',
+        'In progress     In Progress 1/2 · In Review 1',
+        'First pass      40% · attempts 1.4 per card',
+        'Returns         3 (people 1 · agents 1 · outside 1) · 0.6 per card',
+        'Canceled        1',
+        'Aging           WOR-005 In Progress 20.1d (older than p85)',
+        '                WOR-006 In Review 3.1d',
+        'Time in column  To Do 4.2d · In Progress 11.7d · In Review 6.5d · Done 1d',
+        'Agents          claude: 6 runs (5 finished · 0 failed · 0 stopped · 1 running) · median 1d · 4 cards finished · 75% returned',
+        '                codex: 3 runs (2 finished · 1 failed · 0 stopped · 0 running) · median 1d · 1 card finished · 100% returned',
+        '                gemini: 1 run (0 finished · 0 failed · 1 stopped · 0 running) · median 1h · 0 cards finished · — returned',
+        'People          __self__: 6 created · 2 approved · 1 returned · 8 moved',
+        '                alice: 0 created · 1 approved · 0 returned · 0 moved',
+        'Cumulative flow by day: kanbo stats --json cumulativeFlow',
+      ])
+    })
+
+    it('reads the last 12 ISO weeks when no range is given', async () => {
+      // Now is in 2026-W04, which starts on 2026-01-19; eleven weeks before is 2025-11-03.
+      expect((await run(['stats'])).split('\n')[0]).toBe('2025-11-03 → 2026-01-22')
+    })
+
+    it('reads a sprint over its own dates, with planned against done', async () => {
+      const lines = (await run(['stats', '--sprint', 'sprint-1'])).split('\n')
+
+      expect(lines.slice(0, 3)).toEqual([
+        '2025-12-29 → 2026-01-11',
+        'Sprint 1: 3 planned · 3 done',
+        'Cycle time      p50 2d · p85 6d (2 cards)',
+      ])
+    })
+
+    it('prints the fields --json names, from the same numbers', async () => {
+      const printed = JSON.parse(await run(['stats', '--from', '2025-12-29', '--json', 'cycleTime,canceled']))
+
+      expect(printed).toEqual({ cycleTime: { cards: 5, p50: 226_799, p85: 604_800 }, canceled: 1 })
+    })
+
+    it('says a sprint the board has not got, and a range that runs backwards', async () => {
+      vi.stubEnv('KANBO_DEBUG', '')
+      const missing = await run(['stats', '--sprint', 'nope']).then(() => undefined, (error: unknown) => error)
+      expect(describeFailure(missing).message).toContain('No sprint "nope" on this board.')
+
+      const backwards = await run(['stats', '--from', '2026-01-10', '--to', '2026-01-01']).then(() => undefined, (error: unknown) => error)
+      expect(describeFailure(backwards).message).toContain('The range starts after it ends')
     })
   })
 })
