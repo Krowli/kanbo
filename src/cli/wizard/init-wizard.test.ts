@@ -478,6 +478,22 @@ describe('kanbo init wizard', () => {
     expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe('# Project notes\n')
   })
 
+  it('asks where the board should live even when KANBO_DB_PATH names an app\'s database', async () => {
+    vi.stubEnv('KANBO_DB_PATH', join(root, 'app.db'))
+
+    const outcome = await wizard([
+      ['Where should the board live?', enter],
+      ['Card numbers start with', enter],
+      ['Which columns should the board start with?', enter],
+      ['Which coding agents do you use here?', enter],
+      ['Add a first card?', enter],
+      ['Write these changes?', enter],
+    ])
+
+    expect(outcome).toBeNull()
+    expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(true)
+  })
+
   it('asks no agent question when every agent found here already reaches kanbo through its MCP server', async () => {
     machine.detected = ['claude']
     writeFileSync(join(home, '.claude.json'), JSON.stringify({

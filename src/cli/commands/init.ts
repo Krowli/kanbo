@@ -269,15 +269,21 @@ async function resolveBoard(
 }
 
 /**
- * Nothing says where a board is: no flag, no environment, no binding at or
- * above this folder. Then a plain `kanbo init` does what `kanbo init --file`
- * does — a person on a machine with nothing else installed gets a board, not a
- * refusal that names a flag.
+ * Nothing says where this project's board is: no `--db`, no connection string
+ * (typed or exported), no binding at or above this folder. Then a plain
+ * `kanbo init` does what `kanbo init --file` does — a person on a machine with
+ * nothing else installed gets a board, not a refusal that names a flag.
+ *
+ * `KANBO_DB_PATH` is not on that list on purpose. It is how an app that embeds
+ * kanbo names its own database for the commands it starts, and a new board
+ * must not land in it, or fail on it, because the shell `init` runs in happens
+ * to carry that variable. Only `kanbo init --db <path>` binds a project to an
+ * app's database. A Postgres connection string in the environment is the
+ * person's own choice, so it still counts.
  */
 function namesNoBoard(projectDir: string, options: InitOptions): boolean {
   return !options.db?.trim()
     && !options.databaseUrl?.trim()
-    && !process.env.KANBO_DB_PATH?.trim()
     && !process.env.KANBO_DATABASE_URL?.trim()
     && findBinding(projectDir) === null
 }
@@ -304,6 +310,7 @@ async function readSessionWorkspace(options: InitOptions): Promise<BoardWorkspac
  * connection string: binding a project is not something an agent does.
  */
 function resolveInitTarget(projectDir: string, options: InitOptions): BoardTarget {
+  // Reached only when `--db` or a connection string was given, or the project is already bound (`namesNoBoard`).
   const url = resolveDatabaseUrl({ explicitUrl: options.databaseUrl, cwd: projectDir, asAgent: false })
   return url ? { kind: 'postgres', url } : resolveDbTarget({ explicitPath: options.db, cwd: projectDir })
 }

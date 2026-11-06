@@ -88,7 +88,8 @@ export async function runInitWizard(context: InitWizardContext): Promise<InitWiz
 
   say(ui, 'kanbo — set up a board for this project')
   let projectDir: string
-  const missing = findMissingBoardFile(context.cwd)
+  // Only a project that is bound has a board file to lose; `KANBO_DB_PATH` alone does not make one.
+  const missing = bound ? findMissingBoardFile(context.cwd) : null
   if (missing) {
     projectDir = bound?.projectDir ?? await askProjectDir(ui, context.cwd)
     await replaceMissingBoard(ui, missing, projectDir, bound, options)
@@ -154,11 +155,15 @@ function namesPostgres(options: InitOptions): boolean {
   return Boolean(options.databaseUrl?.trim() || (!options.db?.trim() && options.file === undefined && process.env.KANBO_DATABASE_URL?.trim()))
 }
 
-/** Does anything besides the wizard already say which board this is? */
+/**
+ * Does anything besides the wizard already say which board this is? `--db` or
+ * a connection string does. `KANBO_DB_PATH` does not: it names an app's own
+ * database for the commands the app starts, and where a new board goes is
+ * still the person's question (see `namesNoBoard` in `commands/init.ts`).
+ */
 function namesBoard(options: InitOptions): boolean {
   return Boolean(options.db?.trim()
     || options.databaseUrl?.trim()
-    || process.env.KANBO_DB_PATH?.trim()
     || process.env.KANBO_DATABASE_URL?.trim())
 }
 
@@ -176,7 +181,7 @@ function describeExistingBoard(bound: FoundBinding, cwd: string): string {
 }
 
 /**
- * The board file this project is bound to (or `KANBO_DB_PATH` names) is gone.
+ * The board file this project is bound to is gone.
  * The one way on from here is a new, empty board — where the old one was when
  * the project is bound to it — or nothing at all. `--file` already said "a new
  * one"; the columns are asked, and the card key stays the one it was bound to.

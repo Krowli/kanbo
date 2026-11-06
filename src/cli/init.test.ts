@@ -579,11 +579,13 @@ describe('kanbo init', () => {
       expect(existsSync(file)).toBe(false)
     })
 
-    it('says the same about the file KANBO_DB_PATH names', async () => {
-      const file = join(projectDir, 'gone.db')
-      vi.stubEnv('KANBO_DB_PATH', file)
+    it('does not read a missing KANBO_DB_PATH as a lost board: it is the app\'s, not this project\'s', async () => {
+      vi.stubEnv('KANBO_DB_PATH', join(projectDir, 'gone.db'))
 
-      await expect(runWithoutHost(['--connect', 'none'])).rejects.toMatchObject({ exitCode: 2, message: missingMessage(file) })
+      await runWithoutHost(['--connect', 'none'])
+
+      expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(true)
+      expect(existsSync(join(projectDir, 'gone.db'))).toBe(false)
     })
 
     it('puts a new empty board where the old one was with kanbo init --file, under the same card key', async () => {
