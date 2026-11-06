@@ -409,6 +409,22 @@ export function applyConnectPlan(plan: ConnectPlan): ConnectOutcome[] {
 }
 
 /**
+ * What happened to one item, as a person reads it in the parentheses of an
+ * outcome line: an old kanbo section taken out of a file is "removed", not
+ * "written" (kanbo writes no section any more); a `claude mcp` command is
+ * "ran …". `removal` is `kanbo connect --remove`, where every change is a removal.
+ */
+export function describeOutcomeState(outcome: Pick<ConnectOutcome, 'kind' | 'state' | 'command'>, removal = false): string {
+  if (outcome.kind === 'instructions' && outcome.state === 'written') {
+    return 'old kanbo section removed'
+  }
+  if (outcome.state === 'ran') {
+    return `ran ${outcome.command}`
+  }
+  return outcome.state === 'written' && removal ? 'removed' : outcome.state
+}
+
+/**
  * What the person reads about `claude mcp` commands left to them: each on a
  * line of its own, so each can be pasted into any shell — PowerShell has no `&&`.
  */

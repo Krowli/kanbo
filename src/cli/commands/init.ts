@@ -28,7 +28,7 @@ import type { CliResult } from '../output'
 import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from '../output'
 import type { AgentId } from '../setup/agents'
 import { AGENT_IDS, AGENTS, defaultMcpScope, detectAgents, parseAgentId } from '../setup/agents'
-import { describeManualOutcome, pendingItems, planConnect, readMcpState } from '../setup/connect-plan'
+import { describeManualOutcome, describeOutcomeState, pendingItems, planConnect, readMcpState } from '../setup/connect-plan'
 import { inspectBoardFile, inspectPostgresWorkspace } from '../setup/existing-workspace'
 import type { AppliedInitPlan, InitPlan } from '../setup/init-plan'
 import { applyInitPlan, assertOwnBoardFile } from '../setup/init-plan'
@@ -583,7 +583,7 @@ export function describeInit(plan: InitPlan, applied: AppliedInitPlan, options: 
     const who = entry.agents.map(agent => AGENTS[agent].label).join(', ')
     lines.push(entry.state === 'manual'
       ? describeManualOutcome(who, entry)
-      : `${who}: ${entry.path} (${entry.state === 'ran' ? `ran ${entry.command}` : entry.state})`)
+      : `${who}: ${entry.path} (${describeOutcomeState(entry)})`)
   }
   if (applied.firstCard) {
     lines.push(`First card: ${applied.firstCard.id} ${applied.firstCard.title}`)

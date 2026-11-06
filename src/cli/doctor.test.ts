@@ -436,7 +436,7 @@ describe('kanbo doctor', () => {
       const output = printed.join('\n')
       expect(output).toContain('kanbo doctor --fix will:\n  remove  CLAUDE.md (the old kanbo section: agents now learn the board from the MCP server)')
       expect(output).toContain('Nothing is deleted, and nothing else is changed.')
-      expect(output).toContain('  written CLAUDE.md')
+      expect(output).toContain('  removed the old kanbo section from CLAUDE.md')
       // Checked again: the removed block is gone; the edited one is still only a warning, with no fix of --fix's.
       const again = output.split('Checked again:')[1]!
       expect(again).not.toContain(claudeMd())

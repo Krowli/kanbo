@@ -25,7 +25,7 @@ import { describeFailure } from '../failure'
 import { CliError } from '../output'
 import type { AgentDetection, AgentId } from '../setup/agents'
 import { AGENTS } from '../setup/agents'
-import { describeManualOutcome, displayPath, readMcpState } from '../setup/connect-plan'
+import { describeManualOutcome, describeOutcomeState, displayPath, readMcpState } from '../setup/connect-plan'
 import type { ExistingWorkspace } from '../setup/existing-workspace'
 import { inspectBoardFile, inspectPostgresWorkspace } from '../setup/existing-workspace'
 import { findGitRoot } from '../setup/git-root'
@@ -445,7 +445,7 @@ export function printInitOutro(ui: Ui, result: InitWizardResult, applied: Applie
       continue
     }
     connected.push(...outcome.agents)
-    lines.push(`✔ ${who}: ${where} (${outcome.state === 'ran' ? `ran ${outcome.command}` : outcome.state})`)
+    lines.push(`✔ ${who}: ${where} (${describeOutcomeState(outcome)})`)
   }
   for (const note of plan.connect?.notes ?? []) {
     lines.push(`Note: ${note}`)

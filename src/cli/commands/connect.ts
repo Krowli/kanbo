@@ -11,6 +11,7 @@ import {
   applyConnectPlan,
   describeConnectPlan,
   describeManualOutcome,
+  describeOutcomeState,
   displayPath,
   explainItem,
   itemPath,
@@ -225,8 +226,7 @@ function describeOutcomes(action: 'connect' | 'remove', agents: AgentId[], outco
       lines.push(describeManualOutcome(who, outcome))
     }
     else {
-      const state = outcome.state === 'written' && action === 'remove' ? 'removed' : outcome.state
-      lines.push(`${who}: ${where} (${state === 'ran' ? `ran ${outcome.command}` : state})`)
+      lines.push(`${who}: ${where} (${describeOutcomeState(outcome, action === 'remove')})`)
     }
   }
   if (!dryRun && !notesShown) {

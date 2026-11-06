@@ -178,6 +178,8 @@ describe('kanbo connect', () => {
     expect(read(projectDir, 'CLAUDE.md')).toBe('# Notes\n\nbefore\n\nafter\n')
     expect(read(claudeDir, 'CLAUDE.md')).toBe('# Mine\n\nMore of mine.\n')
     expect(printed).toContain('CLAUDE.md (the old kanbo section: agents now learn the board from the MCP server)')
+    expect(printed).toContain('Claude Code: CLAUDE.md (old kanbo section removed)')
+    expect(printed).not.toContain('(written)')
   })
 
   it('keeps a section the person edited, and says kanbo no longer uses it', async () => {

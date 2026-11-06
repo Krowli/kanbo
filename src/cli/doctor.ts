@@ -529,7 +529,9 @@ function connectRepair(plan: ConnectPlan): DoctorRepair | undefined {
         case 'ran':
           return `ran ${outcome.command}`
         default:
-          return `${outcome.state} ${displayPath(plan, outcome.path)}`
+          return outcome.kind === 'instructions' && outcome.state === 'written'
+            ? `removed the old kanbo section from ${displayPath(plan, outcome.path)}`
+            : `${outcome.state} ${displayPath(plan, outcome.path)}`
       }
     }),
   }
