@@ -35,11 +35,9 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
       : details.reason === 'waiting_for_person'
         ? `${named(details.issueId)} is waiting for a person.`
         : `${named(details.issueId)} is not in To Do, so it is not there to take.`,
-    next: 'kanbo ready',
   }),
   board_card_run_active: details => ({
     text: `${named(details.issueId)} already has a run going: ${named(details.agentName)}'s, run ${named(details.runId)}.`,
-    next: `kanbo run finish ${named(details.runId)} --state stopped`,
   }),
   board_column_name_taken: details => ({
     text: `Another column, ${named(details.takenBy)}, already has that name (same slug). Pick another name.`,
@@ -51,8 +49,8 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
   }),
   board_column_ready_protected: details => ({
     text: details.newName === undefined
-      ? `${named(details.statusName)} can't be removed: kanbo ready takes work from To Do, and agents would find no cards to take.`
-      : `${named(details.statusName)} can't be renamed to "${named(details.newName)}": kanbo ready takes work from To Do, `
+      ? `${named(details.statusName)} can't be removed: agents take work from To Do, and agents would find no cards to take.`
+      : `${named(details.statusName)} can't be renamed to "${named(details.newName)}": agents take work from To Do, `
         + 'and agents would find no cards to take. Another spelling of To Do (To-do, TO DO) is fine.',
   }),
   board_column_remove_target_invalid: details => ({
@@ -86,14 +84,12 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
     : { text: 'The range starts after it ends.' },
   board_nothing_ready: () => ({
     text: 'No card in To Do is ready to take: each one is taken or waits for a person, or there is none.',
-    next: 'kanbo ready',
   }),
   board_pull_request_invalid: details => ({
     text: `"${named(details.value)}" is not a GitHub pull request. Give its link or owner/repo#number.`,
   }),
   board_pull_request_not_found: details => ({
     text: `${named(details.issueId)} has no pull request link "${named(details.linkId)}".`,
-    next: `kanbo card pr list ${named(details.issueId)}`,
   }),
   board_pull_request_not_yours: details => ({
     text: `Someone else linked that pull request to ${named(details.issueId)}; only they or a person can unlink it.`,
@@ -107,7 +103,6 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
   board_run_not_found: details => ({ text: `No run "${named(details.runId)}" on this board.` }),
   board_run_session_ref_conflict: details => ({
     text: `Run ${named(details.runId)} already names another session log (${describeSessionRef(details.externalSessionRef)}).`,
-    next: `a person can replace it: kanbo run attach-session ${named(details.runId)} <ref> --replace`,
   }),
   board_run_session_ref_invalid: details => ({
     text: `"${named(details.value)}" is not a session log. Give it as claude:<id> or codex:<id>.`,
@@ -130,17 +125,16 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
   issue_comment_not_found: details => ({ text: `No comment "${named(details.commentId)}" on this board.` }),
   issue_context_ref_invalid_index: details => ({
     text: `${named(details.issueId)} has no context link number ${named(details.index)}.`,
-    next: `kanbo card get ${named(details.issueId)}`,
   }),
   issue_milestone_not_found: details => ({
     text: `No sprint "${named(details.milestoneId)}" on this board.`,
     next: 'kanbo sprint list',
   }),
-  issue_not_found: details => ({ text: `No card "${named(details.issueId)}" here.`, next: 'kanbo card list' }),
+  issue_not_found: details => ({ text: `No card "${named(details.issueId)}" here.`, next: 'kanbo board' }),
   issue_parent_cycle: () => ({ text: 'A card can\'t be put under one of its own sub-cards.' }),
   issue_parent_not_found: details => ({
     text: `No card "${named(details.parentIssueId)}" here to put this one under.`,
-    next: 'kanbo card list',
+    next: 'kanbo board',
   }),
   issue_parent_self_reference: () => ({ text: 'A card can\'t be put under itself.' }),
   issue_relation_not_found: details => ({ text: `No link "${named(details.relationId)}" between cards on this board.` }),

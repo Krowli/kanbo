@@ -50,8 +50,8 @@ describe('what a failed command says', () => {
   })
 
   it('dims the code in a terminal and colours the rest', () => {
-    const painted = paintFailure({ exitCode: 1, code: 'issue_not_found', message: 'No card "X" here.\n  Next: kanbo card list  [issue_not_found]' })
-    expect(painted.replace(/\x1B\[\d+m/g, '')).toBe('No card "X" here.\n  Next: kanbo card list  [issue_not_found]')
+    const painted = paintFailure({ exitCode: 1, code: 'issue_not_found', message: 'No card "X" here.\n  Next: kanbo board  [issue_not_found]' })
+    expect(painted.replace(/\x1B\[\d+m/g, '')).toBe('No card "X" here.\n  Next: kanbo board  [issue_not_found]')
   })
 
   it('prints what was underneath, indented, because the wrapper alone says nothing', () => {

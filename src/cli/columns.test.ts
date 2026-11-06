@@ -158,7 +158,7 @@ describe('kanbo columns', () => {
       expect(await names()).toEqual(['Backlog', 'To Do', 'In Progress', 'Code Review', 'Done', 'Canceled'])
       expect(await columnOf(card!)).toBe('Code Review')
       expect(printed.join('\n')).toContain('Renamed In Review to Code Review (slug code_review).\n'
-        + 'Agents read column names from kanbo prime; rename is picked up there.')
+        + 'Agents read column names from kanbo_prime; rename is picked up there.')
     })
 
     it('refuses a name another column answers to', async () => {
@@ -172,7 +172,7 @@ describe('kanbo columns', () => {
     it('refuses renaming To Do away from its slug, saying why', async () => {
       const outcome = await kanbo('columns', 'rename', 'to_do', 'Ready')
 
-      expect(message(outcome)).toBe('To Do can\'t be renamed to "Ready": kanbo ready takes work from To Do, and agents '
+      expect(message(outcome)).toBe('To Do can\'t be renamed to "Ready": agents take work from To Do, and agents '
         + 'would find no cards to take. Another spelling of To Do (To-do, TO DO) is fine.  [board_column_ready_protected]')
       expect(await names()).toEqual(STANDARD)
     })
@@ -245,7 +245,7 @@ describe('kanbo columns', () => {
     it('never removes To Do', async () => {
       const outcome = await kanbo('columns', 'remove', 'to_do')
 
-      expect(message(outcome)).toBe('To Do can\'t be removed: kanbo ready takes work from To Do, and agents would find no cards to take.  [board_column_ready_protected]')
+      expect(message(outcome)).toBe('To Do can\'t be removed: agents take work from To Do, and agents would find no cards to take.  [board_column_ready_protected]')
       expect(await names()).toEqual(STANDARD)
     })
 

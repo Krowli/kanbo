@@ -71,8 +71,8 @@ export async function addColumn(session: BoardSession, request: AddColumnRequest
   return await changed(session, `Added ${created.name} (slug ${normalizeStatusName(created.name)}).`, { added: created })
 }
 
-/** Said after a rename: agents' instructions name no column but To Do, and `kanbo prime` gives them the rest. */
-export const RENAME_NOTE = 'Agents read column names from kanbo prime; rename is picked up there.'
+/** Said after a rename: agents' instructions name no column but To Do, and `kanbo_prime` gives them the rest. */
+export const RENAME_NOTE = 'Agents read column names from kanbo_prime; rename is picked up there.'
 
 export async function renameColumn(session: BoardSession, column: string, newName: string, actor: BoardActor): Promise<CliResult> {
   const before = await requireNamedColumn(session, column)
