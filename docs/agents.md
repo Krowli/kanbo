@@ -144,7 +144,7 @@ Everything it writes through `kanbo mcp` is then filed under `nightly-triage`, a
 
 ## Upgrading from 0.6 or earlier
 
-Versions up to 0.6 wrote a kanbo section between `<!-- KANBO_START … -->` and `<!-- KANBO_END -->` markers into `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` (in the project, and with `--global` in your own files), and they gave agents `kanbo prime`, `kanbo claim`, `kanbo card …` and `kanbo run …` commands. From 0.7 agents use the MCP server alone and the section is dead text. `kanbo connect <agent>` or `kanbo doctor --fix` takes it out; the rest of each file is kept as it was. A section you edited is kept, with a note, and `kanbo connect --remove --yes` removes it. `kanbo connect --check` lists the files that still carry one.
+Versions up to 0.6 wrote a kanbo section between `<!-- KANBO_START … -->` and `<!-- KANBO_END -->` markers into `CLAUDE.md`, `AGENTS.md` and `GEMINI.md` (in the project, and with `--global` in your own files), and they gave agents `kanbo prime`, `kanbo claim`, `kanbo card …` and `kanbo run …` commands. From 0.7 agents use the MCP server alone and the section is dead text. `kanbo connect <agent>` or `kanbo doctor --fix` takes it out; the rest of each file is kept as it was. A section you edited is kept, with a note; delete it by hand. `kanbo connect --check` lists the files that still carry one.
 
 ## Sources
 

@@ -187,7 +187,7 @@ describe('kanbo connect', () => {
     const printed = await connect('claude', '--yes')
 
     expect(read(projectDir, 'CLAUDE.md')).toBe(edited)
-    expect(printed).toContain('CLAUDE.md: an old kanbo section is still there; kanbo no longer uses it. Delete it yourself, or run kanbo connect --remove.')
+    expect(printed).toContain('CLAUDE.md: an old kanbo section is still there; kanbo no longer uses it. Delete it yourself.')
   })
 
   it('says what it removes before it does: the old section, once for two agents that share AGENTS.md', async () => {
@@ -419,7 +419,7 @@ describe('kanbo connect', () => {
 
       const printed = await connect('claude', '--yes')
       expect(read(projectDir, 'CLAUDE.md')).toBe(newer)
-      expect(printed).toContain('CLAUDE.md: an old kanbo section is still there; kanbo no longer uses it. Delete it yourself, or run kanbo connect --remove.')
+      expect(printed).toContain('CLAUDE.md: an old kanbo section is still there; kanbo no longer uses it. Delete it yourself.')
 
       const kept = await connect('claude', '--remove', '--dry-run')
       expect(read(projectDir, 'CLAUDE.md')).toBe(newer)

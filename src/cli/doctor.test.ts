@@ -187,7 +187,7 @@ describe('kanbo doctor', () => {
 
     expect(instructions.status).toBe('warn')
     expect(instructions.detail).toContain('an old kanbo section')
-    expect(instructions.fix).toBe('Delete it yourself, or run kanbo connect --remove.')
+    expect(instructions.fix).toBe('Delete it yourself.')
     expect(instructions.repair).toBeUndefined()
   })
 
@@ -198,12 +198,12 @@ describe('kanbo doctor', () => {
     writeFileSync(path, `${wrapInstructionBlock('## Kanbo board\n\nNewer words.', 4)}\n`)
     const newer = finding(await doctor(), 'instructions')
     expect(newer.status).toBe('warn')
-    expect(newer.fix).toBe('Delete it yourself, or run kanbo connect --remove.')
+    expect(newer.fix).toBe('Delete it yourself.')
 
     writeFileSync(path, `${wrapInstructionBlock('Coordinate the agents.', 2, 'orchestrator')}\n`)
     const chosen = finding(await doctor(), 'instructions')
     expect(chosen.status).toBe('warn')
-    expect(chosen.fix).toBe('Delete it yourself, or run kanbo connect --remove.')
+    expect(chosen.fix).toBe('Delete it yourself.')
 
     writeFileSync(path, '# Notes\n\n<!-- KANBO_START -->\nMine.\n')
     const damaged = finding(await doctor(), 'instructions')

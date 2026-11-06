@@ -161,7 +161,7 @@ export async function planConnect(
         case 'chosen':
         case 'newer':
           plan.notes.push(`${label}: an old kanbo section is still there; kanbo no longer uses it. `
-            + 'Delete it yourself, or run kanbo connect --remove.')
+            + 'Delete it yourself.')
           break
         default:
           plan.items.push({ kind: 'instructions', agents: [agent], scope, change: planInstructionBlockRemoval(path) })

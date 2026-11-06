@@ -28,8 +28,8 @@ Update with `npm install -g kanbo-cli@latest`. See [Update check](configuration.
 **`instructions` warn: `an old kanbo section — agents now learn the board from the MCP server`**
 A kanbo up to 0.6 wrote that section into the file; agents no longer need it. Run `kanbo doctor --fix`, or `kanbo connect <agent> --yes`: it takes the section out and keeps the rest of the file.
 
-**`instructions` warn, with the fix `Delete it yourself, or run kanbo connect --remove`**
-The section was edited, is a text you chose, or was written by a newer kanbo, so kanbo leaves it alone. Delete it yourself, or run `kanbo connect --remove --yes`.
+**`instructions` warn, with the fix `Delete it yourself.`**
+The section was edited, is a text you chose, or was written by a newer kanbo, so kanbo leaves it alone. Delete it yourself.
 
 **`instructions` fail: `… has a kanbo start marker without an end`**
 The file's kanbo markers do not pair up (a start without an end, an end without a start, or a start inside another block), so kanbo does not write to it or remove anything from it. Fix the markers by hand — or delete the stray one — then run the command again.

@@ -428,7 +428,7 @@ function blockFinding(path: string, inspection: InstructionBlockInspection, agen
     case 'edited':
     case 'chosen':
     case 'newer':
-      return { check: 'instructions', status: 'warn', detail, fix: 'Delete it yourself, or run kanbo connect --remove.' }
+      return { check: 'instructions', status: 'warn', detail, fix: 'Delete it yourself.' }
     default:
       return { check: 'instructions', status: 'warn', detail, fix: `Run kanbo doctor --fix (or kanbo connect ${agent} --yes) to remove it.` }
   }
