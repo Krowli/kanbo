@@ -78,12 +78,12 @@ export const BOARD_ERROR_TEXTS: Record<BoardErrorCode, (details: Details) => Hum
   board_execution_mode_locked: details => ({
     text: `${named(details.issueId)} has been started, so where it is worked (${named(details.executionMode)}) can't change now.`,
   }),
-  board_metrics_range_invalid: details => typeof details.from === 'number' && typeof details.to === 'number'
-    ? { text: `The range starts after it ends: it starts on ${utcDayLabel(details.from)} and ends on ${utcDayLabel(details.to)}.` }
-    : { text: 'The range starts after it ends.' },
   board_flow_rule_invalid: details => details.wipLimit !== undefined
     ? { text: `A column holds at least 1 card; ${named(details.wipLimit)} is not a limit. Use none for no limit.` }
     : { text: `A column accepts cards only from other columns of its own board, and ${list(details.allowedFrom)} is not one.`, next: 'kanbo columns list' },
+  board_metrics_range_invalid: details => typeof details.from === 'number' && typeof details.to === 'number'
+    ? { text: `The range starts after it ends: it starts on ${utcDayLabel(details.from)} and ends on ${utcDayLabel(details.to)}.` }
+    : { text: 'The range starts after it ends.' },
   board_nothing_ready: () => ({
     text: 'No card in To Do is ready to take: each one is taken or waits for a person, or there is none.',
     next: 'kanbo ready',
