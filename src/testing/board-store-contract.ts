@@ -751,6 +751,15 @@ export function runBoardStoreContract(name: string, makeStore: () => Promise<Boa
           .toEqual(['change-theirs'])
         expect(await store.fieldChanges.listByFieldSince('statusId', { workspaceIds: [], since: 0 })).toEqual([])
       })
+
+      it('leaves out the changes whose new value is null', async () => {
+        const issue = await createIssue({ id: 'issue-1', number: 1 })
+        await store.fieldChanges.create({ id: 'change-out', issueId: issue.id, field: 'statusId', fromValue: 's1', toValue: null, createdAt: 1_000 })
+        await store.fieldChanges.create({ id: 'change-in', issueId: issue.id, field: 'statusId', toValue: 's2', createdAt: 1_000 })
+
+        expect((await store.fieldChanges.listByFieldSince('statusId', { workspaceIds: [workspaceId], since: 0 })).map(change => change.id))
+          .toEqual(['change-in'])
+      })
     })
 
     describe('history within one second', () => {

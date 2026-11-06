@@ -325,7 +325,8 @@ export interface IssueFieldChangeStore {
   /**
    * The changes of one field on the cards of the named workspaces, ordered by
    * `(created_at, id)` — the `(field, created_at)` index answers it. An empty
-   * `workspaceIds` lists nothing. What the column-entry feed reads.
+   * `workspaceIds` lists nothing. Changes whose new value is null are left out.
+   * What the column-entry feed reads.
    */
   listByFieldSince: (field: string, query: BoardFieldChangeQuery) => Promise<BoardWorkspaceFieldChange[]>
   create: (values: typeof issueFieldChanges.$inferInsert) => Promise<void>

@@ -39,6 +39,28 @@ describe.each(BOARD_STORE_FACTORIES)('the column-entry feed on $name', (factory)
     vi.spyOn(Date, 'now').mockReturnValue(second * 1000)
   }
 
+  it('counts only real entries against the limit, not cards moved out of every column', async () => {
+    const toDo = await requireColumn(store, WORKSPACE.id, 'to_do')
+    at(SECOND - 10)
+    const cards = [
+      await createCard(store, { workspace: WORKSPACE, title: 'One', statusName: 'To Do' }, USER),
+      await createCard(store, { workspace: WORKSPACE, title: 'Two', statusName: 'To Do' }, USER),
+      await createCard(store, { workspace: WORKSPACE, title: 'Three', statusName: 'To Do' }, USER),
+    ]
+    for (const [index, card] of cards.entries()) {
+      await store.fieldChanges.create({ id: `out-${index}`, issueId: card.id, field: 'statusId', fromValue: toDo.id, toValue: null, createdAt: SECOND })
+    }
+    at(SECOND + 1)
+    const moved = [
+      await createCard(store, { workspace: WORKSPACE, title: 'Four', statusName: 'To Do' }, USER),
+      await createCard(store, { workspace: WORKSPACE, title: 'Five', statusName: 'To Do' }, USER),
+      await createCard(store, { workspace: WORKSPACE, title: 'Six', statusName: 'To Do' }, USER),
+    ]
+
+    const entries = await listColumnEntries(store, { workspaceIds: [WORKSPACE.id], since: SECOND, limit: 3 })
+    expect(entries.map(entry => entry.issueId).sort()).toEqual(moved.map(card => card.id).sort())
+  })
+
   it('lists every entry into a column of the named boards in time order, a creation as an entry from no column', async () => {
     const [toDo, inProgress] = [await requireColumn(store, WORKSPACE.id, 'to_do'), await requireColumn(store, WORKSPACE.id, 'in_progress')]
     at(SECOND)

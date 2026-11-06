@@ -647,6 +647,7 @@ function createSqliteBoardStoreCore(resolveDatabase: () => SqliteDatabase): Sqli
             .innerJoin(issues, eq(issues.id, issueFieldChanges.issueId))
             .where(and(
               eq(issueFieldChanges.field, field),
+              isNotNull(issueFieldChanges.toValue),
               gte(issueFieldChanges.createdAt, query.since),
               query.until === undefined ? undefined : lte(issueFieldChanges.createdAt, query.until),
               inArray(issues.workspaceId, [...query.workspaceIds]),
