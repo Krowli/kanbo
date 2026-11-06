@@ -324,8 +324,8 @@ async function checkBoard(target: BoardTarget | Error | null, workspaceId: strin
 const STANDARD_COLUMN_NAMES = COLUMN_TEMPLATES.standard.map(column => column.name).join(', ')
 
 /**
- * A board with no columns gives agents nothing to take: `kanbo prime` lists
- * none and `kanbo ready` has no To Do. Boards from kanbo 0.1–0.2 got their
+ * A board with no columns gives agents nothing to take: `kanbo_prime` lists
+ * none and `kanbo_ready` has no To Do. Boards from kanbo 0.1–0.2 got their
  * columns only with the first card.
  */
 async function checkColumns(
@@ -339,7 +339,7 @@ async function checkColumns(
   return [{
     check: 'columns',
     status: 'warn',
-    detail: 'This board has no columns: kanbo prime shows agents none, and kanbo ready has no To Do to take cards from.',
+    detail: 'This board has no columns: kanbo_prime shows agents none, and kanbo_ready has no To Do to take cards from.',
     fix: 'Run kanbo doctor --fix, or kanbo columns template standard.',
     repair: {
       plan: [`  add    the Standard columns to the board: ${STANDARD_COLUMN_NAMES}`],

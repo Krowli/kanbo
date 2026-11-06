@@ -61,15 +61,9 @@ export const describeColumnRulesRefusal = refusal('set what a column asks of a c
 
 /**
  * The same, for changing the board's columns: every agent reads its work from
- * them, and `kanbo ready` from To Do.
+ * them, and `kanbo_ready` from To Do.
  */
 export const describeColumnChangesRefusal = refusal('change the board\'s columns', 'change them')
-
-/**
- * The same, for taking back the log a run names: an agent that could clear or
- * swap it could point a card's history at any log it liked.
- */
-export const describeRunSessionRefRefusal = refusal('change or clear the log a run names', 'do it')
 
 /** The commands only a person may run, as typed after `kanbo` — the capabilities manifest reads this rather than naming them again. */
 export const HUMAN_ONLY_ACTIONS = [
@@ -84,11 +78,10 @@ export const HUMAN_ONLY_ACTIONS = [
   'columns remove',
   'columns template',
   'columns add-standard',
-  'run clear-session',
 ] as const
 
-/** What only a person may do: the commands above, and one option of a command anyone may run. */
-type HumanOnlyAction = typeof HUMAN_ONLY_ACTIONS[number] | 'run attach-session --replace'
+/** What only a person may do: the commands above. */
+type HumanOnlyAction = typeof HUMAN_ONLY_ACTIONS[number]
 
 const HUMAN_ONLY_MESSAGES: Record<HumanOnlyAction, (marker: string, words: readonly string[]) => string> = {
   'approve': describeApprovalRefusal,
@@ -102,8 +95,6 @@ const HUMAN_ONLY_MESSAGES: Record<HumanOnlyAction, (marker: string, words: reado
   'columns remove': describeColumnChangesRefusal,
   'columns template': describeColumnChangesRefusal,
   'columns add-standard': describeColumnChangesRefusal,
-  'run clear-session': describeRunSessionRefRefusal,
-  'run attach-session --replace': describeRunSessionRefRefusal,
 }
 
 /**
@@ -124,7 +115,7 @@ export function createCliActor(): BoardActor {
  * is none.
  *
  * Approving, returning, closing a sprint, setting a column's entry rules,
- * changing the board's columns and taking back the log a run names are the
+ * changing the board's columns are the
  * things only a person may do, and a shell
  * that says it belongs to an agent is not one. `KANBO_ACTOR_KIND=person` overrides
  * the marks — for a person's own terminal that an agent tool marked — so this

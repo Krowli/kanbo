@@ -5,8 +5,7 @@ import { readEntryRules } from '../domain/entry-rules'
 import { readFlowRules } from '../domain/flow-rules'
 import { toIssueView } from '../domain/issue-view'
 import { normalizeStatusName } from '../domain/status-name'
-import type { CardAttention, CardLastComment } from '../ops/approval'
-import type { BoardRunView } from '../ops/runs'
+import type { CardLastComment } from '../ops/approval'
 import type { BoardSprint } from '../ops/sprints'
 import type { Issue, IssueRun, IssueStatus } from '../sqlite/schema'
 import { displayWidth, padToWidth, sanitizeTerminalText } from './terminal-text'
@@ -30,7 +29,7 @@ export interface CardView {
   description: string | null
   /** The column's name, `null` when the card sits in no column. */
   column: string | null
-  /** The same column as the slug `kanbo card move` takes. */
+  /** The slug of the column, as a card is moved there. */
   columnSlug: string | null
   statusLine: string | null
   waitingFor: 'human' | null
@@ -49,7 +48,7 @@ export interface CardView {
   lastComment?: CardLastComment
 }
 
-/** Every field `kanbo card list|get --json` may ask for, in listing order. */
+/** Every field `--json` may ask of a card, in listing order. */
 export const CARD_VIEW_FIELDS: readonly (keyof CardView)[] = [
   'id',
   'number',
@@ -70,17 +69,6 @@ export const CARD_VIEW_FIELDS: readonly (keyof CardView)[] = [
   'lastComment',
 ]
 
-/** Every field `kanbo card get --json` may ask for: a card's, and the parts `--include` reads with it. */
-export const CARD_DETAIL_VIEW_FIELDS: readonly string[] = [
-  ...CARD_VIEW_FIELDS,
-  'subCards',
-  'comments',
-  'commentCount',
-  'runs',
-  'history',
-  'pullRequests',
-]
-
 /** The run going on right now, as much as a line in a card list needs. */
 interface CardActiveRunView {
   id: string
@@ -93,7 +81,7 @@ interface CardActiveRunView {
 export interface ColumnView {
   id: string
   name: string
-  /** What `kanbo card move` and the prime text call this column. */
+  /** What the prime text calls this column. */
   slug: string
   description: string | null
   category: IssueStatus['category']
@@ -132,42 +120,6 @@ export const SPRINT_VIEW_FIELDS: readonly (keyof SprintView)[] = [
   'doneCards',
 ]
 
-/** One launch of a card, as the command line prints it. */
-export interface RunView {
-  id: string
-  issueId: string
-  agentName: string
-  state: IssueRun['state']
-  executionMode: IssueRun['executionMode']
-  branch: string | null
-  worktreePath: string | null
-  startedAt: number
-  endedAt: number | null
-  /** Which launch of the card this is, counting from its first — `listRuns` counts them. */
-  attempt: number
-  chatSessionId: string | null
-  /** Where the agent's own log of this run lives, once it said (ruling 7-1): `claude:<id>` or `codex:<id>`, else `null`. */
-  externalSessionRef: string | null
-  launchedByKind: IssueRun['launchedByKind']
-}
-
-/** Every field `kanbo run start|finish|attach-session --json` may ask for, in listing order. */
-export const RUN_VIEW_FIELDS: readonly (keyof RunView)[] = [
-  'id',
-  'issueId',
-  'agentName',
-  'state',
-  'executionMode',
-  'branch',
-  'worktreePath',
-  'startedAt',
-  'endedAt',
-  'attempt',
-  'chatSessionId',
-  'externalSessionRef',
-  'launchedByKind',
-]
-
 export function projectCard(card: Issue, columns: IssueStatus[], runs: BoardRunProjection): CardView {
   const view = toIssueView(card)
   const column = columns.find(candidate => candidate.id === card.statusId) ?? null
@@ -189,15 +141,6 @@ export function projectCard(card: Issue, columns: IssueStatus[], runs: BoardRunP
     activeRun: projectCardActiveRun(runs.activeRun),
     updatedAt: view.updatedAt,
   }
-}
-
-/** List cards with what `readCardAttention` says beside them — `returned` and `lastComment` only where there is something. */
-export function withCardAttention(cards: CardView[], attention: readonly CardAttention[]): CardView[] {
-  return cards.map((card, index) => ({
-    ...card,
-    ...(attention[index]?.returned ? { returned: true as const } : {}),
-    ...(attention[index]?.lastComment ? { lastComment: attention[index].lastComment } : {}),
-  }))
 }
 
 /** The run going on right now, trimmed to what a card line needs — not the agent id, the branch or the session behind it. */
@@ -234,61 +177,6 @@ export function projectSprint(sprint: BoardSprint): SprintView {
     openCards: sprint.cards.open,
     doneCards: sprint.cards.done,
   }
-}
-
-export function projectRun(run: BoardRunView): RunView {
-  return {
-    id: run.id,
-    issueId: run.issueId,
-    agentName: run.agentName,
-    state: run.state,
-    executionMode: run.executionMode,
-    branch: run.branch,
-    worktreePath: run.worktreePath,
-    startedAt: run.startedAt,
-    endedAt: run.endedAt,
-    attempt: run.attempt,
-    chatSessionId: run.chatSessionId,
-    externalSessionRef: run.externalSessionRef,
-    launchedByKind: run.launchedByKind,
-  }
-}
-
-/** One card per line: the key, the column it is in, and what it is called (`cardDisplayTitle`). */
-export function describeCards(
-  cards: (Pick<CardView, 'id' | 'title' | 'description' | 'column'> & Partial<Pick<CardView, 'statusLine' | 'waitingFor' | 'returned' | 'lastComment'>>)[],
-): string {
-  if (cards.length === 0) {
-    return 'No cards'
-  }
-
-  const keyWidth = Math.max(...cards.map(card => card.id.length))
-  const indent = ' '.repeat(keyWidth + 2)
-  const column = (card: Pick<CardView, 'column'>): string => sanitizeTerminalText(card.column ?? '—')
-  const columnWidth = Math.max(...cards.map(card => displayWidth(column(card))))
-  return cards
-    .map((card) => {
-      const line = `${card.id.padEnd(keyWidth)}  ${padToWidth(column(card), columnWidth)}  ${sanitizeTerminalText(cardDisplayTitle(card))}`
-      // What the card waits on, or why it came back, under it — so "what is
-      // waiting" is one command: an agent that saw only the titles opened
-      // every waiting card to learn what it asked (docs/performance.md).
-      const under = [
-        card.waitingFor === 'human'
-          ? `waiting for a person${card.statusLine ? ` — ${sanitizeTerminalText(card.statusLine)}` : ''}`
-          : null,
-        card.returned && !card.lastComment ? 'returned' : null,
-        card.lastComment
-          ? `${card.returned ? 'returned — ' : 'last comment, '}${describeCommentAuthor(card.lastComment.author)}: ${sanitizeTerminalText(card.lastComment.text)}`
-          : null,
-      ].filter(text => text !== null)
-      return [line, ...under.map(text => `${indent}${text}`)].join('\n')
-    })
-    .join('\n')
-}
-
-/** Who wrote a comment, as a list line says it. */
-function describeCommentAuthor(author: CardLastComment['author']): string {
-  return author === 'user' ? 'person' : author
 }
 
 /** The whole card, for a person who asked about exactly one. */

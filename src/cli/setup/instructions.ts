@@ -1,14 +1,6 @@
 import { createHash } from 'node:crypto'
 
-import {
-  COMMENT_RULE,
-  MOVE_CARD_RULE,
-  OWN_SESSION_RULE,
-  PERSON_ONLY_RULE,
-  STATUS_LINE_RULE,
-  SUBTASK_RULE,
-  WAIT_FOR_PERSON_RULE,
-} from '../../ops/agent-rules'
+import { PERSON_ONLY_RULE } from '../../ops/agent-rules'
 import { canPrompt } from '../ui/environment'
 import { getUi } from '../ui/ui'
 import type { FileChange } from './file-change'
@@ -53,7 +45,7 @@ export const INSTRUCTION_END = '<!-- KANBO_END -->'
 const INSTRUCTION_START_PATTERN = /<!-- KANBO_START\b([^>]*?)\s*-->/g
 const INSTRUCTION_END_PATTERN = /<!-- KANBO_END\s*-->/g
 
-/** The kinds of block that are kanbo's pointer — the one `kanbo connect` writes. */
+/** The kinds of block that are kanbo's pointer — the one kanbo 0.5–0.6 wrote. */
 const POINTER_KINDS = new Set(['short', 'global'])
 
 /**
@@ -82,75 +74,8 @@ export interface InstructionBlockInspection {
   damage?: string
 }
 
-/** The commands an agent uses, spelled once for the guide and the `kanbo prime` cheat sheet. */
-const COMMAND = {
-  claim: 'kanbo claim',
-  move: 'kanbo card move <id> <column>',
-  statusLine: 'kanbo card status-line <id> --text "..."',
-  subtask: 'kanbo card create --description "..." --parent <id>',
-  comment: 'kanbo card comment <id> --content "..."',
-  waitApproval: 'kanbo card wait-approval <id>',
-  runStart: 'kanbo run start <id> --agent <name>',
-  capabilities: 'kanbo capabilities',
-}
-
-/**
- * What to run and when, and nothing about how to do the work: the method is
- * the person's own instructions to their agent. The rules are the sentences
- * `ops/agent-rules.ts` holds for every surface, with the command beside each.
- */
-const RULE_LINES = [
-  `- Take a card with \`${COMMAND.claim}\`: it starts your run and moves the card into work in one step, and no other agent gets the same card.`,
-  `- ${MOVE_CARD_RULE} (\`${COMMAND.move}\`)`,
-  `- ${STATUS_LINE_RULE} (\`${COMMAND.statusLine}\`)`,
-  `- ${SUBTASK_RULE} (\`${COMMAND.subtask}\`)`,
-  `- ${COMMENT_RULE} (\`${COMMAND.comment}\`)`,
-  `- ${WAIT_FOR_PERSON_RULE} (\`${COMMAND.waitApproval}\`)`,
-  `- ${PERSON_ONLY_RULE}`,
-  `- ${OWN_SESSION_RULE} (\`${COMMAND.runStart}\`)`,
-  `- Run \`${COMMAND.capabilities}\` for the full list of tools, commands and rules.`,
-]
-
-/**
- * The whole guide for an agent working a board from the command line — what
- * the project block said in kanbo 0.1–0.2, before it became a pointer.
- */
-export const AGENT_GUIDE_TEXT = [
-  '## Kanbo board',
-  '',
-  'Work on this project is tracked on a kanbo board. Before starting a task run `kanbo prime` —'
-  + ' it prints the board\'s columns and what each one means.',
-  '',
-  ...RULE_LINES,
-].join('\n')
-
-/**
- * The commands, for an agent with no MCP tools: `kanbo prime` prints this under
- * the board's rules, which say when to use each. Each is written out with its
- * arguments, as a call that works — agents that had only the placeholders read
- * `kanbo capabilities` first, or guessed an option and ran it again
- * (docs/performance.md).
- */
-export const COMMAND_SHEET = [
-  'Commands (a card is named by its id, e.g. TST-5):',
-  '',
-  '- `kanbo ready` — the cards you may take next; cards a person sent back to you come first',
-  '- `kanbo card get TST-5` — one card, with its latest comments',
-  '- `kanbo card list --waiting` (or `--returned`) — cards waiting for a person (or sent back), each with its last comment',
-  '- `kanbo card move TST-5 in_progress` — move a card; the column by its slug above',
-  '- `kanbo card status-line TST-5 --text "Running the tests"` — what is happening on the card right now',
-  '- `kanbo card comment TST-5 --content "Added slugify with a test"` — a finding, result, decision or question',
-  '- `kanbo card create --description "..." --parent TST-5` — a subtask',
-  '- `kanbo card update TST-7 --parent TST-5` — move a card at the wrong level under another (`--parent none`: the top level)',
-  '- `kanbo card wait-approval TST-5 --text "Ready for review: ..."` — ask a person, then end your turn',
-  '- `kanbo claim` — take the first ready card: starts your run and moves it into work in one step (`kanbo claim TST-5` for that card); it prints the finish command',
-  '- `kanbo run start TST-5 --agent claude` — record a run on a card you did not claim; it prints the finish command',
-  '- `kanbo run finish <run id> --state finished` — end it: finished, failed or stopped',
-  `- \`${COMMAND.capabilities}\` — everything else, rarely needed`,
-].join('\n')
-
 /** How to take work and who approves it — said by both blocks after their first sentence. */
-const POINTER_TAIL = `Take work with \`${COMMAND.claim}\`. ${PERSON_ONLY_RULE}`
+const POINTER_TAIL = `Take work with \`kanbo claim\`. ${PERSON_ONLY_RULE}`
 
 /** The body of the project block: what `kanbo instructions short` prints. */
 export const PROJECT_BODY = [

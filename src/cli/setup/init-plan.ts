@@ -41,7 +41,7 @@ export interface InitPlan {
   boardFile: { path: string, exists: boolean } | null
   /**
    * The columns a new board starts with — a board file created here, or a
-   * shared database whose tables are created here — so `kanbo prime` has them
+   * shared database whose tables are created here — so `kanbo_prime` has them
    * from the start. `null` leaves the board's columns as they are.
    */
   columns: readonly ColumnSpec[] | null
@@ -197,7 +197,7 @@ async function withBoardOps<T>(target: BoardTarget, body: (ops: BoardOps) => Pro
  * `kanbo init --file` a no-op.
  *
  * The chosen columns go into a new board before it is moved into place, for
- * `seed`'s workspace: `kanbo prime` right after `init` then has columns to show.
+ * `seed`'s workspace: `kanbo_prime` right after `init` then has columns to show.
  * Returns the names of the columns put there.
  */
 async function createOwnBoardFile(absolutePath: string, seed: ColumnSeed | null): Promise<string[]> {

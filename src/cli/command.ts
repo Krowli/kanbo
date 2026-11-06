@@ -69,9 +69,6 @@ export interface OpenBoardSession extends BoardSession {
 /** Whether the command is going to write to the board. Writes are guarded; reads are not. */
 export type BoardCommandMode = 'read' | 'write'
 
-/** The two modes a card can be worked in, as `issues.execution_mode` spells them. */
-const EXECUTION_MODES = ['worktree', 'main'] as const
-
 /** Add the options that name a board and shape the answer, wherever the command sits in the tree. */
 export function withTargetOptions(command: Command): Command {
   return command
@@ -199,24 +196,6 @@ export async function runBoardCommand(
   finally {
     await session.close()
   }
-}
-
-/** Where a card's work happens. A caller naming anything else is refused, not corrected. */
-export function parseExecutionMode(value: string): Issue['executionMode'] {
-  const mode = EXECUTION_MODES.find(candidate => candidate === value)
-  if (!mode) {
-    throw new CliError(1, `Unknown execution mode "${value}". Use ${EXECUTION_MODES.join(' or ')}.`)
-  }
-  return mode
-}
-
-/** A count a caller typed, refused rather than quietly rounded when it is not one. */
-export function parseCount(value: string): number {
-  const count = Number(value)
-  if (!Number.isInteger(count) || count <= 0) {
-    throw new CliError(1, `Expected a positive whole number, got "${value}".`)
-  }
-  return count
 }
 
 const DAY_SECONDS = 86_400

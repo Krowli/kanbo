@@ -6,7 +6,6 @@ import type { AgentId, McpTarget } from './agents'
 import { AGENT_IDS, AGENTS } from './agents'
 import type { FileChange } from './file-change'
 import { applyFileChange } from './file-change'
-import type { InstructionBlockState } from './instructions'
 import {
   damagedBlockMessage,
   INSTRUCTION_BLOCK,

@@ -3,25 +3,20 @@ import { homedir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 
 /**
- * Where each agent tool keeps the files kanbo writes into, for one project and
- * for the person's whole machine.
+ * Where each agent tool keeps the files kanbo registers its MCP server in (and
+ * once wrote its instruction block into), for one project and for the person's
+ * whole machine.
  *
  * Resolved on every call rather than at import, so `HOME` and `CODEX_HOME` set
  * by a test (or a person) are the ones obeyed. Each path was checked against
  * the tool's own documentation; `docs/agents.md` lists the pages.
  */
 
-/** The tools whose user-level instruction file `kanbo init --global` can write. */
-export const GLOBAL_INSTRUCTION_CLIENTS = ['claude', 'codex', 'gemini'] as const
-export type GlobalInstructionClient = typeof GLOBAL_INSTRUCTION_CLIENTS[number]
+/** The tools with a user-level instruction file an older kanbo wrote its block into. */
+export type GlobalInstructionClient = 'claude' | 'codex' | 'gemini'
 
-/** The files a project's agents read their standing instructions from. */
-export const PROJECT_INSTRUCTION_FILES = { claude: 'CLAUDE.md', agents: 'AGENTS.md' } as const
-export type ProjectInstructionTarget = keyof typeof PROJECT_INSTRUCTION_FILES
-
-/** The tools that can be told about the board's MCP server. */
-export const MCP_CLIENTS = ['claude', 'codex', 'cursor'] as const
-export type McpClient = typeof MCP_CLIENTS[number]
+/** The tools whose user-level MCP configuration is a file of this list. */
+export type McpClient = 'claude' | 'codex' | 'cursor'
 
 /** Where Codex keeps its global files: `$CODEX_HOME`, else `~/.codex`. */
 export function codexHome(): string {
@@ -42,7 +37,7 @@ export function geminiDir(): string {
   return join(process.env.GEMINI_CLI_HOME?.trim() || homedir(), '.gemini')
 }
 
-/** The user-level instruction file of each tool. */
+/** The user-level instruction file of each tool — where an older kanbo wrote its block, which `kanbo connect` takes out. */
 export function globalInstructionPath(client: GlobalInstructionClient): string {
   switch (client) {
     case 'claude': return join(claudeConfigDir(), 'CLAUDE.md')

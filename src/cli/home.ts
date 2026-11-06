@@ -5,11 +5,12 @@ import { CommanderError } from 'commander'
 import pc from 'picocolors'
 
 import { cardDisplayTitle } from '../domain/card-display-title'
+import { toIssueView } from '../domain/issue-view'
 import { READY_COLUMN_SLUG } from '../domain/column-templates'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { readIssuePrefix } from '../domain/numbering'
 import type { IssueStatus } from '../sqlite/schema'
-import { describePersonOverride, isAgentShell, requireHumanActor } from './actor'
+import { createPlacementActor, describePersonOverride, isAgentShell, requireHumanActor } from './actor'
 import { openBoardSession } from './command'
 import { checkAgent } from './commands/connect'
 import type { RunningServe } from './commands/serve'
@@ -86,7 +87,7 @@ interface HomeBoard {
   waiting: CardView[]
 }
 
-type MenuChoice = 'review' | 'board' | 'serve' | 'card' | 'connect' | 'instructions' | 'columns' | 'doctor' | 'update' | 'exit'
+type MenuChoice = 'review' | 'board' | 'serve' | 'card' | 'connect' | 'columns' | 'doctor' | 'update' | 'exit'
 
 /**
  * `kanbo` with no words. Says `'home'` when it showed the home screen, which
@@ -209,9 +210,8 @@ function menuOptions(board: HomeBoard, update: AvailableUpdate | null, updates: 
     ...(board.waiting.length > 0 ? [item('review', `Review the cards waiting for you (${board.waiting.length})`, 'approve · kanbo return')] : []),
     item('board', 'Show the board here', MENU_COMMANDS.board.join(' ')),
     item('serve', 'Open the board in your browser', 'serve'),
-    item('card', 'Add a card', 'card create'),
+    { value: 'card', label: 'Add a card' },
     item('connect', 'Connect an agent', 'connect'),
-    item('instructions', 'Get the agent instructions', 'instructions'),
     item('columns', 'Change columns', MENU_COMMANDS.columns.join(' ')),
     item('doctor', 'Check the setup', 'doctor'),
     // On Windows the item says how to update after closing kanbo, which cannot replace itself while running;
@@ -269,7 +269,7 @@ async function serveUntilStopped(context: BareKanboContext): Promise<void> {
   }
 }
 
-/** A card from one line of description, into To Do — `kanbo card create`. */
+/** A card from one line of description, into To Do — through the board operations, as `review` below approves. */
 async function addCard(context: BareKanboContext): Promise<void> {
   const description = (await context.ui.text({
     message: 'What is the card about? (Enter on an empty line to go back)',
@@ -278,7 +278,18 @@ async function addCard(context: BareKanboContext): Promise<void> {
   if (!description) {
     return
   }
-  await runCommand(context, ['card', 'create', '--description', description, '--column', READY_COLUMN_SLUG])
+  const session = await openBoardSession({}, 'write')
+  try {
+    const card = await session.ops.createCard({
+      workspace: session.workspace,
+      description,
+      statusName: READY_COLUMN_SLUG,
+    }, createPlacementActor())
+    say(context.ui, `Added ${toIssueView(card).id} ${cardDisplayTitle(card)} to To Do`)
+  }
+  finally {
+    await session.close()
+  }
 }
 
 type Decision = 'approve' | 'return' | 'skip' | 'stop'

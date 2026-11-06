@@ -6,8 +6,6 @@ import { registerKanboCommands } from '../cli/commands'
 import { CLI_EXIT_CODES } from '../cli/output'
 import type { EntryRule } from '../domain/entry-rules'
 import { ENTRY_RULE_DESCRIPTIONS, ENTRY_RULES } from '../domain/entry-rules'
-import type { KanboToolCliEquivalent } from '../mcp/tool-names'
-import { KANBO_TOOL_CLI_EQUIVALENTS } from '../mcp/tool-names'
 import { KANBO_TOOLS } from '../mcp/tools'
 import { BOARD_RULES } from '../ops/agent-rules'
 import { APPROVED_COMMENT } from '../ops/approval'
@@ -47,13 +45,12 @@ import { BOARD_SCHEMA_EPOCH } from '../schema-epoch'
  * sources gains something this file was not told about.
  *
  * `buildCapabilitiesManifest` and `renderCapabilitiesMarkdown` are the one
- * source two servings come from: `kanbo capabilities` prints either shape
- * from a terminal, and `kanbo mcp` serves both as resources
+ * source two servings come from: `kanbo mcp` serves both as resources
  * (`kanbo://capabilities`, `kanbo://capabilities.md`).
  */
 
 /** The manifest's own shape version, bumped when a field is added or removed — not the package's version. */
-export const CAPABILITIES_MANIFEST_VERSION = '3'
+export const CAPABILITIES_MANIFEST_VERSION = '4'
 
 /** The board's name and the build that is answering, as `kanbo mcp` itself reports them. */
 export interface KanboCapabilitiesPackage {
@@ -78,8 +75,6 @@ export interface KanboCapabilityTool {
   description: string
   /** `tool.inputSchema` converted with zod's own `toJSONSchema` — never hand-written. */
   inputSchema: Record<string, unknown>
-  /** What to type instead, from `KANBO_TOOL_CLI_EQUIVALENTS`: the `kanbo` command. */
-  cli: KanboToolCliEquivalent
 }
 
 /** One flag a CLI command takes, as commander itself declares it. */
@@ -132,7 +127,7 @@ export interface KanboCapabilities {
   storages: KanboCapabilityStorage[]
   tools: KanboCapabilityTool[]
   commands: KanboCapabilityCommand[]
-  /** The board-independent rules `kanbo prime` states — no columns here, because a column is per board. */
+  /** The board-independent rules `kanbo_prime` states — no columns here, because a column is per board. */
   rules: string[]
   /** Every rule a column may ask of a card, from `ENTRY_RULES` — which columns ask for which is per board, in `kanbo_columns`. */
   entryRules: KanboCapabilityEntryRule[]
@@ -195,14 +190,13 @@ function buildCanonicalStrings(): Record<string, string> {
   }
 }
 
-/** Every board tool, with its schema converted and its CLI equivalent attached. */
+/** Every board tool, with its schema converted. */
 function buildTools(): KanboCapabilityTool[] {
   return KANBO_TOOLS.map(tool => ({
     name: tool.name,
     title: tool.title,
     description: tool.description,
     inputSchema: z.toJSONSchema(z.object(tool.inputSchema)) as Record<string, unknown>,
-    cli: KANBO_TOOL_CLI_EQUIVALENTS[tool.name],
   }))
 }
 
@@ -276,14 +270,14 @@ export function buildCapabilitiesManifest(): KanboCapabilities {
       + '`board_column_rules_unmet` (`allowed_from`, `wip_limit`); a person goes through and is told. A new board\'s Done '
       + 'accepts cards from In Review only. Only a person sets them — `kanbo columns flow` refuses an agent\'s shell '
       + '(exit 4). The database role does not enforce them.',
-      'A claim (`kanbo claim`, `kanbo_card_claim`, `POST /issues/claim`) takes a ready card from To Do, starts its run and '
+      'A claim (`kanbo_card_claim`, `POST /issues/claim`) takes a ready card from To Do, starts its run and '
       + 'moves it into the board\'s first `started` column in one write; two claimers never get the same card, and the one '
       + 'that loses is told `board_nothing_ready` or `board_card_not_ready`. A card has one run going at a time: starting a '
       + 'second is refused with `board_card_run_active`, on every path.',
       'Only a person changes the board\'s columns: `kanbo columns add`, `rename`, `move`, `remove`, `template` and '
       + '`add-standard` refuse an agent\'s shell (exit 4), and the rename, move, remove and add-missing operations '
       + 'refuse any actor but a person (`board_column_structure_requires_user`); no MCP tool changes columns. '
-      + 'To Do can be neither removed nor renamed away from its slug `to_do`: `kanbo ready` takes work from it.',
+      + 'To Do can be neither removed nor renamed away from its slug `to_do`: `kanbo_ready` takes work from it.',
       'No board tool or command deletes a card, agent role or not. Cancelling one is a move to another column. '
       + 'The one exception is `kanbo serve`\'s `DELETE /issues/:id`, which it answers only for '
       + 'a request presenting its token, on a server a person started, that has not sent `x-kanbo-actor: agent` '

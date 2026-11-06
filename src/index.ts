@@ -121,9 +121,7 @@ export { type PullRequestFactKeys, pullRequestFactKeys } from './domain/pull-req
 export { DEFAULT_STATUSES, normalizeStatusName } from './domain/status-name'
 export { currentUnixSeconds } from './domain/time'
 export {
-  KANBO_TOOL_CLI_EQUIVALENTS,
   KANBO_TOOL_NAMES,
-  type KanboToolCliEquivalent,
   type KanboToolName,
 } from './mcp/tool-names'
 export { type BoardOps, createBoardOps } from './ops'

@@ -5,8 +5,8 @@ import type { KanboCapabilities, KanboCapabilityCommand, KanboCapabilityTool } f
  * can read and an agent can paste into its own `CLAUDE.md` or `AGENTS.md`.
  *
  * Nothing here decides what the board can do — it only lays the manifest's own
- * fields out under headings. `kanbo capabilities` prints this by default, and
- * `kanbo mcp` serves it as `kanbo://capabilities.md` beside the JSON.
+ * fields out under headings. `kanbo mcp` serves it as
+ * `kanbo://capabilities.md` beside the JSON.
  */
 
 /**
@@ -31,18 +31,17 @@ function renderStorages(manifest: KanboCapabilities): string[] {
 }
 
 function renderTool(tool: KanboCapabilityTool): string {
-  return `| \`${tool.name}\` | \`${cell(tool.cli.kanbo)}\` | ${cell(tool.description)} |`
+  return `| \`${tool.name}\` | ${cell(tool.description)} |`
 }
 
 function renderTools(manifest: KanboCapabilities): string[] {
   return [
     '## Tools',
     '',
-    'Full JSON Schema for each tool\'s input is in the JSON manifest (`kanbo capabilities --json` or '
-    + '`kanbo://capabilities`) — this table is the tools themselves and what to type instead of calling one.',
+    'Full JSON Schema for each tool\'s input is in the JSON manifest (`kanbo://capabilities`) — this table is the tools themselves.',
     '',
-    '| Tool | `kanbo` | Does |',
-    '| --- | --- | --- |',
+    '| Tool | Does |',
+    '| --- | --- |',
     ...manifest.tools.map(renderTool),
   ]
 }

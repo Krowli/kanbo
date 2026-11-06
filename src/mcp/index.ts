@@ -17,9 +17,7 @@ export {
 } from './resources'
 export { createKanboMcpServer, KANBO_MCP_SERVER_NAME, registerKanboTools } from './server'
 export {
-  KANBO_TOOL_CLI_EQUIVALENTS,
   KANBO_TOOL_NAMES,
-  type KanboToolCliEquivalent,
   type KanboToolName,
 } from './tool-names'
 export {

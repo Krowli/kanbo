@@ -4,21 +4,14 @@ import type { UpdateCheck } from '../update-check'
 
 import { registerApproveCommand } from './approve'
 import { registerBoardCommand } from './board'
-import { registerCapabilitiesCommand } from './capabilities'
-import { registerClaimCommand } from './claim'
-import { registerCardCommands } from './card'
 import { registerColumnsCommands } from './columns'
 import { registerConnectCommand } from './connect'
 import { registerDoctorCommand } from './doctor'
 import { registerInitCommand } from './init'
-import { registerInstructionsCommand } from './instructions'
 import { registerMcpCommand } from './mcp'
 import { registerMigrateCommand } from './migrate'
-import { registerPrimeCommand } from './prime'
-import { registerReadyCommand } from './ready'
 import { registerReturnCommand } from './return'
 import { registerRolesCommands } from './roles'
-import { registerRunCommands } from './run'
 import { registerServeCommand } from './serve'
 import { registerSprintCommands } from './sprint'
 import { registerStatsCommand } from './stats'
@@ -35,33 +28,27 @@ import { registerUninstallCommand } from './uninstall'
  * this one.
  *
  * The order is the order `kanbo --help` lists them in, under the heading of
- * the group each belongs to.
+ * the group each belongs to. Agents reach the board through the MCP server
+ * (`kanbo mcp`) alone; every other command is a person's.
  */
 export function registerKanboCommands(program: Command, context: KanboProgramContext = {}): void {
   program.commandsGroup('Get started:')
   registerInitCommand(program)
   registerConnectCommand(program)
-  registerInstructionsCommand(program)
   registerDoctorCommand(program, context.update ?? null)
   registerUninstallCommand(program)
 
   program.commandsGroup('Your board:')
   registerBoardCommand(program)
-  registerCardCommands(program)
   registerColumnsCommands(program)
   registerApproveCommand(program)
   registerReturnCommand(program)
-  registerReadyCommand(program)
-  registerPrimeCommand(program)
   registerSprintCommands(program)
   registerStatsCommand(program)
   registerServeCommand(program)
 
-  program.commandsGroup('For agents and integrations:')
+  program.commandsGroup('For agents:')
   registerMcpCommand(program)
-  registerClaimCommand(program)
-  registerRunCommands(program)
-  registerCapabilitiesCommand(program)
 
   program.commandsGroup('Shared Postgres boards:')
   registerMigrateCommand(program)
