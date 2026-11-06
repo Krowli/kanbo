@@ -4,6 +4,24 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-11-06
+
+**Run `kanbo migrate` after upgrading** (on a board file `kanbo doctor --fix` does it too; on a shared Postgres board run `kanbo roles apply` after it, as after every migration). 0.5.0 adds two columns to `issue_statuses` and an index to `issue_field_changes`. Until the board is migrated, a read or a write is refused (exit 3, "Run kanbo migrate"). An app that keeps the board in its own database adds the same migration and pins this exact version.
+
+### Added
+
+- Flow rules on a column: which columns a card may enter it from (`allowedFrom`) and the most cards it holds (`wipLimit`). They are checked at the same door as entry rules, for every writer: an agent moving, creating, bulk-moving or claiming a card against them is refused with `board_column_rules_unmet` and one line per rule (`- allowed_from: Done accepts cards from In Review only`, `- wip_limit: In Progress holds 3 of 3`); a person goes through and is warned. A bulk move is held to a WIP limit as a whole. `kanbo columns flow <column> --from <columns|any> --wip <count|none>` sets them (a person only, exit 4 in an agent's shell). `kanbo prime`, `kanbo_columns`, `kanbo columns list` and `GET /issues/statuses` show them. Deleting a column takes it out of every list; a list it empties accepts cards from no column, not from every one.
+- New boards start with the standard flow: Done accepts cards only from In Review (from In Review and QA on a Review + QA board). Existing boards keep their columns as they are.
+- `kanbo claim [card]`, the `kanbo_card_claim` tool and `POST /issues/claim`: take a card to work on in one step. The run starts and the card moves from To Do into the board's first work-in-progress column in one write, and two agents never get the same card — the one that loses is told `board_nothing_ready` or `board_card_not_ready` (`run_active`, `waiting_for_person`, `not_in_to_do`). `kanbo prime`, the MCP server's instructions and the orchestrator guide tell agents to claim instead of starting a run and moving the card. `kanbo_card_claim` is published to every MCP host, including one that passes `includeRunTools: false`.
+- For applications that use kanbo as a library: `createBoardOps(store)` gains `setColumnFlowRules`, `applyStandardFlow`, `claimCard` and `listColumnEntries`. `listColumnEntries({ workspaceIds, since, limit })` lists every entry into a column since a moment, in `(at, changeId)` order, from the cards' own history — so it sees every writer — and never ends a page inside a second. The package root exports `readFlowRules`, `ColumnFlowRules`, `FLOW_RULES`, `ClaimCardInput`, `ClaimedCard`, `ColumnEntry`. `BoardStore` gains `issues.lockById` and `fieldChanges.listByFieldSince`; `KanboToolTransport` gains `cardClaim`. `BoardErrorCode` gains `board_card_run_active`, `board_nothing_ready`, `board_card_not_ready` (all `409`) and `board_flow_rule_invalid` (`400`).
+
+### Changed
+
+- A card has one run going at a time: starting a second run on a card whose run is still going is refused with `board_card_run_active`, naming that run — through `kanbo run start`, `kanbo_run_start`, `POST /issues/:id/runs` and an app's own launch alike. Finish or stop the first run before starting another.
+- A card created in a column records that column in its history as a change from no column, filed under whoever created it. The activity feed and the board page's History show it as the card's creation, as before; `kanbo card get --include history` and `GET /issues/:id/field-changes` list the row.
+- The instruction block `kanbo init` and `kanbo connect` write says "Take work with `kanbo claim`" (block v3). `kanbo doctor` reports a v2 block as written by an older kanbo, and `kanbo connect` or `kanbo doctor --fix` brings it forward; a block you edited is kept. `kanbo instructions agent` says the same.
+- A board file a migration behind refuses a read as it refuses a write — exit 3, with the sentence that names `kanbo migrate` — instead of failing on the missing column. A board whose only difference is its schema stamp stays readable. `kanbo mcp` on such a file stops at start with the same sentence, as on an outdated Postgres board.
+
 ## [0.4.0] — 2026-11-04
 
 ### Added
@@ -192,6 +210,7 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
+[0.5.0]: https://github.com/Krowli/kanbo/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Krowli/kanbo/releases/tag/v0.4.0
 [0.3.0]: https://github.com/Krowli/kanbo/releases/tag/v0.3.0
 [0.2.1]: https://github.com/Krowli/kanbo/releases/tag/v0.2.1
