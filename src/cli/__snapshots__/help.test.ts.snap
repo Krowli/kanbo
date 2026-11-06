@@ -47,8 +47,6 @@ Get started:
   connect|setup [options] [agents...]  Connect your coding agents to the board:
                                        its MCP server, for every project
                                        (--project: this project only)
-  instructions [options] [kind]        Print the instructions to give your agent
-                                       (to paste yourself)
   doctor [options]                     Check that kanbo, this project's board
                                        and your agents' setup work
   uninstall [options]                  Disconnect kanbo from your agents; the
@@ -57,33 +55,21 @@ Get started:
 Your board:
   board [options]                      Show the board here: columns, cards, what
                                        each is doing, what waits for you
-  card                                 Add, change, move and read cards
   columns                              See and change the board's columns
                                        (alone: a menu)
   approve [options] <card>             Approve the work on a card that is
                                        waiting for you
   return [options] <card>              Send a card back to the previous column,
                                        saying why
-  ready [options]                      Cards ready to start: in To Do, not
-                                       taken, not waiting for a person
-  prime [options]                      Print the board's columns and rules for
-                                       an agent to read first
   sprint                               Group cards into time-boxed sprints
   stats [options]                      How work flows on this board: cycle time,
                                        throughput, work in progress, returns,
                                        agents
   serve [options]                      Open the board in your browser
 
-For agents and integrations:
+For agents:
   mcp [options]                        Run the board's MCP server for an agent
                                        (it starts this itself)
-  claim [options] [card]               Take a card to work on: start your run
-                                       and move it out of To Do, in one step
-  run                                  Record when an agent starts and finishes
-                                       work on a card
-  capabilities [options]               List what kanbo offers agents: tools,
-                                       commands, rules and limits (no board
-                                       needed)
 
 Shared Postgres boards:
   migrate [options]                    Create or update the board's tables after

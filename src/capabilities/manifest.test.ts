@@ -80,11 +80,11 @@ describe('buildCapabilitiesManifest', () => {
     expect(manifest.package.version).toBe(KANBO_PACKAGE_VERSION)
   })
 
-  it.each(KANBO_TOOL_NAMES)('carries %s, with a JSON Schema and a CLI equivalent', (name) => {
+  it.each(KANBO_TOOL_NAMES)('carries %s, with a JSON Schema', (name) => {
     const tool = manifest.tools.find(candidate => candidate.name === name)
     expect(tool, `${name} is missing from the manifest`).toBeDefined()
     expect(tool!.inputSchema).toMatchObject({ type: 'object' })
-    expect(tool!.cli.kanbo.startsWith('kanbo ')).toBe(true)
+    expect(tool).not.toHaveProperty('cli')
   })
 
   it('carries no tool the board does not have', () => {

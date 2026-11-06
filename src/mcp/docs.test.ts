@@ -23,7 +23,6 @@ import { HUMAN_ONLY_ACTIONS } from '../cli/actor'
 import { registerKanboCommands } from '../cli/commands'
 import { DOCTOR_FIX_YES_HINT } from '../cli/commands/doctor'
 import { NO_BOARD_AGENT_FIRST_LINE, NO_BOARD_HINT } from '../cli/home'
-import { ORCHESTRATOR_GUIDE } from '../cli/setup/orchestrator-guide'
 import { KANBO_TOOL_NAMES } from './tool-names'
 
 const DOCS_DIRECTORY = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs')
@@ -153,20 +152,17 @@ describe('the kanbo doctor section of docs/cli.md', () => {
 })
 
 describe('docs/orchestrator.md', () => {
-  it('shows the orchestrator instruction file word for word, as `kanbo instructions orchestrator` prints it', () => {
-    const doc = readFileSync(join(DOCS_DIRECTORY, 'orchestrator.md'), 'utf8').replace(/\r\n/g, '\n')
-    expect(doc).toContain(`\`\`\`markdown\n${ORCHESTRATOR_GUIDE}\n\`\`\`\n`)
-  })
+  const doc = readFileSync(join(DOCS_DIRECTORY, 'orchestrator.md'), 'utf8').replace(/\r\n/g, '\n')
 
   it('names every command only a person may run, so an orchestrator never tries one', () => {
     for (const action of HUMAN_ONLY_ACTIONS) {
-      expect(ORCHESTRATOR_GUIDE, action).toContain(`\`kanbo ${action}\``)
+      expect(doc, action).toContain(`\`kanbo ${action}\``)
     }
   })
 
-  it('names no column but To Do by its slug: a board\'s other columns are its own, and kanbo prime says what they are', () => {
+  it('names no column but To Do by its slug: a board\'s other columns are its own, and kanbo_prime says what they are', () => {
     for (const slug of ['backlog', 'in_progress', 'in_review', 'done', 'canceled']) {
-      expect(ORCHESTRATOR_GUIDE, slug).not.toMatch(new RegExp(`\`${slug}\``))
+      expect(doc, slug).not.toMatch(new RegExp(`\`${slug}\``))
     }
   })
 })

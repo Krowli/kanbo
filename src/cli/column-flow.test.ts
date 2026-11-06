@@ -11,8 +11,8 @@ import type { BoardActor } from '../ops/types'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
-import { describeColumnRulesRefusal } from './actor'
-import { registerCardCommands } from './commands/card'
+import { createPlacementActor, describeColumnRulesRefusal } from './actor'
+import { openBoardSession } from './command'
 import { registerColumnsCommands } from './commands/columns'
 import { describeFailure } from './failure'
 
@@ -52,7 +52,6 @@ describe('column flow rules from a terminal', () => {
     })
     const program = new Command().exitOverride()
     registerColumnsCommands(program)
-    registerCardCommands(program)
     await program.parseAsync([...argv, '--db', board.path, '--workspace', WORKSPACE.id], { from: 'user' })
   }
 
@@ -94,15 +93,24 @@ describe('column flow rules from a terminal', () => {
     expect(readFlowRules(await requireColumn(store, WORKSPACE.id, 'in_review'))).toEqual({ allowedFrom: null, wipLimit: null })
   })
 
-  it('refuses an agent\'s move the flow rules do not allow with one line per rule, and warns a person whose move it is', async () => {
+  it('refuses an agent\'s move the flow rules do not allow with one line per rule, and reports to a person whose move it is', async () => {
     const card = await createCard(store, { workspace: WORKSPACE, title: 'Card', statusName: 'In Progress' }, USER)
+    const move = async () => {
+      const session = await openBoardSession({ db: board.path, workspace: WORKSPACE.id }, 'write')
+      try {
+        return await session.ops.moveCard(card.id, 'done', createPlacementActor())
+      }
+      finally {
+        await session.close()
+      }
+    }
 
     vi.stubEnv('KANBO_ACTOR_KIND', 'agent')
-    const failure = await run(['card', 'move', card.id, 'done']).then(() => undefined, (error: unknown) => error)
+    const failure = await move().then(() => undefined, (error: unknown) => error)
     expect(describeFailure(failure).message).toContain(`${card.id} can't go into "Done" yet:\n- allowed_from: Done accepts cards from In Review only`)
 
     vi.stubEnv('KANBO_ACTOR_KIND', undefined)
-    await run(['card', 'move', card.id, 'done'])
-    expect(warned).toContain(`kanbo: warning: ${card.id} entered "Done" without allowed_from: Done accepts cards from In Review only`)
+    const moved = await move()
+    expect(moved.unmetRules?.map(item => `${item.rule}: ${item.detail}`)).toEqual(['allowed_from: Done accepts cards from In Review only'])
   })
 })

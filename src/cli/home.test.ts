@@ -136,13 +136,19 @@ describe('kanbo with no words', () => {
 
   /** Two cards an agent handed to a person: one with a comment on it. */
   async function createWaitingCards(): Promise<void> {
-    vi.stubEnv('KANBO_ACTOR_KIND', 'agent')
-    for (const title of ['Fix the login form', 'Add a dark theme']) {
-      expect(await kanbo('card', 'create', '--title', title, '--column', 'in_review')).toBeNull()
+    const agent = { kind: 'agent', id: 'claude' } as const
+    const session = await openBoardSession({}, 'write')
+    try {
+      for (const title of ['Fix the login form', 'Add a dark theme']) {
+        await session.ops.createCard({ workspace: session.workspace, title, statusName: 'in_review' }, agent)
+      }
+      await session.ops.addComment({ issueId: 'WST-002', content: 'Toggle is in Settings.\nScreenshots attached.' }, agent)
+      await session.ops.waitApproval('WST-001', { statusLine: 'login fixed, please check' }, agent)
+      await session.ops.waitApproval('WST-002', { statusLine: 'dark theme ready' }, agent)
     }
-    expect(await kanbo('card', 'comment', 'WST-002', '--content', 'Toggle is in Settings.\nScreenshots attached.')).toBeNull()
-    expect(await kanbo('card', 'wait-approval', 'WST-001', '--text', 'login fixed, please check')).toBeNull()
-    expect(await kanbo('card', 'wait-approval', 'WST-002', '--text', 'dark theme ready')).toBeNull()
+    finally {
+      await session.close()
+    }
     vi.stubEnv('KANBO_ACTOR_KIND', undefined)
     printed = []
     driver = createPromptDriver()
@@ -163,7 +169,7 @@ describe('kanbo with no words', () => {
 
   const golden = (name: string): string => join(__dirname, '__golden__', `home-${name}.txt`)
 
-  const exitMenu = (d: PromptDriver): void => d.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+  const exitMenu = (d: PromptDriver): void => d.press('down', 'down', 'down', 'down', 'down', 'down', 'enter')
 
   async function readCard(key: string): Promise<{ column: string | undefined, waitingFor: string | null, comments: string[] }> {
     const session = await openBoardSession({}, 'read')
@@ -357,7 +363,7 @@ describe('kanbo with no words', () => {
 
     const running = kanbo()
     await driver.waitFor('What next?')
-    driver.press('down', 'down', 'down', 'down', 'down', 'enter')
+    driver.press('down', 'down', 'down', 'down', 'enter')
     await driver.waitFor('Columns of this board:')
     await driver.waitFor('What would you like to change?')
     driver.press('up', 'enter') // Done
@@ -432,7 +438,7 @@ describe('kanbo with no words', () => {
     const running = runKanbo([], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'darwin' }).then(() => null, (error: unknown) => error)
     await driver.waitFor('kanbo 9.0.0 is available (you have 0.3.0).')
     await driver.waitFor('Update kanbo to 9.0.0 — npm install -g kanbo-cli@latest')
-    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'enter')
 
     // No Exit pressed: a successful update ends the menu by itself.
     expect(await running).toBeNull()
@@ -449,7 +455,7 @@ describe('kanbo with no words', () => {
 
     const running = runKanbo([], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'darwin' }).then(() => null, (error: unknown) => error)
     await driver.waitFor('Update kanbo to 9.0.0')
-    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'enter')
     await driver.waitFor('kanbo was not updated')
     await driver.waitFor('What next?')
     exitMenu(driver)
@@ -459,7 +465,7 @@ describe('kanbo with no words', () => {
   })
 
   it.each([
-    ['Exit', (d: PromptDriver): void => d.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')],
+    ['Exit', (d: PromptDriver): void => d.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')],
     ['Ctrl-C', (d: PromptDriver): void => d.press('ctrl-c')],
   ])('says a newer kanbo in one line, with no question, on leaving the menu with %s', async (_label, leave) => {
     await createBoard()
@@ -498,7 +504,7 @@ describe('kanbo with no words', () => {
 
     const running = runKanbo([], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'win32' }).then(() => null, (error: unknown) => error)
     await driver.waitFor('How to update kanbo to 9.0.0 — npm install -g kanbo-cli@latest')
-    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'enter')
     await driver.waitFor(WINDOWS_NOTICE)
     await driver.waitFor('What next?')
     exitMenu(driver)
@@ -516,7 +522,7 @@ describe('kanbo with no words', () => {
 
     const running = runKanbo([], program, {}, { fetch: npmSays('9.0.0'), env: {}, currentVersion: '0.3.0', install, platform: 'darwin', installKind: 'project' }).then(() => null, (error: unknown) => error)
     await driver.waitFor('How to update kanbo to 9.0.0 — npm install kanbo-cli@latest')
-    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'down', 'enter')
+    driver.press('down', 'down', 'down', 'down', 'down', 'down', 'enter')
     await driver.waitFor(notice)
     await driver.waitFor('What next?')
     exitMenu(driver)

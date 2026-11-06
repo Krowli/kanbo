@@ -16,7 +16,6 @@ import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-dat
 import type { PromptDriver } from '../testing/prompt-driver'
 import { createPromptDriver } from '../testing/prompt-driver'
 import { describeColumnChangesRefusal } from './actor'
-import { registerCardCommands } from './commands/card'
 import { registerColumnsCommands } from './commands/columns'
 import { describeFailure } from './failure'
 import { createUi, setUiForTests } from './ui/ui'
@@ -79,7 +78,6 @@ describe('kanbo columns', () => {
   function program(): Command {
     const created = new Command().exitOverride().configureOutput({ writeErr: text => printed.push(text), writeOut: text => printed.push(text) })
     registerColumnsCommands(created)
-    registerCardCommands(created)
     return created
   }
 

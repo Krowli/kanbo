@@ -130,31 +130,6 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
       const program = createKanboProgram().exitOverride()
       await program.parseAsync([...args, ...board.target], { from: 'user' })
     }
-    await measure('cli card list', async () => await kanbo('card', 'list'))
-    await measure('cli card list, filtered', async () => await kanbo(
-      'card',
-      'list',
-      '--column',
-      'to_do,in_review',
-      '--parent',
-      PARENT_KEY,
-      '--text',
-      'SETTINGS',
-      '--updated-since',
-      '2020-01-01',
-      '--label',
-      SEED_LABEL,
-      '--priority',
-      'none,high',
-      '--limit',
-      '5',
-      '--json',
-      'id',
-    ))
-    rows['cli card list, filtered'] = (JSON.parse(String(vi.mocked(console.log).mock.lastCall?.[0])) as unknown[]).length
-    await measure('cli ready', async () => await kanbo('ready'))
-    await measure('cli prime', async () => await kanbo('prime'))
-    await measure('cli card get', async () => await kanbo('card', 'get', PARENT_KEY))
     await measure('cli board', async () => await kanbo('board'))
     await measure('cli stats', async () => await kanbo('stats'))
 
@@ -293,15 +268,11 @@ describe.each<Engine>(['sqlite', 'postgres'])('statements per read on %s', (engi
 
 /** Cards the seeded board answers the filtered reads with, on 10 cards and on 50. */
 const SMALL_ROWS: Counts = {
-  'cli card list, filtered': 1,
   'mcp kanbo_card_list, filtered': 1,
   'mcp kanbo_card_get sub-cards': 2,
   'mcp kanbo_card_get, everything sub-cards': 2,
 }
 const LARGE_ROWS: Counts = {
-  // One more than the tool: the command line asks nothing of waiting, so the
-  // sub-card waiting in review counts.
-  'cli card list, filtered': 3,
   'mcp kanbo_card_list, filtered': 2,
   'mcp kanbo_card_get sub-cards': 12,
   'mcp kanbo_card_get, everything sub-cards': 12,
@@ -319,11 +290,6 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
   // 0.5.0: three more per CLI command: the board file's schema guard (the read
   // guard) runs on every CLI open on SQLite, as the Postgres guard does below.
   sqlite: {
-    'cli card list': 9,
-    'cli card list, filtered': 10,
-    'cli ready': 9,
-    'cli prime': 6,
-    'cli card get': 9,
     'cli board': 7,
     'cli stats': 10,
     'ops card get + comments': 5,
@@ -341,11 +307,6 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
   },
   // Two more per command: the schema guard an external board is opened behind.
   postgres: {
-    'cli card list': 8,
-    'cli card list, filtered': 9,
-    'cli ready': 8,
-    'cli prime': 5,
-    'cli card get': 8,
     'cli board': 6,
     'cli stats': 9,
     'ops card get + comments': 5,

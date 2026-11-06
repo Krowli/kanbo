@@ -20,7 +20,6 @@ import { startServe } from '../cli/commands/serve'
 import { openMcpBoard } from '../cli/mcp-board'
 import { overridePostgresOpenerForTests } from '../cli/postgres-board'
 import { INSTRUCTION_BLOCK } from '../cli/setup/instructions'
-import { KANBO_CAPABILITIES_MARKDOWN_RESOURCE_URI, KANBO_CAPABILITIES_RESOURCE_URI } from '../mcp/resources'
 import { createKanboMcpServer } from '../mcp/server'
 import { APPROVED_COMMENT } from '../ops/approval'
 import { migrateBoardDatabase } from '../postgres/migrate'
@@ -40,7 +39,8 @@ import { writeFakeBin } from '../testing/fake-bin'
  * each door's own tests cannot find.
  *
  * The doors are the ones the product opens, in this process:
- * - the terminal: `registerKanboCommands`, the binary's own program;
+ * - the terminal: `registerKanboCommands`, the binary's own program — the
+ *   person's commands only; an agent has no command line, only MCP;
  * - MCP: `openMcpBoard` + `createKanboMcpServer` with the run tools — what
  *   `kanbo mcp` wires to stdio — over an in-memory link to an SDK client;
  * - HTTP: `startServe`, the body of `kanbo serve`, on a free port.
@@ -48,6 +48,12 @@ import { writeFakeBin } from '../testing/fake-bin'
  * The last test is the guard: it reads the capabilities manifest and fails when
  * a command or tool has no case here and no entry in `NOT_DRIVEN_HERE`.
  */
+
+/** The cards on the terminal's board, by key, title and column — what `kanbo board --json` prints. */
+async function cardsOnBoard(b: MatrixBoard): Promise<{ id: string, title: string, columnSlug: string | null }[]> {
+  const sections = await b.cliJson<{ cards: { id: string, title: string, columnSlug: string | null }[] }[]>(['board', '--json'])
+  return sections.flatMap(section => section.cards).map(({ id, title, columnSlug }) => ({ id, title, columnSlug }))
+}
 
 /** A command or tool that no case below drives in-process, and why that is fine. */
 const NOT_DRIVEN_HERE: Record<string, string> = {
@@ -110,148 +116,135 @@ interface MatrixCase {
 
 const CASES: MatrixCase[] = [
   {
-    name: 'a card an agent creates over MCP is in the terminal\'s list, on the board and on /issues',
-    covers: ['kanbo_card_create', 'card list', 'board'],
+    name: 'a card an agent creates over MCP is on the terminal\'s board, and on /issues',
+    covers: ['kanbo_card_create', 'board'],
     run: async (b) => {
       const created = await b.tool('kanbo_card_create', { title: 'From the agent', description: 'Made over MCP', column: 'to_do' })
       expect(created).toEqual({ id: 'MAT-001', title: 'From the agent', column: 'to_do', updatedAt: expect.any(Number) })
 
-      expect(await b.cliJson(['card', 'list', '--json', 'id,title,columnSlug'])).toEqual([
-        { id: 'MAT-001', title: 'From the agent', columnSlug: 'to_do' },
-      ])
-      expect(await b.cliJson(['card', 'list', '--column', 'to_do', '--limit', '1', '--json', 'id'])).toEqual([{ id: 'MAT-001' }])
+      expect(await cardsOnBoard(b)).toEqual([{ id: 'MAT-001', title: 'From the agent', columnSlug: 'to_do' }])
       expect(await b.cli(['board'])).toMatch(/To Do \(1\)[\s\S]*MAT-001 {2}From the agent/)
       const listed = await b.http<{ id: string, description: string }[]>('GET', '/issues')
       expect(listed.json.map(card => [card.id, card.description])).toEqual([['MAT-001', 'Made over MCP']])
     },
   },
   {
-    name: 'a card typed in the terminal is what the agent\'s card_get and card_list read, and /issues/:id',
-    covers: ['card create', 'card get', 'kanbo_card_get', 'kanbo_card_list'],
+    name: 'a sub-card an agent creates is what the agent\'s card_get and card_list read, and /issues/:id',
+    covers: ['kanbo_card_get', 'kanbo_card_list'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Parent', '--column', 'to_do', '--execution-mode', 'main'])
-      await b.cli(['card', 'create', '--title', 'Child', '--parent', 'MAT-001', '--description', 'part of it', '--column', 'backlog'])
+      await b.tool('kanbo_card_create', { title: 'Parent', column: 'to_do', executionMode: 'main' })
+      await b.tool('kanbo_card_create', { title: 'Child', parent: 'MAT-001', description: 'part of it', column: 'backlog' })
 
       const parent = await b.tool('kanbo_card_get', { card: 'MAT-1' })
       expect(parent).toMatchObject({ id: 'MAT-001', executionMode: 'main', columnSlug: 'to_do' })
       expect(parent.subCards).toEqual([{ id: 'MAT-002', title: 'Child', columnSlug: 'backlog' }])
       expect((await b.tool('kanbo_card_list', { column: 'backlog' })).cards.map((card: any) => card.id)).toEqual(['MAT-002'])
-      expect((await b.cliJson(['card', 'get', '2', '--json', 'parentIssueId']))).toEqual({ parentIssueId: 'MAT-001' })
+      expect(await b.tool('kanbo_card_get', { card: '2', include: [] })).toMatchObject({ parentIssueId: 'MAT-001' })
       expect((await b.http('GET', '/issues/MAT-002')).json).toMatchObject({ description: 'part of it', parentIssueId: 'MAT-001' })
     },
   },
   {
-    name: 'one question, one call: the agent\'s card_list filters and card_get parts match the terminal\'s',
-    covers: ['card list', 'card get', 'kanbo_card_list', 'kanbo_card_get'],
+    name: 'one question, one call: the agent\'s card_list filters and card_get parts',
+    covers: ['kanbo_card_list', 'kanbo_card_get'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Parent', '--column', 'to_do'])
-      await b.cli(['card', 'create', '--title', 'Parser fix', '--parent', 'MAT-001', '--column', 'in_progress'])
-      await b.cli(['card', 'create', '--title', 'Needs a look', '--column', 'in_review'])
+      await b.tool('kanbo_card_create', { title: 'Parent', column: 'to_do' })
+      await b.tool('kanbo_card_create', { title: 'Parser fix', parent: 'MAT-001', column: 'in_progress' })
+      await b.tool('kanbo_card_create', { title: 'Needs a look', column: 'in_review' })
       await b.tool('kanbo_wait_approval', { card: 'MAT-003', text: 'check the diff' })
       await b.tool('kanbo_run_start', { card: 'MAT-002', agent: 'Claude' })
       await b.tool('kanbo_card_link_pr', { card: 'MAT-002', url: 'octo/repo#7' })
-      await b.cli(['card', 'comment', 'MAT-002', '--content', 'found the cause'])
+      await b.tool('kanbo_card_comment', { card: 'MAT-002', content: 'found the cause' })
       const ids = (page: any): string[] => page.cards.map((card: any) => card.id)
-      const cliIds = async (...argv: string[]): Promise<string[]> =>
-        (await b.cliJson(['card', 'list', ...argv, '--json', 'id'])).map((card: any) => card.id)
 
       expect(ids(await b.tool('kanbo_card_list', { waitingForPerson: true }))).toEqual(['MAT-003'])
-      expect(await cliIds('--waiting')).toEqual(['MAT-003'])
       expect(ids(await b.tool('kanbo_card_list', { hasActiveRun: true, parent: 'MAT-001' }))).toEqual(['MAT-002'])
-      expect(await cliIds('--active', '--parent', 'MAT-001')).toEqual(['MAT-002'])
       expect(ids(await b.tool('kanbo_card_list', { text: 'parser', columns: ['in_progress', 'in_review'] }))).toEqual(['MAT-002'])
-      expect(await cliIds('--text', 'parser', '--column', 'in_progress,in_review')).toEqual(['MAT-002'])
       expect(ids(await b.tool('kanbo_card_list', { updatedSince: '2000-01-01', limit: 2 }))).toEqual(['MAT-001', 'MAT-002'])
-      expect(await cliIds('--updated-since', '2000-01-01', '--limit', '2')).toEqual(['MAT-001', 'MAT-002'])
 
       const everything = ['comments', 'subCards', 'runs', 'history', 'prs']
       const read = await b.tool('kanbo_card_get', { card: 'MAT-002', include: everything })
       expect(read.runs).toEqual([expect.objectContaining({ agentName: 'Claude', state: 'running' })])
       expect(read.pullRequests).toEqual([expect.objectContaining({ owner: 'octo', repo: 'repo', number: 7 })])
       expect(read.comments.at(-1)).toMatchObject({ content: 'found the cause' })
-      const printed = await b.cliJson(['card', 'get', 'MAT-002', '--include', everything.join(','), '--json', 'comments,history,commentCount'])
-      expect(printed).toEqual({ comments: read.comments, history: read.history, commentCount: read.commentCount })
       expect((await b.tool('kanbo_card_get', { card: 'MAT-001' })).subCards).toEqual([{ id: 'MAT-002', title: 'Parser fix', columnSlug: 'in_progress' }])
     },
   },
   {
-    name: 'a move in the terminal reaches the agent and the card\'s history; the agent\'s move reaches the terminal',
-    covers: ['card move', 'kanbo_card_move'],
+    name: 'the agent\'s move reaches the terminal\'s board and the card\'s history',
+    covers: ['kanbo_card_move'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Moving', '--column', 'to_do'])
+      await b.tool('kanbo_card_create', { title: 'Moving', column: 'to_do' })
 
-      await b.cli(['card', 'move', 'MAT-001', 'in_progress'])
+      await b.tool('kanbo_card_move', { card: 'MAT-001', column: 'in_progress' })
       expect(await b.tool('kanbo_card_get', { card: 'MAT-001' })).toMatchObject({ column: 'In Progress', columnSlug: 'in_progress' })
       const inProgress = (await b.tool('kanbo_columns')).find((column: any) => column.slug === 'in_progress')
       const history = await b.http<{ field: string, toValue: string }[]>('GET', '/issues/MAT-001/field-changes')
       expect(history.json).toContainEqual(expect.objectContaining({ field: 'statusId', toValue: inProgress.id }))
 
       await b.tool('kanbo_card_move', { card: 'MAT-001', column: 'in_review' })
-      expect(await b.cliJson(['card', 'get', 'MAT-001', '--json', 'columnSlug'])).toEqual({ columnSlug: 'in_review' })
+      expect(await cardsOnBoard(b)).toEqual([{ id: 'MAT-001', title: 'Moving', columnSlug: 'in_review' }])
     },
   },
   {
-    name: 'an update from either side is read by the other, and lands in the history',
-    covers: ['card update', 'kanbo_card_update'],
+    name: 'an update over MCP is read back and lands in the history',
+    covers: ['kanbo_card_update'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Before'])
+      await b.tool('kanbo_card_create', { title: 'Before' })
 
-      await b.cli(['card', 'update', 'MAT-001', '--title', 'After', '--priority', 'high', '--labels', 'ui,bug'])
+      await b.tool('kanbo_card_update', { card: 'MAT-001', title: 'After', priority: 'high', labels: ['ui', 'bug'] })
       expect(await b.tool('kanbo_card_get', { card: 'MAT-001' })).toMatchObject({ title: 'After', priority: 'high', labels: ['ui', 'bug'] })
 
       await b.tool('kanbo_card_update', { card: 'MAT-001', description: 'Written by the agent', executionMode: 'main' })
-      expect(await b.cliJson(['card', 'get', 'MAT-001', '--json', 'description,executionMode']))
-        .toEqual({ description: 'Written by the agent', executionMode: 'main' })
+      expect(await b.tool('kanbo_card_get', { card: 'MAT-001', include: [] })).toMatchObject({ description: 'Written by the agent', executionMode: 'main' })
       const history = JSON.stringify((await b.http('GET', '/issues/MAT-001/field-changes')).json)
       expect(history).toContain('After')
       expect(history).toContain('Written by the agent')
 
-      // A card created at the wrong level: the agent puts it under another, the terminal takes it back out.
-      await b.cli(['card', 'create', '--title', 'Part of it'])
+      // A card created at the wrong level: the agent puts it under another, and takes it back out.
+      await b.tool('kanbo_card_create', { title: 'Part of it' })
       expect(await b.tool('kanbo_card_update', { card: 'MAT-002', parent: 'MAT-1' })).toMatchObject({ id: 'MAT-002', parentId: 'MAT-001' })
-      expect(await b.cliJson(['card', 'get', 'MAT-002', '--json', 'parentIssueId'])).toEqual({ parentIssueId: 'MAT-001' })
-      await b.cli(['card', 'update', 'MAT-002', '--parent', 'none'])
+      expect(await b.tool('kanbo_card_get', { card: 'MAT-002', include: [] })).toMatchObject({ parentIssueId: 'MAT-001' })
+      await b.tool('kanbo_card_update', { card: 'MAT-002', parent: 'none' })
       expect(await b.tool('kanbo_card_get', { card: 'MAT-002', include: [] })).toMatchObject({ parentIssueId: null })
       const moves = (await b.http<{ field: string, toValue: string | null }[]>('GET', '/issues/MAT-002/field-changes')).json
       expect(moves.filter(change => change.field === 'parentIssueId').map(change => change.toValue)).toEqual(['MAT-001', null])
     },
   },
   {
-    name: 'a status line set over MCP is on `kanbo board`; one set in the terminal is on the agent\'s card',
-    covers: ['kanbo_status_line', 'card status-line'],
+    name: 'a status line set over MCP is on `kanbo board`, the agent\'s card and /issues',
+    covers: ['kanbo_status_line', 'board'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Busy', '--column', 'in_progress'])
+      await b.tool('kanbo_card_create', { title: 'Busy', column: 'in_progress' })
 
       await b.tool('kanbo_status_line', { card: 'MAT-001', text: 'running the tests' })
       expect(await b.cli(['board'])).toMatch(/MAT-001 {2}Busy[\s\S]*running the tests/)
 
-      await b.cli(['card', 'status-line', 'MAT-001', '--text', 'tests pass'], { agent: true })
+      await b.tool('kanbo_status_line', { card: 'MAT-001', text: 'tests pass' })
       expect(await b.tool('kanbo_card_get', { card: 'MAT-001' })).toMatchObject({ statusLine: 'tests pass' })
       expect((await b.http('GET', '/issues/MAT-001')).json).toMatchObject({ statusLine: 'tests pass' })
     },
   },
   {
-    name: 'comments from the agent and from the terminal are both on /issues/:id/comments',
-    covers: ['kanbo_card_comment', 'card comment'],
+    name: 'comments from the agent are on /issues/:id/comments',
+    covers: ['kanbo_card_comment'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Talk'])
+      await b.tool('kanbo_card_create', { title: 'Talk' })
 
       await b.tool('kanbo_card_comment', { card: 'MAT-001', content: 'A finding from the agent' })
-      await b.cli(['card', 'comment', 'MAT-001', '--content', 'A note from the terminal'])
+      await b.tool('kanbo_card_comment', { card: 'MAT-001', content: 'A question from the agent' })
 
       const comments = await b.http<{ content: string }[]>('GET', '/issues/MAT-001/comments')
-      expect(comments.json.map(comment => comment.content)).toEqual(['A finding from the agent', 'A note from the terminal'])
+      expect(comments.json.map(comment => comment.content)).toEqual(['A finding from the agent', 'A question from the agent'])
     },
   },
   {
     name: 'the agent asks over MCP, a person approves in the terminal, and the agent sees it approved',
     covers: ['kanbo_wait_approval', 'approve'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Ship it', '--column', 'in_review'])
+      await b.tool('kanbo_card_create', { title: 'Ship it', column: 'in_review' })
 
       await b.tool('kanbo_wait_approval', { card: 'MAT-001', text: 'ready to merge' })
-      expect(await b.cliJson(['card', 'get', 'MAT-001', '--json', 'waitingFor,statusLine']))
-        .toEqual({ waitingFor: 'human', statusLine: 'ready to merge' })
+      expect(await b.tool('kanbo_card_get', { card: 'MAT-001', include: [] })).toMatchObject({ waitingFor: 'human', statusLine: 'ready to merge' })
 
       // An agent's shell is refused, and the card stays waiting.
       expect(await b.cliFails(['approve', 'MAT-001'], { agent: true })).toBe(4)
@@ -265,12 +258,11 @@ const CASES: MatrixCase[] = [
     },
   },
   {
-    name: 'the terminal\'s wait-approval and return reach the agent\'s card',
-    covers: ['card wait-approval', 'return'],
+    name: 'a person returns a waiting card in the terminal and the agent\'s card is back in work; an agent\'s shell is refused',
+    covers: ['return'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Check me', '--column', 'in_review'])
-
-      await b.cli(['card', 'wait-approval', 'MAT-001', '--text', 'please look'], { agent: true })
+      await b.tool('kanbo_card_create', { title: 'Check me', column: 'in_review' })
+      await b.tool('kanbo_wait_approval', { card: 'MAT-001', text: 'please look' })
       expect((await b.http('GET', '/issues/MAT-001')).json).toMatchObject({ waitingFor: 'human', statusLine: 'please look' })
 
       expect(await b.cliFails(['return', 'MAT-001', '--comment', 'no'], { agent: true })).toBe(4)
@@ -281,31 +273,22 @@ const CASES: MatrixCase[] = [
     },
   },
   {
-    name: 'runs: started, attached, cleared and finished from either side, read by the others',
-    covers: ['kanbo_run_start', 'kanbo_run_finish', 'run start', 'run attach-session', 'run clear-session', 'run finish'],
+    name: 'runs: started and finished over MCP, read by /issues and the card',
+    covers: ['kanbo_run_start', 'kanbo_run_finish'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Work', '--column', 'in_progress'])
+      await b.tool('kanbo_card_create', { title: 'Work', column: 'in_progress' })
 
-      const run = await b.tool('kanbo_run_start', { card: 'MAT-001', agent: 'Claude', branch: 'feat/x' })
-      expect(await b.cliJson(['card', 'get', 'MAT-001', '--json', 'activeRun'])).toMatchObject({
+      const run = await b.tool('kanbo_run_start', { card: 'MAT-001', agent: 'Claude', branch: 'feat/x', session: 'claude:session-1' })
+      expect(await b.tool('kanbo_card_get', { card: 'MAT-001' })).toMatchObject({
         activeRun: { id: run.id, agentName: 'Claude', state: 'running' },
       })
-      const started = (await b.http<{ id: string, branch: string | null }[]>('GET', '/issues/MAT-001/runs')).json
-      expect(started.find(entry => entry.id === run.id)?.branch).toBe('feat/x')
+      const started = (await b.http<{ id: string, branch: string | null, externalSessionRef: string | null }[]>('GET', '/issues/MAT-001/runs')).json
+      expect(started.find(entry => entry.id === run.id)).toMatchObject({ branch: 'feat/x', externalSessionRef: 'claude:session-1' })
 
-      await b.cli(['run', 'attach-session', run.id, 'claude:session-1'], { agent: true })
-      const attached = (await b.http<{ id: string, externalSessionRef: string | null }[]>('GET', '/issues/MAT-001/runs')).json
-      expect(attached.find(entry => entry.id === run.id)?.externalSessionRef).toBe('claude:session-1')
-
-      expect(await b.cliFails(['run', 'clear-session', run.id], { agent: true })).toBe(4)
-      await b.cli(['run', 'clear-session', run.id])
-      const cleared = (await b.http<{ id: string, externalSessionRef: string | null }[]>('GET', '/issues/MAT-001/runs')).json
-      expect(cleared.find(entry => entry.id === run.id)?.externalSessionRef).toBeNull()
-
-      await b.cli(['run', 'finish', run.id, '--state', 'finished'], { agent: true })
+      await b.tool('kanbo_run_finish', { run: run.id, state: 'finished' })
       expect(await b.tool('kanbo_card_get', { card: 'MAT-001' })).toMatchObject({ activeRun: null, attemptCount: 1 })
 
-      const second = await b.cliJson(['run', 'start', 'MAT-001', '--agent', 'Codex', '--session', 'codex:abc', '--json'], { agent: true })
+      const second = await b.tool('kanbo_run_start', { card: 'MAT-001', agent: 'Codex', session: 'codex:abc' })
       await b.tool('kanbo_run_finish', { run: second.id, state: 'failed', errorText: 'tests broke' })
       const runs = (await b.http<{ id: string, state: string, externalSessionRef: string | null }[]>('GET', '/issues/MAT-001/runs')).json
       expect(runs.find(entry => entry.id === second.id)).toMatchObject({ state: 'failed', externalSessionRef: 'codex:abc' })
@@ -314,43 +297,39 @@ const CASES: MatrixCase[] = [
     },
   },
   {
-    name: 'claim: an agent claims over MCP and in its shell, the terminal and /issues read the run, a second claim is refused, a person claims over HTTP',
-    covers: ['claim', 'kanbo_card_claim'],
+    name: 'claim: an agent claims over MCP, the card and /issues read the run, a second claim is refused, a person claims over HTTP',
+    covers: ['kanbo_card_claim'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'First', '--column', 'to_do'])
-      await b.cli(['card', 'create', '--title', 'Second', '--column', 'to_do'])
+      await b.tool('kanbo_card_create', { title: 'First', column: 'to_do' })
+      await b.tool('kanbo_card_create', { title: 'Second', column: 'to_do' })
 
       const claimed = await b.tool('kanbo_card_claim', {})
       expect(claimed).toMatchObject({ card: { id: 'MAT-001', column: 'in_progress' }, column: 'in_progress' })
-      expect(await b.cliJson(['card', 'get', 'MAT-001', '--json', 'activeRun'])).toMatchObject({ activeRun: { id: claimed.run, state: 'running' } })
+      expect(await b.tool('kanbo_card_get', { card: 'MAT-001' })).toMatchObject({ activeRun: { id: claimed.run, state: 'running' } })
       expect(await b.toolFails('kanbo_card_claim', { card: 'MAT-001' })).toContain('board_card_not_ready')
 
-      const second = await b.cliJson(['claim', '--agent', 'Codex', '--json'], { agent: true })
-      expect(second).toMatchObject({ card: { id: 'MAT-002', columnSlug: 'in_progress' }, run: { agentName: 'Codex', state: 'running' } })
+      const second = await b.tool('kanbo_card_claim', {})
+      expect(second).toMatchObject({ card: { id: 'MAT-002', column: 'in_progress' } })
       expect(await b.toolFails('kanbo_card_claim', {})).toContain('board_nothing_ready')
 
-      await b.cli(['card', 'create', '--title', 'Third', '--column', 'to_do'])
+      await b.tool('kanbo_card_create', { title: 'Third', column: 'to_do' })
       const overHttp = await b.http('POST', '/issues/claim', { workspaceId: await b.workspaceId(), agentName: 'Gemini' })
       expect(overHttp.status).toBe(200)
       expect(overHttp.json).toMatchObject({ card: { id: 'MAT-003' }, run: { agentName: 'Gemini', state: 'running' }, column: { name: 'In Progress' } })
     },
   },
   {
-    name: 'pull request links from either side are listed by the other; a removal reaches /pull-requests',
-    covers: ['kanbo_card_link_pr', 'kanbo_card_pull_requests', 'card pr add', 'card pr list', 'card pr remove'],
+    name: 'pull request links from the agent are listed by the agent and /pull-requests',
+    covers: ['kanbo_card_link_pr', 'kanbo_card_pull_requests'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'PR'])
+      await b.tool('kanbo_card_create', { title: 'PR' })
 
       await b.tool('kanbo_card_link_pr', { card: 'MAT-001', url: 'octo/repo#7' })
-      expect((await b.cliJson(['card', 'pr', 'list', 'MAT-001', '--json'])).map((link: any) => link.url))
-        .toEqual(['https://github.com/octo/repo/pull/7'])
+      await b.tool('kanbo_card_link_pr', { card: 'MAT-001', url: 'https://github.com/octo/repo/pull/8' })
 
-      const added = await b.cliJson(['card', 'pr', 'add', 'MAT-001', 'https://github.com/octo/repo/pull/8', '--json'])
       expect((await b.tool('kanbo_card_pull_requests', { card: 'MAT-001' })).map((link: any) => link.number)).toEqual([7, 8])
-
-      await b.cli(['card', 'pr', 'remove', 'MAT-001', added.id])
-      const left = (await b.http<{ number: number }[]>('GET', '/issues/MAT-001/pull-requests')).json
-      expect(left.map(link => link.number)).toEqual([7])
+      const listed = (await b.http<{ number: number }[]>('GET', '/issues/MAT-001/pull-requests')).json
+      expect(listed.map(link => link.number)).toEqual([7, 8])
     },
   },
   {
@@ -439,10 +418,10 @@ const CASES: MatrixCase[] = [
     },
   },
   {
-    name: 'a card a person returns in the terminal comes first for the agent: card_list returned, ready, prime and the terminal\'s list',
-    covers: ['card list', 'return', 'kanbo_card_list', 'kanbo_ready', 'kanbo_prime'],
+    name: 'a card a person returns in the terminal comes first for the agent: card_list returned, ready and prime',
+    covers: ['kanbo_card_list', 'kanbo_ready', 'kanbo_prime'],
     run: async (b) => {
-      await b.cli(['card', 'create', '--title', 'Check me', '--column', 'in_review'])
+      await b.tool('kanbo_card_create', { title: 'Check me', column: 'in_review' })
       await b.tool('kanbo_card_comment', { id: 'MAT-001', text: 'Done, please look' })
       await b.tool('kanbo_wait_approval', { card: 'MAT-001', content: 'please look' })
       // What is waiting says what it asks, in the one list call.
@@ -455,19 +434,16 @@ const CASES: MatrixCase[] = [
       expect((await b.tool('kanbo_card_list', { returned: true })).cards).toEqual([expect.objectContaining(returned)])
       expect((await b.tool('kanbo_ready')).returned).toEqual([expect.objectContaining(returned)])
       expect(await b.tool<string>('kanbo_prime')).toMatch(/^Returned to you[^\n]*\n\n- MAT-001 Check me \(`in_progress`\) — person: "Needs a test"/)
-      expect(await b.cliJson(['card', 'list', '--returned', '--json', 'id,returned'])).toEqual([{ id: 'MAT-001', returned: true }])
-      expect(await b.cli(['ready'], { agent: true })).toContain('Returned to you')
       expect((await b.tool('kanbo_card_get', { card: 'MAT-001', include: [] })).statusLine).toBe('returned by a person: Needs a test')
     },
   },
   {
-    name: 'ready and prime read the same board from the terminal, over MCP and over HTTP',
-    covers: ['ready', 'prime', 'kanbo_ready', 'kanbo_prime'],
+    name: 'ready and prime read the same board over MCP and over HTTP',
+    covers: ['kanbo_ready', 'kanbo_prime'],
     run: async (b) => {
       await b.tool('kanbo_card_create', { title: 'Next up', column: 'to_do' })
-      await b.cli(['card', 'create', '--title', 'Later', '--column', 'to_do'])
+      await b.tool('kanbo_card_create', { title: 'Later', column: 'to_do' })
 
-      expect((await b.cliJson(['ready', '--json'])).map((card: any) => card.id)).toEqual(['MAT-001', 'MAT-002'])
       expect(await b.tool('kanbo_ready', { limit: 1 })).toEqual({
         total: 2,
         more: 1,
@@ -476,29 +452,12 @@ const CASES: MatrixCase[] = [
       })
       expect((await b.http<{ id: string }[]>('GET', `/issues/ready?workspaceId=${await b.workspaceId()}`)).json.map(card => card.id)).toEqual(['MAT-001', 'MAT-002'])
 
-      const primed = await b.tool<string>('kanbo_prime')
-      expect(primed).toContain('To Do (`to_do`)')
-      // The terminal's prime is the board's own text, plus a cheat sheet of commands.
-      const printed = await b.cli(['prime'])
-      expect(printed.startsWith(primed.trimEnd())).toBe(true)
-      expect(printed).toContain('kanbo ready')
-    },
-  },
-  {
-    name: 'capabilities: the terminal prints the manifest MCP serves as resources',
-    covers: ['capabilities'],
-    run: async (b) => {
-      const client = await b.mcpClient()
-      const served = await client.readResource({ uri: KANBO_CAPABILITIES_RESOURCE_URI })
-      const servedMarkdown = await client.readResource({ uri: KANBO_CAPABILITIES_MARKDOWN_RESOURCE_URI })
-
-      expect(await b.cliJson(['capabilities', '--json'])).toEqual(JSON.parse(String((served.contents[0] as { text: string }).text)))
-      expect(await b.cli(['capabilities', '--markdown'])).toBe(String((servedMarkdown.contents[0] as { text: string }).text))
+      expect(await b.tool<string>('kanbo_prime')).toContain('To Do (`to_do`)')
     },
   },
   {
     name: 'setup: init, connect, instructions, doctor and uninstall on a project, checked through the files and each other',
-    covers: ['init', 'connect', 'instructions', 'doctor', 'uninstall'],
+    covers: ['init', 'connect', 'doctor', 'uninstall'],
     // These are about the project's own files, not the engine; and doctor's handshake starts a real
     // `kanbo mcp` process, which cannot reach the PGlite this process holds. `init` of a Postgres
     // board is every Postgres case's own setup.
@@ -533,7 +492,7 @@ const CASES: MatrixCase[] = [
     run: async (b) => {
       await b.tool('kanbo_card_create', { title: 'Survives a migration' })
       await b.cli(['migrate'])
-      expect((await b.cliJson(['card', 'list', '--json', 'title']))).toEqual([{ title: 'Survives a migration' }])
+      expect((await cardsOnBoard(b)).map(card => card.title)).toEqual(['Survives a migration'])
 
       const sql = await b.cli(['roles', 'print'])
       expect(sql).toContain(BOARD_AGENT_ROLE)
@@ -553,7 +512,7 @@ const CASES: MatrixCase[] = [
     },
   },
   {
-    name: 'serve: card create, read, update and delete over HTTP, read back by MCP and the terminal',
+    name: 'serve: card create, read, update and delete over HTTP, read back by MCP and the terminal\'s board',
     covers: ['serve'],
     run: async (b) => {
       const workspaceId = await b.workspaceId()
@@ -562,7 +521,7 @@ const CASES: MatrixCase[] = [
       expect(await b.tool('kanbo_card_get', { card: created.json.id })).toMatchObject({ title: 'Over HTTP', columnSlug: 'to_do' })
 
       expect((await b.http('PATCH', `/issues/${created.json.id}`, { title: 'Renamed over HTTP' })).status).toBe(200)
-      expect(await b.cliJson(['card', 'get', created.json.id, '--json', 'title'])).toEqual({ title: 'Renamed over HTTP' })
+      expect(await b.tool('kanbo_card_get', { card: created.json.id, include: [] })).toMatchObject({ title: 'Renamed over HTTP' })
 
       expect((await b.http('PATCH', `/issues/${created.json.id}/status/in_progress`)).status).toBe(200)
       expect(await b.tool('kanbo_card_get', { card: created.json.id })).toMatchObject({ columnSlug: 'in_progress' })
@@ -570,7 +529,7 @@ const CASES: MatrixCase[] = [
       // An agent may not delete a card, even with the token; a person may.
       expect((await b.http('DELETE', `/issues/${created.json.id}`, undefined, { 'x-kanbo-actor': 'agent' })).status).toBe(403)
       expect((await b.http('DELETE', `/issues/${created.json.id}`)).status).toBe(200)
-      expect(await b.cliJson(['card', 'list', '--json', 'id'])).toEqual([])
+      expect(await cardsOnBoard(b)).toEqual([])
       expect(await b.toolFails('kanbo_card_get', { card: created.json.id })).toMatch(/No card/i)
     },
   },

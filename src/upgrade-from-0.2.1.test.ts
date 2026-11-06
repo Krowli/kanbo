@@ -4,6 +4,8 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { PGlite } from '@electric-sql/pglite'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { Command } from 'commander'
 import { sql } from 'drizzle-orm'
 import { migrate as migrateSqlite } from 'drizzle-orm/better-sqlite3/migrator'
@@ -12,9 +14,13 @@ import { migrate as migratePglite } from 'drizzle-orm/pglite/migrator'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { BoardStore } from './board-store'
+import { createPlacementActor } from './cli/actor'
 import { writeBinding } from './cli/binding'
+import { openBoardSession } from './cli/command'
 import { registerKanboCommands } from './cli/commands'
+import { openMcpBoard } from './cli/mcp-board'
 import { overridePostgresOpenerForTests } from './cli/postgres-board'
+import { createKanboMcpServer } from './mcp/server'
 import { createBoardOps } from './ops'
 import { createPostgresBoardStore } from './postgres/board-store.postgres'
 import { migrateBoardDatabase } from './postgres/migrate'
@@ -77,7 +83,7 @@ const BOARD_AS_0_2_1_WROTE_IT = `
 `
 
 /** What this build reads off that board, the same on either engine. */
-async function expectBoardReadsAsWritten(store: BoardStore, kanbo: (argv: string[]) => Promise<string>): Promise<void> {
+async function expectBoardReadsAsWritten(store: BoardStore, tool: (name: string, args: Record<string, unknown>) => Promise<any>): Promise<void> {
   const ops = createBoardOps(store)
   const ids = (page: { cards: { id: string }[] }) => page.cards.map(card => card.id)
 
@@ -92,7 +98,7 @@ async function expectBoardReadsAsWritten(store: BoardStore, kanbo: (argv: string
   // Ready: To Do, nobody on it, nobody waited for — the sub-card in To Do too.
   expect(await ops.queryReady({ workspaceId: 'upgrade' })).toMatchObject({ total: 2, cards: [{ id: 'UPG-001' }, { id: 'UPG-002' }] })
 
-  const parent = JSON.parse(await kanbo(['card', 'get', '1', '--include', 'comments,subCards,history', '--json']))
+  const parent = await tool('kanbo_card_get', { card: '1', include: ['comments', 'subCards', 'history'] })
   expect(parent).toMatchObject({
     id: 'UPG-001',
     title: 'Settings page',
@@ -107,16 +113,16 @@ async function expectBoardReadsAsWritten(store: BoardStore, kanbo: (argv: string
       { field: 'priority', from: 'none', to: 'high' },
     ],
   })
-  const running = JSON.parse(await kanbo(['card', 'get', 'UPG-3', '--include', 'runs,history', '--json']))
+  const running = await tool('kanbo_card_get', { card: 'UPG-3', include: ['runs', 'history'] })
   expect(running).toMatchObject({
     id: 'UPG-003',
     statusLine: 'writing tests',
     runs: [{ id: 'run-going', state: 'running', branch: 'kanbo/upg-003' }],
     history: [{ field: 'statusLine', to: 'writing tests' }],
   })
-  const finished = JSON.parse(await kanbo(['card', 'get', 'UPG-005', '--include', 'runs', '--json']))
+  const finished = await tool('kanbo_card_get', { card: 'UPG-005', include: ['runs'] })
   expect(finished.runs).toMatchObject([{ id: 'run-done', state: 'finished', endedAt: 1190 }])
-  const waiting = JSON.parse(await kanbo(['card', 'get', 'UPG-004', '--json']))
+  const waiting = await tool('kanbo_card_get', { card: 'UPG-004' })
   expect(waiting).toMatchObject({ waitingFor: 'human', statusLine: 'done, please check', commentCount: 1 })
 }
 
@@ -152,9 +158,40 @@ describe('a board made by kanbo 0.2.1', () => {
     return printed.join('\n')
   }
 
+  /** An agent's call of one MCP tool on the project's board, and what it answered, parsed. */
+  async function tool(name: string, args: Record<string, unknown>): Promise<any> {
+    const board = await openMcpBoard({ actor: { kind: 'external', id: 'tester' } })
+    const server = createKanboMcpServer(board, { includeRunTools: true })
+    const [clientChannel, serverChannel] = InMemoryTransport.createLinkedPair()
+    const client = new Client({ name: 'upgrade-test', version: '0.0.0' })
+    await Promise.all([client.connect(clientChannel), server.connect(serverChannel)])
+    try {
+      const result = await client.callTool({ name, arguments: args })
+      const text = (result.content as { text: string }[]).map(part => part.text).join('\n')
+      expect(result.isError, text).toBeFalsy()
+      return JSON.parse(text)
+    }
+    finally {
+      await client.close()
+      await board.close()
+    }
+  }
+
   /** The cards this build lists, with the fields a person reads. */
   async function listCards(): Promise<unknown> {
-    return JSON.parse(await kanbo(['card', 'list', '--json', 'id,title,column']))
+    const sections = JSON.parse(await kanbo(['board', '--json'])) as { cards: { id: string, title: string, column: string }[] }[]
+    return sections.flatMap(section => section.cards).map(({ id, title, column }) => ({ id, title, column }))
+  }
+
+  /** A card written the way a person's terminal files it, through the board operations. */
+  async function writeCard(title: string, column: string): Promise<void> {
+    const session = await openBoardSession({}, 'write')
+    try {
+      await session.ops.createCard({ workspace: session.workspace, title, statusName: column }, createPlacementActor())
+    }
+    finally {
+      await session.close()
+    }
   }
 
   it('as a board file of the project\'s own', async () => {
@@ -178,17 +215,17 @@ describe('a board made by kanbo 0.2.1', () => {
     })
 
     // 0.5.0 added columns to issue_statuses: a write to the 0.2.1 board asks for kanbo migrate first.
-    await expect(kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema', '--column', 'backlog']))
+    await expect(writeCard('Written on the 0.2.1 schema', 'backlog'))
       .rejects
       .toThrowError(expect.objectContaining({ exitCode: 3 }))
     await kanbo(['migrate'])
     await kanbo(['columns', 'add-standard'])
-    await kanbo(['card', 'create', '--title', 'Written after kanbo migrate', '--column', 'to_do'])
+    await writeCard('Written after kanbo migrate', 'to_do')
 
     expect(await listCards()).toEqual([
       { id: 'UPG-001', title: 'Written after kanbo migrate', column: 'To Do' },
     ])
-    expect(JSON.parse(await kanbo(['ready', '--json', 'id']))).toEqual([{ id: 'UPG-001' }])
+    expect((await tool('kanbo_ready', {})).cards.map((card: { id: string }) => ({ id: card.id }))).toEqual([{ id: 'UPG-001' }])
   })
 
   it('as a shared Postgres board', async () => {
@@ -213,12 +250,12 @@ describe('a board made by kanbo 0.2.1', () => {
         identifier: 'UPG',
       })
 
-      await expect(kanbo(['card', 'create', '--title', 'Written on the 0.2.1 schema', '--column', 'backlog']))
+      await expect(writeCard('Written on the 0.2.1 schema', 'backlog'))
         .rejects
         .toThrowError(expect.objectContaining({ exitCode: 3 }))
       await kanbo(['migrate'])
       await kanbo(['columns', 'add-standard'])
-      await kanbo(['card', 'create', '--title', 'Written after kanbo migrate', '--column', 'to_do'])
+      await writeCard('Written after kanbo migrate', 'to_do')
 
       expect(await listCards()).toEqual([
         { id: 'UPG-001', title: 'Written after kanbo migrate', column: 'To Do' },
@@ -249,7 +286,7 @@ describe('a board made by kanbo 0.2.1', () => {
 
     const board = await openBoardDatabase(path)
     try {
-      await expectBoardReadsAsWritten(createSqliteBoardStore({ database: () => board.database }), kanbo)
+      await expectBoardReadsAsWritten(createSqliteBoardStore({ database: () => board.database }), tool)
     }
     finally {
       board.close()
@@ -276,7 +313,7 @@ describe('a board made by kanbo 0.2.1', () => {
       // has brought it forward, and migrating keeps every row 0.2.1 wrote.
       await kanbo(['migrate'])
 
-      await expectBoardReadsAsWritten(createPostgresBoardStore({ database }), kanbo)
+      await expectBoardReadsAsWritten(createPostgresBoardStore({ database }), tool)
     }
     finally {
       await client.close()

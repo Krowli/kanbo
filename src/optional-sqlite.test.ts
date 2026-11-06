@@ -92,10 +92,8 @@ function withoutBetterSqlite3(args: string[]): string {
 }
 
 describe.skipIf(!built)('the library and the binary without better-sqlite3', () => {
-  it('runs kanbo capabilities --json, which opens no board at all', () => {
-    const printed = withoutBetterSqlite3([join(dist, 'cli.cjs'), 'capabilities', '--json'])
-
-    expect(JSON.parse(printed)).toEqual(expect.objectContaining({ package: expect.objectContaining({ name: 'kanbo' }) }))
+  it('runs kanbo roles print, which opens no board at all', () => {
+    expect(withoutBetterSqlite3([join(dist, 'cli.cjs'), 'roles', 'print'])).toContain('kanban_agent')
   })
 
   it('prints the binary\'s own help rather than a module-resolution stack', () => {

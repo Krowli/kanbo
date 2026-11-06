@@ -10,7 +10,8 @@ import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import { markBoardFileOwnedByKanbo } from '../sqlite/open-database'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
-import { registerCardCommands } from './commands/card'
+import { registerApproveCommand } from './commands/approve'
+import { registerBoardCommand } from './commands/board'
 import { FILE_SCHEMA_OUTDATED_MESSAGE, SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
 
 const WORKSPACE: BoardWorkspaceIdentity = { id: 'workspace', identifier: 'WOR', name: 'Workspace' }
@@ -52,7 +53,8 @@ describe('a board file older than this build', () => {
       printed.push(String(line))
     })
     const program = new Command().exitOverride()
-    registerCardCommands(program)
+    registerBoardCommand(program)
+    registerApproveCommand(program)
     await program.parseAsync([...argv, '--db', board.path, '--workspace', WORKSPACE.id], { from: 'user' })
     return printed
   }
@@ -62,7 +64,7 @@ describe('a board file older than this build', () => {
     ageTheDatabase()
 
     const refusal = expect.objectContaining({ exitCode: 3, message: SCHEMA_OUTDATED_MESSAGE })
-    await expect(run(['card', 'move', card.id, 'in_progress'])).rejects.toThrowError(refusal)
+    await expect(run(['approve', card.id])).rejects.toThrowError(refusal)
     expect((await store.issues.findById(card.id))?.statusId).toBe(card.statusId)
   })
 
@@ -70,20 +72,20 @@ describe('a board file older than this build', () => {
     await createCard(store, { workspace: WORKSPACE, title: 'Card', statusName: 'To Do' }, USER)
     ageTheDatabase()
 
-    expect((await run(['card', 'list'])).join('\n')).toContain('Card')
+    expect((await run(['board'])).join('\n')).toContain('Card')
   })
 
   it('refuses a read the file lacks a column for with the sentence a write gets, not the driver\'s', async () => {
     await createCard(store, { workspace: WORKSPACE, title: 'Card', statusName: 'To Do' }, USER)
     dropTheNewestColumns()
 
-    await expect(run(['card', 'list'])).rejects.toThrowError(expect.objectContaining({ exitCode: 3, message: SCHEMA_OUTDATED_MESSAGE }))
+    await expect(run(['board'])).rejects.toThrowError(expect.objectContaining({ exitCode: 3, message: SCHEMA_OUTDATED_MESSAGE }))
   })
 
   it('names kanbo migrate when the file a migration behind is kanbo\'s own', async () => {
     markBoardFileOwnedByKanbo(board.database)
     dropTheNewestColumns()
 
-    await expect(run(['card', 'list'])).rejects.toThrowError(expect.objectContaining({ exitCode: 3, message: FILE_SCHEMA_OUTDATED_MESSAGE }))
+    await expect(run(['board'])).rejects.toThrowError(expect.objectContaining({ exitCode: 3, message: FILE_SCHEMA_OUTDATED_MESSAGE }))
   })
 })

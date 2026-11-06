@@ -6,13 +6,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { BoardStore } from '../board-store'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { createBoardOps } from '../ops'
+import { waitApproval } from '../ops/cards'
 import { ensureDefaultColumns } from '../ops/columns'
 import type { BoardActor } from '../ops/types'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import { registerBoardCommand } from './commands/board'
-import { registerCardCommands } from './commands/card'
+import { registerApproveCommand } from './commands/approve'
 import { describeFailure } from './failure'
 import { displayWidth } from './terminal-text'
 
@@ -84,7 +85,7 @@ describe('kanbo board', () => {
   async function kanbo(...args: string[]): Promise<unknown> {
     const program = new Command().exitOverride()
     registerBoardCommand(program)
-    registerCardCommands(program)
+    registerApproveCommand(program)
     return await program
       .parseAsync([...args, '--db', board.path, '--workspace', WORKSPACE.id], { from: 'user' })
       .then(() => null, (error: unknown) => error)
@@ -188,17 +189,20 @@ describe('kanbo board', () => {
     expect(shipLine).not.toMatch(/\u200D…/)
   })
 
-  it('prints no escape sequence a card carries in card list and card get', async () => {
+  it('prints no escape sequence a card carries in the board and in what approve shows of it', async () => {
+    for (const name of ['KANBO_ACTOR_KIND', 'CLAUDECODE', 'GEMINI_CLI', 'CURSOR_AGENT', 'CODEX_THREAD_ID']) {
+      vi.stubEnv(name, undefined)
+    }
     const card = await createBoardOps(store).createCard({
       workspace: WORKSPACE,
       title: 'Evil \u001B]0;pwned\u0007title',
       description: 'first\n\u001B[2Jsecond',
       statusName: 'To Do',
     }, USER)
-    await createBoardOps(store).setStatusLine(card.id, 'on \u001B[31mit', AGENT)
+    await waitApproval(store, card.id, { statusLine: 'on \u001B[31mit' }, AGENT)
 
-    expect(await kanbo('card', 'list')).toBeNull()
-    expect(await kanbo('card', 'get', card.id)).toBeNull()
+    expect(await kanbo('board')).toBeNull()
+    expect(await kanbo('approve', card.id)).toBeNull()
 
     expect(output()).not.toMatch(/[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/)
     expect(output()).toContain('Evil title')

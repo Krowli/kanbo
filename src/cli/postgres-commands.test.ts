@@ -18,9 +18,11 @@ import { BOARD_AGENT_ROLE, BOARD_PERSON_ROLE } from '../postgres/roles.sql'
 import { boardPostgresSchema } from '../postgres/schema'
 import type { TestPostgresDatabase } from '../testing/postgres-database'
 import { createTestPostgresDatabase } from '../testing/postgres-database'
+import { createPlacementActor } from './actor'
 import { writeBinding } from './binding'
+import { openBoardSession } from './command'
 import { registerApproveCommand } from './commands/approve'
-import { registerCardCommands } from './commands/card'
+import { registerBoardCommand } from './commands/board'
 import { registerInitCommand } from './commands/init'
 import { BOARD_FILE_NOT_MIGRATED_MESSAGE, registerMigrateCommand } from './commands/migrate'
 import { registerRolesCommands, ROLES_NEED_A_DATABASE_MESSAGE } from './commands/roles'
@@ -130,6 +132,23 @@ describe('the command line on an external board', () => {
     return await runExactly([...argv, '--database-url', DATABASE_URL])
   }
 
+  /** The cards on the board, by key, title and column — what `kanbo board --json` prints. */
+  async function cardsOnBoard(): Promise<{ id: string, title: string, column: string | null, columnSlug: string | null }[]> {
+    const sections = JSON.parse(await run(['board', '--json'])) as { cards: { id: string, title: string, column: string | null, columnSlug: string | null }[] }[]
+    return sections.flatMap(section => section.cards).map(({ id, title, column, columnSlug }) => ({ id, title, column, columnSlug }))
+  }
+
+  /** The card commands' work, through the board operations: on the shared board, as a person's terminal files it. */
+  async function onTheBoard<T>(body: (session: Awaited<ReturnType<typeof openBoardSession>>) => Promise<T>): Promise<T> {
+    const session = await openBoardSession({ databaseUrl: DATABASE_URL }, 'write')
+    try {
+      return await body(session)
+    }
+    finally {
+      await session.close()
+    }
+  }
+
   /** The same, with only the arguments given — for the commands that must refuse a board file. */
   async function runExactly(argv: string[]): Promise<string> {
     const printed: string[] = []
@@ -137,7 +156,7 @@ describe('the command line on an external board', () => {
       printed.push(String(line))
     })
     const program = new Command().exitOverride()
-    registerCardCommands(program)
+    registerBoardCommand(program)
     registerInitCommand(program)
     registerApproveCommand(program)
     registerMigrateCommand(program)
@@ -149,22 +168,20 @@ describe('the command line on an external board', () => {
   it('numbers a card with the key the binding says, and reads it back', async () => {
     await boardWithSchema()
 
-    await run(['card', 'create', '--title', 'First card'])
-    const printed = await run(['card', 'list', '--json', 'id,title,column'])
+    await onTheBoard(async session => await session.ops.createCard({ workspace: session.workspace, title: 'First card' }, createPlacementActor()))
 
-    expect(JSON.parse(printed)).toEqual([{ id: 'WOR-001', title: 'First card', column: 'Backlog' }])
+    expect((await cardsOnBoard()).map(({ id, title, column }) => ({ id, title, column }))).toEqual([{ id: 'WOR-001', title: 'First card', column: 'Backlog' }])
     expect(openedUrls).toEqual([DATABASE_URL, DATABASE_URL])
   })
 
   it('moves a card, and tells every reader the board changed', async () => {
     const store = await boardWithSchema()
-    await run(['card', 'create', '--title', 'First card'])
+    await onTheBoard(async session => await session.ops.createCard({ workspace: session.workspace, title: 'First card' }, createPlacementActor()))
     const before = await readChangeSeq(store)
 
-    await run(['card', 'move', 'WOR-001', 'in_progress'])
+    await onTheBoard(async session => await session.ops.moveCard('WOR-001', 'in_progress', createPlacementActor()))
 
-    const printed = await run(['card', 'get', 'WOR-1', '--json', 'columnSlug'])
-    expect(JSON.parse(printed)).toEqual({ columnSlug: 'in_progress' })
+    expect((await cardsOnBoard()).map(({ columnSlug }) => columnSlug)).toEqual(['in_progress'])
     expect(await readChangeSeq(store)).toBe(before + 1)
   })
 
@@ -200,8 +217,8 @@ describe('the command line on an external board', () => {
     bindProject()
 
     const refusal = expect.objectContaining({ exitCode: 3, message: SCHEMA_NOT_INSTALLED_MESSAGE })
-    await expect(run(['card', 'list'])).rejects.toThrowError(refusal)
-    await expect(run(['card', 'create', '--title', 'Card'])).rejects.toThrowError(refusal)
+    await expect(run(['board'])).rejects.toThrowError(refusal)
+    await expect(onTheBoard(async session => await session.ops.createCard({ workspace: session.workspace, title: 'Card' }, createPlacementActor()))).rejects.toThrowError(refusal)
   })
 
   it('creates the board with migrate, and says the same thing the second time', async () => {
@@ -217,7 +234,7 @@ describe('the command line on an external board', () => {
     // Never the password, in the one line that names the board it migrated.
     expect(first).toContain('postgres://user:***@board.example:5432/board')
     expect(first).not.toContain('secret')
-    expect(JSON.parse(await run(['card', 'list', '--json', 'id']))).toEqual([])
+    expect(await cardsOnBoard()).toEqual([])
   })
 
   it('init --migrate creates the tables, puts the chosen columns on the board, and its first card in To Do', async () => {
@@ -234,7 +251,7 @@ describe('the command line on an external board', () => {
     expect(printed).toContain('First card: WEA-001 Calibrate the sensors')
     const store = createPostgresBoardStore({ database: board.database })
     expect((await store.statuses.listByWorkspace('weather')).map(column => column.name)).toEqual(['To Do', 'In Progress', 'Done'])
-    expect(JSON.parse(await run(['card', 'list', '--json', 'id,column']))).toEqual([{ id: 'WEA-001', column: 'To Do' }])
+    expect((await cardsOnBoard()).map(({ id, column }) => ({ id, column }))).toEqual([{ id: 'WEA-001', column: 'To Do' }])
   })
 
   it('refuses both of its own commands on a board file, which is a host app\'s to look after', async () => {
@@ -269,7 +286,7 @@ describe('the command line on an external board', () => {
     // No binding, no --workspace, no KANBO_WORKSPACE_ID: an external board
     // holds no `workspaces` table to look the answer up in.
     const refusal = expect.objectContaining({ exitCode: 2, message: EXTERNAL_WORKSPACE_NOT_RESOLVED_MESSAGE })
-    await expect(run(['card', 'list'])).rejects.toThrowError(refusal)
+    await expect(run(['board'])).rejects.toThrowError(refusal)
   })
 
   it('refuses to number a card under a key the binding does not give', async () => {
@@ -278,12 +295,12 @@ describe('the command line on an external board', () => {
     bindProject({ identifier: null })
 
     const refusal = expect.objectContaining({ exitCode: 2, message: EXTERNAL_IDENTIFIER_NOT_RESOLVED_MESSAGE })
-    await expect(run(['card', 'list'])).rejects.toThrowError(refusal)
+    await expect(run(['board'])).rejects.toThrowError(refusal)
 
     // And the binding's key is only good for the workspace the binding is
     // about: another one would print this project's prefix on its cards.
     bindProject()
-    await expect(run(['card', 'list', '--workspace', 'another-workspace'])).rejects.toThrowError(refusal)
+    await expect(run(['board', '--workspace', 'another-workspace'])).rejects.toThrowError(refusal)
   })
 
   it('migrates as the owner even from an agent\'s shell, because the agent may not create a table', async () => {

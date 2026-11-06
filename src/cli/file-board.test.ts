@@ -16,12 +16,12 @@ import { migrateBoardFile } from '../sqlite/migrate'
 import { assertBoardSchema, markBoardFileOwnedByKanbo, openBoardDatabase } from '../sqlite/open-database'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { seedHostWorkspace } from '../testing/board-database'
-import { describeApprovalRefusal } from './actor'
+import { createPlacementActor, describeApprovalRefusal } from './actor'
 import { writeBinding } from './binding'
 import { registerApproveCommand } from './commands/approve'
-import { registerCardCommands } from './commands/card'
+import { registerBoardCommand } from './commands/board'
+import { openBoardSession } from './command'
 import { BOARD_FILE_NOT_MIGRATED_MESSAGE, registerMigrateCommand } from './commands/migrate'
-import { registerReadyCommand } from './commands/ready'
 import { registerRolesCommands, ROLES_NEED_A_DATABASE_MESSAGE } from './commands/roles'
 import { FILE_SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
 import { FILE_IDENTIFIER_NOT_RESOLVED_MESSAGE, FILE_WORKSPACE_NOT_RESOLVED_MESSAGE } from './workspace'
@@ -96,13 +96,29 @@ describe('the command line on a board file of this project\'s own', () => {
       printed.push(String(line))
     })
     const program = new Command().exitOverride()
-    registerCardCommands(program)
-    registerReadyCommand(program)
+    registerBoardCommand(program)
     registerApproveCommand(program)
     registerMigrateCommand(program)
     registerRolesCommands(program)
     await program.parseAsync(argv, { from: 'user' })
     return printed.join('\n')
+  }
+
+  /** The cards on the board, by key, title and column — what `kanbo board --json` prints. */
+  async function cardsOnBoard(): Promise<{ id: string, title: string, columnSlug: string | null }[]> {
+    const sections = JSON.parse(await run(['board', '--json'])) as { cards: { id: string, title: string, columnSlug: string | null }[] }[]
+    return sections.flatMap(section => section.cards).map(({ id, title, columnSlug }) => ({ id, title, columnSlug }))
+  }
+
+  /** What the card commands did before `card create` and `card move` went: the board operations, on the file, as a person's terminal files them. */
+  async function onTheBoard<T>(body: (session: Awaited<ReturnType<typeof openBoardSession>>) => Promise<T>): Promise<T> {
+    const session = await openBoardSession({ db: board.path }, 'write')
+    try {
+      return await body(session)
+    }
+    finally {
+      await session.close()
+    }
   }
 
   /** Every command below resolves the workspace from the binding, the way an own file always does. */
@@ -116,7 +132,7 @@ describe('the command line on a board file of this project\'s own', () => {
     // every row to a host app's workspace id and rewrote the binding to say so.
     // Nothing here was told about any of it - the binding is where the answer
     // has always come from - and the same cards have to come back.
-    await run(['card', 'create', '--title', 'Made before the app saw it'])
+    await onTheBoard(async session => await session.ops.createCard({ workspace: session.workspace, title: 'Made before the app saw it', statusName: 'To Do' }, createPlacementActor()))
 
     const hostWorkspaceId = '6f0c2a1e-2f4b-4f5e-9c3a-0d7d1b8e4c21'
     for (const table of ['issue_statuses', 'issue_milestones', 'issues']) {
@@ -132,31 +148,21 @@ describe('the command line on a board file of this project\'s own', () => {
       identifier: 'BST',
     })
 
-    const printed = await run(['card', 'list', '--json', 'id,title'])
-
-    expect(JSON.parse(printed)).toEqual([{ id: 'WOR-001', title: 'Made before the app saw it' }])
+    expect((await cardsOnBoard()).map(({ id, title }) => ({ id, title }))).toEqual([{ id: 'WOR-001', title: 'Made before the app saw it' }])
     // The card keeps the key it was printed under: comments, runs and links all
     // point at it, and a prefix is not worth breaking them for.
-    await run(['card', 'move', 'WOR-001', 'in_progress'])
-    expect(JSON.parse(await run(['card', 'list', '--json', 'id,columnSlug'])))
-      .toEqual([{ id: 'WOR-001', columnSlug: 'in_progress' }])
+    await onTheBoard(async session => await session.ops.moveCard('WOR-001', 'in_progress', createPlacementActor()))
+    expect((await cardsOnBoard()).map(({ id, columnSlug }) => ({ id, columnSlug }))).toEqual([{ id: 'WOR-001', columnSlug: 'in_progress' }])
   })
 
-  it('creates, lists and moves cards under the key the binding gives, with no workspaces table in sight', async () => {
-    await run(['card', 'create', '--title', 'First card'])
+  it('creates, shows and moves cards under the key the binding gives, with no workspaces table in sight', async () => {
+    await onTheBoard(async session => await session.ops.createCard({ workspace: session.workspace, title: 'First card', statusName: 'To Do' }, createPlacementActor()))
     const before = await readChangeSeq(store)
 
-    await run(['card', 'move', 'WOR-001', 'in_progress'])
+    await onTheBoard(async session => await session.ops.moveCard('WOR-001', 'in_progress', createPlacementActor()))
 
-    const printed = await run(['card', 'list', '--json', 'id,title,columnSlug'])
-    expect(JSON.parse(printed)).toEqual([{ id: 'WOR-001', title: 'First card', columnSlug: 'in_progress' }])
+    expect(await cardsOnBoard()).toEqual([{ id: 'WOR-001', title: 'First card', columnSlug: 'in_progress' }])
     expect(await readChangeSeq(store)).toBe(before + 1)
-  })
-
-  it('offers a card nobody has started through kanbo ready', async () => {
-    const card = await createCard(store, { workspace: WORKSPACE, title: 'Ready card', statusName: 'To Do' }, USER)
-
-    expect(await run(['ready'])).toContain(card.id)
   })
 
   it('refuses an approval in a shell started for an agent, and leaves the card waiting', async () => {
@@ -219,7 +225,7 @@ describe('the command line on a board file of this project\'s own', () => {
     board.database.run(sql`update kanban_meta set revision = 0 where key = 'schema_epoch'`)
 
     const refusal = expect.objectContaining({ exitCode: 3, message: FILE_SCHEMA_OUTDATED_MESSAGE })
-    await expect(run(['card', 'move', card.id, 'in_progress'])).rejects.toThrowError(refusal)
+    await expect(run(['approve', card.id])).rejects.toThrowError(refusal)
     expect((await store.issues.findById(card.id))?.statusId).toBe(card.statusId)
   })
 
@@ -237,7 +243,7 @@ describe('the command line on a board file of this project\'s own', () => {
     vi.spyOn(process, 'cwd').mockReturnValue(strayDir)
 
     const refusal = expect.objectContaining({ exitCode: 2, message: FILE_WORKSPACE_NOT_RESOLVED_MESSAGE })
-    await expect(runExactly(['card', 'list', '--db', strayPath])).rejects.toThrowError(refusal)
+    await expect(runExactly(['board', '--db', strayPath])).rejects.toThrowError(refusal)
 
     rmSync(strayDir, { force: true, recursive: true })
   })
@@ -252,6 +258,6 @@ describe('the command line on a board file of this project\'s own', () => {
     })
 
     const refusal = expect.objectContaining({ exitCode: 2, message: FILE_IDENTIFIER_NOT_RESOLVED_MESSAGE })
-    await expect(run(['card', 'list'])).rejects.toThrowError(refusal)
+    await expect(run(['board'])).rejects.toThrowError(refusal)
   })
 })

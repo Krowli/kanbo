@@ -60,15 +60,14 @@ describe.skipIf(!built)('the kanbo binary copied without its package', () => {
     expect(runCopied(['--version']).trim()).toBe(packageVersion)
   })
 
-  it('serves the capabilities manifest with that version', () => {
-    const manifest = JSON.parse(runCopied(['capabilities', '--json'])) as { package: { version: string } }
-    expect(manifest.package.version).toBe(packageVersion)
+  it('prints the role SQL, which opens no board at all', () => {
+    expect(runCopied(['roles', 'print'])).toContain('kanban_agent')
   })
 
   it('serves the board page and its built assets', async () => {
     const project = join(copy, 'project')
     mkdirSync(project)
-    runCopied(['init', '--file', '--yes', '--instructions', 'none'], project)
+    runCopied(['init', '--file', '--yes'], project)
     const server = spawn(process.execPath, [join(copy, 'dist', 'cli.cjs'), 'serve', '--port', '0'], {
       cwd: project,
       env: { ...copiedEnvironment(), KANBO_SERVE_TOKEN: 'dist-alone-token' },

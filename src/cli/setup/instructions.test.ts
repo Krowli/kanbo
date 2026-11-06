@@ -2,13 +2,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
-import { Command } from 'commander'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PromptDriver } from '../../testing/prompt-driver'
 import { createPromptDriver } from '../../testing/prompt-driver'
-import { registerInitCommand } from '../commands/init'
-import { registerPrimeCommand } from '../commands/prime'
 import { setUiForTests } from '../ui/ui'
 import {
   classifyBlock,
@@ -23,10 +20,10 @@ import {
 } from './instructions'
 import { LEGACY_BLOCK_BODIES } from './legacy-blocks'
 
-/** A project's `CLAUDE.md` exactly as `kanbo init --instructions claude` 0.2.1 left it. */
+/** A project's `CLAUDE.md` exactly as kanbo 0.2.1 left it. */
 const CLAUDE_MD_0_2_1 = readFileSync(join(import.meta.dirname, 'fixtures', 'claude-md-0.2.1.md'), 'utf8')
 
-/** The same file as `kanbo init --instructions claude` 0.3.0–0.4.0 left it: block v2, with its hash. */
+/** The same file as kanbo 0.3.0–0.4.0 left it: block v2, with its hash. */
 const CLAUDE_MD_0_4_0 = readFileSync(join(import.meta.dirname, 'fixtures', 'claude-md-0.4.0.md'), 'utf8')
 
 /** The same file after the person changed a word inside the current block. */
@@ -49,27 +46,6 @@ describe('the kanbo instruction block', () => {
     vi.restoreAllMocks()
     rmSync(projectDir, { force: true, recursive: true })
   })
-
-  /** Run kanbo commands in the project, and hand back what they printed on stdout and stderr. */
-  async function kanbo(...argv: string[]): Promise<{ out: string, err: string }> {
-    const out: string[] = []
-    const err: string[] = []
-    vi.spyOn(console, 'log').mockImplementation((line: unknown) => {
-      out.push(String(line))
-    })
-    vi.spyOn(console, 'error').mockImplementation((line: unknown) => {
-      err.push(String(line))
-    })
-    const program = new Command().exitOverride()
-    registerInitCommand(program)
-    registerPrimeCommand(program)
-    await program.parseAsync(argv, { from: 'user' })
-    return { out: out.join('\n'), err: err.join('\n') }
-  }
-
-  function claudeMd(): string {
-    return readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')
-  }
 
   it('is a short pointer with a version and hash on its marker', () => {
     expect(INSTRUCTION_BLOCK).toMatch(/^<!-- KANBO_START v3 h=[0-9a-f]{8} -->\n/)
@@ -174,21 +150,5 @@ describe('the kanbo instruction block', () => {
     it('removes it when the person says yes', async () => {
       expect(await remove(['down', 'enter'])).toBe('# Mine\n')
     })
-  })
-
-  it('kanbo prime on the command line ends with the commands', async () => {
-    await kanbo('init', '--file', '--yes')
-
-    const { out } = await kanbo('prime')
-
-    expect(out).toContain('How this board works:')
-    expect(out).toContain('Commands (a card is named by its id')
-    expect(out).toContain('`kanbo card move TST-5 in_progress`')
-    // The arguments agents got wrong, written out, so they need no `kanbo capabilities` first.
-    expect(out).toContain('--content "')
-    expect(out).toContain('--state finished')
-    // A card created at the wrong level is moved, not made again.
-    expect(out).toContain('`kanbo card update TST-7 --parent TST-5`')
-    expect(out).toContain('`--parent none`')
   })
 })

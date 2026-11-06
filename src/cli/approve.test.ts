@@ -5,16 +5,14 @@ import type { BoardStore } from '../board-store'
 import type { BoardWorkspaceIdentity } from '../domain/numbering'
 import { createCard, waitApproval } from '../ops/cards'
 import { readChangeSeq } from '../ops/change-seq'
-import { startRun } from '../ops/runs'
 import { createMilestone } from '../ops/sprints'
 import type { BoardActor } from '../ops/types'
 import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
-import { describeApprovalRefusal, describePersonOverride, describeReturnRefusal, describeRunSessionRefRefusal, describeSprintCloseRefusal } from './actor'
+import { describeApprovalRefusal, describePersonOverride, describeReturnRefusal, describeSprintCloseRefusal } from './actor'
 import { registerApproveCommand } from './commands/approve'
 import { registerReturnCommand } from './commands/return'
-import { registerRunCommands } from './commands/run'
 import { registerSprintCommands } from './commands/sprint'
 
 const WORKSPACE: BoardWorkspaceIdentity = { id: 'workspace', identifier: 'WOR', name: 'Workspace' }
@@ -61,7 +59,6 @@ describe('approving and returning from a terminal', () => {
     const program = new Command().exitOverride()
     registerApproveCommand(program)
     registerReturnCommand(program)
-    registerRunCommands(program)
     registerSprintCommands(program)
     await program.parseAsync(typed(argv), { from: 'user' })
   }
@@ -193,34 +190,5 @@ describe('approving and returning from a terminal', () => {
 
     await expect(run(['sprint', 'close', theirs.id])).rejects.toThrowError(expect.objectContaining({ message: expect.stringContaining('issue_milestone_not_found') }))
     expect((await store.milestones.findById(theirs.id))?.status).toBe('open')
-  })
-  /** A run that named the wrong log of its own. */
-  async function createRunWithRef() {
-    const card = await createCard(store, { workspace: WORKSPACE, title: 'Card' }, AGENT)
-    return await startRun(store, card.id, { agentName: 'Codex', externalSessionRef: 'codex:wrong' }, AGENT)
-  }
-
-  it.each(AGENT_SHELL)('refuses clearing or replacing a run\'s log in a shell started for an agent (%s)', async (variable) => {
-    const started = await createRunWithRef()
-    const before = await readChangeSeq(store)
-    vi.stubEnv(variable, variable === 'KANBO_ACTOR_KIND' ? 'agent' : 'session-1')
-
-    const clear = ['run', 'clear-session', started.id]
-    const replace = ['run', 'attach-session', started.id, 'claude:right', '--replace']
-    await expect(run(clear)).rejects.toThrowError(refusalOf(describeRunSessionRefRefusal, clear))
-    await expect(run(replace)).rejects.toThrowError(refusalOf(describeRunSessionRefRefusal, replace))
-
-    expect((await store.runs.findById(started.id))?.externalSessionRef).toBe('codex:wrong')
-    expect(await readChangeSeq(store)).toBe(before)
-  })
-
-  it('replaces and clears a run\'s log in a person\'s own terminal', async () => {
-    const started = await createRunWithRef()
-
-    await run(['run', 'attach-session', started.id, 'claude:right', '--replace'])
-    expect((await store.runs.findById(started.id))?.externalSessionRef).toBe('claude:right')
-
-    await run(['run', 'clear-session', started.id])
-    expect((await store.runs.findById(started.id))?.externalSessionRef).toBeNull()
   })
 })
