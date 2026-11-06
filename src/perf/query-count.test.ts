@@ -169,6 +169,7 @@ async function measureSurfaces(engine: Engine, count: number, projectDir: string
       ])
     })
     await measure('ops board metrics', async () => await ops.boardMetrics({ workspaceIds: [SEED_WORKSPACE.id], from: 0, to: 2_000_000_000 }))
+    await measure('ops board metrics, 2 workspaces', async () => await ops.boardMetrics({ workspaceIds: [SEED_WORKSPACE.id, 'second-workspace'], from: 0, to: 2_000_000_000 }))
 
     // The MCP tools, through a client on the other end of an in-memory pipe.
     const transport = await createDbTransport({
@@ -326,6 +327,7 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
     'cli board': 7,
     'ops card get + comments': 5,
     'ops board metrics': 6,
+    'ops board metrics, 2 workspaces': 9,
     'mcp kanbo_card_list': 5,
     'mcp kanbo_card_list, filtered': 6,
     'mcp kanbo_ready': 5,
@@ -346,6 +348,7 @@ const QUERY_BUDGETS: Record<Engine, Counts> = {
     'cli board': 6,
     'ops card get + comments': 5,
     'ops board metrics': 6,
+    'ops board metrics, 2 workspaces': 9,
     'mcp kanbo_card_list': 5,
     'mcp kanbo_card_list, filtered': 6,
     'mcp kanbo_ready': 5,

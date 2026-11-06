@@ -11,10 +11,10 @@ const APPROVAL_KINDS = ['system.approved'] as const
 const FROM_THE_FIRST_CHANGE = 0
 
 /**
- * Every row the metrics of these workspaces are computed from, in a fixed
- * number of statements whatever the board holds: per workspace its columns,
- * milestones and cards; for all of them at once the column changes (through
- * the `(field, created_at)` index), the runs and the approvals.
+ * Every row the metrics of these workspaces are computed from: three
+ * statements per workspace (columns, milestones, cards) plus three across all
+ * of them (column changes through the `(field, created_at)` index, runs,
+ * approvals); none per card.
  *
  * The rows are read and the metrics computed in TypeScript rather than in SQL
  * (ruling R012-1): a board is thousands of rows, not millions; percentiles, ISO
@@ -28,6 +28,7 @@ export async function readBoardMetricsHistory(store: BoardStore, workspaceIds: r
     return { statuses: [], milestones: [], cards: [], entries: [], runs: [], approvals: [] }
   }
   const perWorkspace = async <T>(read: (workspaceId: string) => Promise<T[]>): Promise<T[]> => (await Promise.all(ids.map(read))).flat()
+  // Separate statements, not one snapshot: a card moved between them can have one stretch off until the next read.
   const [statuses, milestones, cards, entries, runs, approvals] = await Promise.all([
     perWorkspace(async id => await store.statuses.listByWorkspace(id)),
     perWorkspace(async id => await store.milestones.listByWorkspace(id)),
