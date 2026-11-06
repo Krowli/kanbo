@@ -21,7 +21,7 @@ export interface CardStretch {
  * were made in (ruling R012-5). Moves that do not chain keep the feed's order.
  */
 export function buildCardTimeline(card: Pick<Issue, 'statusId' | 'createdAt'>, entries: readonly ColumnEntry[]): CardStretch[] {
-  const ordered = chainSameSecond(entries.toSorted((left, right) => left.at - right.at))
+  const ordered = chainSameSecond(entries.toSorted((left, right) => left.at - right.at || (left.changeId < right.changeId ? -1 : left.changeId > right.changeId ? 1 : 0)))
   const stretches: CardStretch[] = []
   // Where the first move left from (no column, for a 0.5.0 creation), or where the card is now if it never moved.
   const first = ordered[0]
@@ -50,16 +50,23 @@ function chainSameSecond(entries: readonly ColumnEntry[]): ColumnEntry[] {
     const group = entries.slice(start, end)
     const previous = ordered.at(-1)
     // The first move of a card's history leaves the column no other move of its second entered.
-    let current = previous
-      ? previous.toStatusId
-      : group.find(entry => !group.some(other => other !== entry && other.toStatusId === entry.fromStatusId))?.fromStatusId
+    let current = previous ? previous.toStatusId : headOf(group)?.fromStatusId
     while (group.length > 0) {
-      const next = group.findIndex(entry => entry.fromStatusId === current)
-      const [picked] = group.splice(Math.max(next, 0), 1)
+      let next = group.findIndex(entry => entry.fromStatusId === current)
+      if (next < 0) {
+        // The chain is broken (a move to no column is not in the feed): start again from the head of what is left.
+        next = Math.max(group.findIndex(entry => entry === headOf(group)), 0)
+      }
+      const [picked] = group.splice(next, 1)
       ordered.push(picked!)
       current = picked!.toStatusId
     }
     start = end
   }
   return ordered
+}
+
+/** The move nothing else in the group feeds into. */
+function headOf(group: readonly ColumnEntry[]): ColumnEntry | undefined {
+  return group.find(entry => !group.some(other => other !== entry && other.toStatusId === entry.fromStatusId))
 }

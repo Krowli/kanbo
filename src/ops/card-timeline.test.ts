@@ -59,4 +59,23 @@ describe('a card\'s timeline', () => {
     expect(statusAt(stretches, 199)).toBe('todo')
     expect(statusAt(stretches, 200)).toBe('done')
   })
+
+  it('ends in the column the card is in after a move to no column the feed does not hold', () => {
+    // A→B, a hidden move out of every column, then none→C and C→D in one second, given in either order.
+    const group = [move('y', null, 'C', 200), move('z', 'C', 'D', 200)]
+    for (const sameSecond of [group, group.toReversed()]) {
+      const stretches = buildCardTimeline({ statusId: 'D', createdAt: 50 }, [move('a', 'A', 'B', 100), ...sameSecond])
+
+      expect(stretches.map(stretch => stretch.statusId)).toEqual(['A', 'B', 'C', 'D'])
+    }
+  })
+
+  it('gives the same timeline for a same-second group in any input order', () => {
+    const group = [move('a', 'A', 'B', 200), move('b', 'B', 'C', 200), move('c', 'C', 'D', 200), move('d', 'D', 'E', 200)]
+    const expected = buildCardTimeline({ statusId: 'E', createdAt: 50 }, group)
+    for (const shuffled of [group.toReversed(), [group[2]!, group[0]!, group[3]!, group[1]!], [group[3]!, group[1]!, group[2]!, group[0]!]]) {
+      expect(buildCardTimeline({ statusId: 'E', createdAt: 50 }, shuffled)).toEqual(expected)
+    }
+    expect(expected.map(stretch => stretch.statusId)).toEqual(['A', 'B', 'C', 'D', 'E'])
+  })
 })
