@@ -440,7 +440,8 @@ What the numbers mean:
 
 - **Started**: a card's first move into a `started` column, or its creation when it was created in one. **Finished**: its latest move into a `completed` column, for a card still in one. A card reopened since is not finished.
 - **Cycle time** = finished − started, **lead time** = finished − created, over the cards finished in the range. They are shown as p50 and p85, by nearest rank: p85 of 20 cards is the 17th shortest.
-- **Throughput**: cards finished per ISO week (Monday 00:00 UTC). **In progress**: cards in `started` columns now, against each column's limit (`kanbo column flow`). **Aging**: those cards, oldest first, marked when older than the range's cycle-time p85.
+- **Throughput**: cards finished per ISO week (Monday 00:00 UTC). **In progress**: cards in `started` columns now, against each column's limit (`kanbo columns flow`). **Aging**: those cards, oldest first, marked when older than the range's cycle-time p85.
+- A card moved to no column is not seen leaving its last column (the column-change feed has no "to no column" entry), so the cumulative flow keeps it in that column until it is placed again; WIP reads the card's current column and leaves it out.
 - **Time in column**: the time the finished cards spent in each column before they finished. A column deleted since is left out.
 - **Returns** are moves back to an earlier column that is unstarted or started (To Do, In Progress, In Review on the standard board), by anyone: a person's `kanbo return`, an agent sending a card back, an outside script reopening one. They are split by people, agents and outside writers. A move back into Backlog is not a return. **First pass** = finished cards never returned ÷ finished cards. **Attempts** = runs per finished card.
 - **Canceled** cards (in a `canceled` column now) are counted on their own line and left out of every other number.
