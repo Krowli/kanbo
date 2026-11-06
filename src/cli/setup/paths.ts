@@ -26,7 +26,9 @@ export function codexHome(): string {
 /**
  * Where Claude Code keeps its user files: `$CLAUDE_CONFIG_DIR`, else
  * `~/.claude`. Its documentation says every `~/.claude` path moves there; it
- * does not say `~/.claude.json` does, so that one is not moved here.
+ * does not say `~/.claude.json` does; the MCP file follows the variable
+ * all the same, as `claude mcp add --scope user` writes it there
+ * (`globalMcpConfigPath`).
  */
 export function claudeConfigDir(): string {
   return process.env.CLAUDE_CONFIG_DIR?.trim() || join(homedir(), '.claude')
@@ -48,12 +50,13 @@ export function globalInstructionPath(client: GlobalInstructionClient): string {
 
 /**
  * The user-level MCP configuration of each tool. Claude Code's is
- * `~/.claude.json`, its own state file: kanbo reads it but never writes it —
+ * `.claude.json` in `$CLAUDE_CONFIG_DIR` (else in the home directory), its own
+ * state file: resolved on every call, and kanbo reads it but never writes it —
  * `claude mcp add` and `claude mcp remove` do.
  */
 export function globalMcpConfigPath(client: McpClient): string {
   switch (client) {
-    case 'claude': return join(homedir(), '.claude.json')
+    case 'claude': return join(process.env.CLAUDE_CONFIG_DIR?.trim() || homedir(), '.claude.json')
     case 'codex': return join(codexHome(), 'config.toml')
     case 'cursor': return join(homedir(), '.cursor', 'mcp.json')
   }

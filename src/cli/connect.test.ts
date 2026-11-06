@@ -250,6 +250,36 @@ describe('kanbo connect', () => {
       expect(rows.find(row => row.agent === 'claude')).toMatchObject({ mcp: 'ok', scope: 'user' })
     })
 
+    it('reads Claude Code\'s user file from $CLAUDE_CONFIG_DIR when it is set, as claude mcp add writes it', async () => {
+      const claudeDir = join(root, 'claude-config')
+      mkdirSync(claudeDir)
+      vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
+      writeFileSync(join(claudeDir, '.claude.json'), JSON.stringify({
+        mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: {} } },
+      }))
+
+      const rows = await check('--global')
+
+      expect(rows.find(row => row.agent === 'claude')).toMatchObject({ mcp: 'ok', scope: 'user', connected: true })
+    })
+
+    it('plans no claude mcp add when the entry is already in $CLAUDE_CONFIG_DIR/.claude.json', async () => {
+      const claudeDir = join(root, 'claude-config')
+      mkdirSync(claudeDir)
+      vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
+      writeFileSync(join(claudeDir, '.claude.json'), JSON.stringify({
+        mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: {} } },
+      }))
+      const calls = join(root, 'claude-calls')
+      writeRecordingBin(bin, 'claude', calls)
+      vi.stubEnv('PATH', [bin, dirname(process.execPath)].join(delimiter))
+
+      const printed = await connect('claude', '--yes')
+
+      expect(existsSync(calls)).toBe(false)
+      expect(printed).not.toContain('claude mcp add')
+    })
+
     it('tells a registration that no longer starts from a current one, and lists the files with an old section', async () => {
       writeFileSync(join(projectDir, 'CLAUDE.md'), CLAUDE_MD_0_2_1)
       writeFileSync(join(projectDir, '.mcp.json'), JSON.stringify({
