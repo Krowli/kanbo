@@ -378,13 +378,13 @@ describe('kanbo connect', () => {
       expect(printed).not.toContain('&&')
     })
 
-    it('leaves a v3 block alone: connect keeps it, --remove without --yes keeps it, --remove --yes takes it out', async () => {
-      const newer = `# Mine\n\n${wrapInstructionBlock('## Kanbo board\n\nNewer words.', 3)}\n`
+    it('leaves a v4 block alone: connect keeps it, --remove without --yes keeps it, --remove --yes takes it out', async () => {
+      const newer = `# Mine\n\n${wrapInstructionBlock('## Kanbo board\n\nNewer words.', 4)}\n`
       writeFileSync(join(projectDir, 'CLAUDE.md'), newer)
 
       const printed = await connect('claude', '--no-mcp', '--yes')
       expect(read(projectDir, 'CLAUDE.md')).toBe(newer)
-      expect(printed).toContain('CLAUDE.md: the kanbo section was written by a newer kanbo (v3) — kept. Update kanbo: npm install -g kanbo-cli@latest')
+      expect(printed).toContain('CLAUDE.md: the kanbo section was written by a newer kanbo (v4) — kept. Update kanbo: npm install -g kanbo-cli@latest')
 
       const kept = await connect('claude', '--no-mcp', '--remove', '--dry-run')
       expect(read(projectDir, 'CLAUDE.md')).toBe(newer)

@@ -345,7 +345,7 @@ async function main() {
   const connect = kanbo(['connect', 'claude', '--project', '--yes'])
   const claudeMd = readText(join(project, 'CLAUDE.md'))
   const block = BLOCK_PATTERN.exec(claudeMd)
-  check(block !== null && /(^|\s)v2(\s|$)/.test(block[1]), 'CLAUDE.md has no v2 kanbo block', claudeMd)
+  check(block !== null && /(^|\s)v3(\s|$)/.test(block[1]), 'CLAUDE.md has no v3 kanbo block', claudeMd)
   const mcpJson = JSON.parse(readText(join(project, '.mcp.json')))
   const projectEntry = mcpJson.mcpServers?.kanbo
   check(projectEntry !== undefined, '.mcp.json has no kanbo entry', JSON.stringify(mcpJson, null, 2))
@@ -554,7 +554,7 @@ async function upgradeMain() {
   kanbo(['doctor', '--fix', '--yes'])
   const claudeMd = readText(claudeMdPath)
   const newBlock = BLOCK_PATTERN.exec(claudeMd)
-  check(newBlock !== null && /(^|\s)v2(\s|$)/.test(newBlock[1]), 'CLAUDE.md has no v2 kanbo block after doctor --fix', claudeMd)
+  check(newBlock !== null && /(^|\s)v3(\s|$)/.test(newBlock[1]), 'CLAUDE.md has no v3 kanbo block after doctor --fix', claudeMd)
   check(claudeMd.startsWith(TEXT_BEFORE) && claudeMd.endsWith(TEXT_AFTER), 'doctor --fix changed the text outside the kanbo block', claudeMd)
   check(claudeMd.split('KANBO_START').length === 2, 'CLAUDE.md has more than one kanbo block', claudeMd)
   const doctorAfter = kanbo(['doctor', '--json'], { expectCode: null })

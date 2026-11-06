@@ -159,7 +159,7 @@ No questions. When nothing names a board — no `--db`/`--database-url`, no `KAN
 | `--yes` | Take the defaults instead of asking. |
 | `--json [fields]`, `--format <format>` | Output, as everywhere. No wizard. |
 
-The wizard's answers and the equivalent flags plan exactly the same changes. The instruction block sits between `<!-- KANBO_START v2 h=… -->` and `<!-- KANBO_END -->` and is replaced in place on a later run when kanbo wrote it — see [which blocks and entries kanbo changes](#what-kanbo-changes-and-what-it-leaves-alone). An MCP entry named `kanbo` that already exists is left alone, unless it is kanbo's own and no longer starts. `--instructions` and `--mcp` plan the same changes as `kanbo connect <agent> --project` (`agents` is the `AGENTS.md` Codex and Cursor read).
+The wizard's answers and the equivalent flags plan exactly the same changes. The instruction block sits between `<!-- KANBO_START v3 h=… -->` and `<!-- KANBO_END -->` and is replaced in place on a later run when kanbo wrote it — see [which blocks and entries kanbo changes](#what-kanbo-changes-and-what-it-leaves-alone). An MCP entry named `kanbo` that already exists is left alone, unless it is kanbo's own and no longer starts. `--instructions` and `--mcp` plan the same changes as `kanbo connect <agent> --project` (`agents` is the `AGENTS.md` Codex and Cursor read).
 
 `--file` together with `--database-url` is refused (exit `1`).
 

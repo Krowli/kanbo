@@ -30,6 +30,9 @@ import { LEGACY_BLOCK_BODIES } from './legacy-blocks'
 /** A project's `CLAUDE.md` exactly as `kanbo init --instructions claude` 0.2.1 left it. */
 const CLAUDE_MD_0_2_1 = readFileSync(join(import.meta.dirname, 'fixtures', 'claude-md-0.2.1.md'), 'utf8')
 
+/** The same file as `kanbo init --instructions claude` 0.3.0–0.4.0 left it: block v2, with its hash. */
+const CLAUDE_MD_0_4_0 = readFileSync(join(import.meta.dirname, 'fixtures', 'claude-md-0.4.0.md'), 'utf8')
+
 /** The same file after the person changed a word inside the current block. */
 const EDITED_BLOCK = INSTRUCTION_BLOCK.replace('Take work with', 'Pick work with')
 
@@ -73,7 +76,7 @@ describe('the kanbo instruction block', () => {
   }
 
   it('is a short pointer with a version and hash on its marker', () => {
-    expect(INSTRUCTION_BLOCK).toMatch(/^<!-- KANBO_START v2 h=[0-9a-f]{8} -->\n/)
+    expect(INSTRUCTION_BLOCK).toMatch(/^<!-- KANBO_START v3 h=[0-9a-f]{8} -->\n/)
     expect(INSTRUCTION_BLOCK.split('\n').length).toBeLessThanOrEqual(7)
     expect(INSTRUCTION_BLOCK).toContain('run `kanbo prime`')
     expect(GLOBAL_INSTRUCTION_BLOCK).toContain('In a project with a `.kanbo/` folder')
@@ -103,8 +106,8 @@ describe('the kanbo instruction block', () => {
   })
 
   it('reads a block a newer kanbo wrote as newer, a chosen text as chosen, and markers that do not pair up as damaged', () => {
-    expect(inspectBlock(wrapInstructionBlock('## Kanbo board\n\nNewer words.', 3), INSTRUCTION_BLOCK))
-      .toEqual({ state: 'newer', version: 3, kind: null })
+    expect(inspectBlock(wrapInstructionBlock('## Kanbo board\n\nNewer words.', 4), INSTRUCTION_BLOCK))
+      .toEqual({ state: 'newer', version: 4, kind: null })
     expect(inspectBlock(wrapInstructionBlock('Any text.', 2, 'orchestrator'), INSTRUCTION_BLOCK))
       .toEqual({ state: 'chosen', version: 2, kind: 'orchestrator' })
     expect(classifyBlock(wrapInstructionBlock(PROJECT_BODY, 2, 'short'), INSTRUCTION_BLOCK)).toBe('outdated')
@@ -128,6 +131,16 @@ describe('the kanbo instruction block', () => {
 
   it('replaces the 0.2.1 block under --yes and keeps the rest of the file', async () => {
     writeFileSync(join(projectDir, 'CLAUDE.md'), CLAUDE_MD_0_2_1)
+
+    await kanbo('init', '--file', '--instructions', 'claude', '--yes')
+
+    expect(claudeMd()).toBe(`# Project notes\n\n${INSTRUCTION_BLOCK}\n`)
+  })
+
+  it('reads the v2 block 0.3–0.4 wrote as outdated, and replaces it under --yes with the v3 block that says to claim', async () => {
+    expect(inspectBlock(CLAUDE_MD_0_4_0, INSTRUCTION_BLOCK)).toEqual({ state: 'outdated', version: 2, kind: null })
+    expect(INSTRUCTION_BLOCK).toContain('Take work with `kanbo claim`.')
+    writeFileSync(join(projectDir, 'CLAUDE.md'), CLAUDE_MD_0_4_0)
 
     await kanbo('init', '--file', '--instructions', 'claude', '--yes')
 
@@ -194,7 +207,7 @@ describe('the kanbo instruction block', () => {
       writeFileSync(path, `# Mine\n\n${block}\n\nMore of mine.\n`)
       expect((await planInstructionBlockRemovalAsking(path, {})).change.next).toBe(without)
     }
-    for (const block of [EDITED_BLOCK, wrapInstructionBlock('Mine.', 2, 'orchestrator'), wrapInstructionBlock('Newer.', 3)]) {
+    for (const block of [EDITED_BLOCK, wrapInstructionBlock('Mine.', 2, 'orchestrator'), wrapInstructionBlock('Newer.', 4)]) {
       writeFileSync(path, `# Mine\n\n${block}\n\nMore of mine.\n`)
       const kept = await planInstructionBlockRemovalAsking(path, { label: 'CLAUDE.md' })
       expect(kept.change.next).toBeNull()

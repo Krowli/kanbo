@@ -64,11 +64,11 @@ kanbo connect all --global
 It binds no board and creates none; a project gets a board with a plain `kanbo init`. The global block binds nothing:
 
 ```markdown
-<!-- KANBO_START v2 h=4b740256 -->
+<!-- KANBO_START v3 h=c58553c6 -->
 ## Kanbo boards
 
 In a project with a `.kanbo/` folder, before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
-Take work with `kanbo ready`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
+Take work with `kanbo claim`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
 A project without `.kanbo/` has no board: ignore this section there, and do not create one — a person sets a board up with `kanbo init`.
 <!-- KANBO_END -->
 ```
@@ -124,11 +124,11 @@ Pass `--project` to put every MCP server into the project's files, Codex's inclu
 The block `kanbo connect` writes is a short pointer; the rules themselves come from `kanbo prime` (which, on the command line, also lists the commands) or from the MCP server:
 
 ```markdown
-<!-- KANBO_START v2 h=4842e336 -->
+<!-- KANBO_START v3 h=38d0418d -->
 ## Kanbo board
 
 This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
-Take work with `kanbo ready`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
+Take work with `kanbo claim`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
 <!-- KANBO_END -->
 ```
 

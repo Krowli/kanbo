@@ -173,10 +173,10 @@ describe('kanbo doctor', () => {
     installKanbo('process.exit(1)')
     const path = join(projectDir, 'CLAUDE.md')
 
-    writeFileSync(path, `${wrapInstructionBlock('## Kanbo board\n\nNewer words.', 3)}\n`)
+    writeFileSync(path, `${wrapInstructionBlock('## Kanbo board\n\nNewer words.', 4)}\n`)
     const newer = finding(await doctor(), 'instructions')
     expect(newer.status).toBe('ok')
-    expect(newer.detail).toContain('written by a newer kanbo (v3) — update kanbo: npm install -g kanbo-cli@latest')
+    expect(newer.detail).toContain('written by a newer kanbo (v4) — update kanbo: npm install -g kanbo-cli@latest')
 
     writeFileSync(path, `${wrapInstructionBlock('Coordinate the agents.', 2, 'orchestrator')}\n`)
     const chosen = finding(await doctor(), 'instructions')

@@ -85,11 +85,11 @@ Say Yes and it shows exactly which files change, and why, before touching any of
 The section it writes into `CLAUDE.md` (or `AGENTS.md` for Codex and Cursor) is short — a pointer, not the whole rulebook:
 
 ```markdown
-<!-- KANBO_START v2 h=4842e336 -->
+<!-- KANBO_START v3 h=38d0418d -->
 ## Kanbo board
 
 This project tracks its work on a kanbo board. Before starting a task, run `kanbo prime` (or call the `kanbo_prime` tool) and follow what it prints.
-Take work with `kanbo ready`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
+Take work with `kanbo claim`. Only a person approves a card, and only a person takes one out of waiting. Never do either yourself.
 <!-- KANBO_END -->
 ```
 

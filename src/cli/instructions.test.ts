@@ -83,7 +83,7 @@ describe('kanbo instructions', () => {
   it('marks any other text with its kind, so kanbo connect leaves that block alone', async () => {
     await kanbo(['instructions', 'orchestrator', '--markers'])
 
-    expect(stdout[0]).toMatch(/^<!-- KANBO_START v2 k=orchestrator h=[0-9a-f]{8} -->\n/)
+    expect(stdout[0]).toMatch(/^<!-- KANBO_START v3 k=orchestrator h=[0-9a-f]{8} -->\n/)
     expect(classifyBlock(stdout[0]!, INSTRUCTION_BLOCK)).toBe('chosen')
   })
 

@@ -30,7 +30,7 @@ import { planTextFile, readTextFile } from './text-file'
  * project, and most of them have no board.
  *
  * The start marker carries the block's version and a hash of its body
- * (`<!-- KANBO_START v2 h=1a2b3c4d -->`), so a block a person changed by hand
+ * (`<!-- KANBO_START v3 h=1a2b3c4d -->`), so a block a person changed by hand
  * can be told apart from one an older kanbo wrote. Blocks from kanbo 0.1–0.2
  * start with a bare `<!-- KANBO_START -->`, and are told apart by their body
  * (`legacy-blocks.ts`). A block `kanbo instructions <kind> --markers` printed
@@ -44,7 +44,7 @@ import { planTextFile, readTextFile } from './text-file'
  */
 
 /** The version of the block this build writes. */
-export const INSTRUCTION_BLOCK_VERSION = 2
+export const INSTRUCTION_BLOCK_VERSION = 3
 
 export const INSTRUCTION_END = '<!-- KANBO_END -->'
 
@@ -86,7 +86,7 @@ export interface InstructionBlockInspection {
 
 /** The commands an agent uses, spelled once for the guide and the `kanbo prime` cheat sheet. */
 const COMMAND = {
-  ready: 'kanbo ready',
+  claim: 'kanbo claim',
   move: 'kanbo card move <id> <column>',
   statusLine: 'kanbo card status-line <id> --text "..."',
   subtask: 'kanbo card create --description "..." --parent <id>',
@@ -102,7 +102,7 @@ const COMMAND = {
  * `ops/agent-rules.ts` holds for every surface, with the command beside each.
  */
 const RULE_LINES = [
-  `- Take a card from \`${COMMAND.ready}\`.`,
+  `- Take a card with \`${COMMAND.claim}\`: it starts your run and moves the card into work in one step, and no other agent gets the same card.`,
   `- ${MOVE_CARD_RULE} (\`${COMMAND.move}\`)`,
   `- ${STATUS_LINE_RULE} (\`${COMMAND.statusLine}\`)`,
   `- ${SUBTASK_RULE} (\`${COMMAND.subtask}\`)`,
@@ -152,7 +152,7 @@ export const COMMAND_SHEET = [
 ].join('\n')
 
 /** How to take work and who approves it — said by both blocks after their first sentence. */
-const POINTER_TAIL = `Take work with \`${COMMAND.ready}\`. ${PERSON_ONLY_RULE}`
+const POINTER_TAIL = `Take work with \`${COMMAND.claim}\`. ${PERSON_ONLY_RULE}`
 
 /** The body of the project block: what `kanbo instructions short` prints. */
 export const PROJECT_BODY = [
