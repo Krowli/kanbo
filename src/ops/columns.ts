@@ -280,10 +280,13 @@ export async function setColumnEntryRules<TStore extends BoardStore>(
   }, scope)
 }
 
+/** The largest WIP limit: what a Postgres `integer` column holds. */
+const MAX_WIP_LIMIT = 2_147_483_647
+
 /**
  * Set where a card may enter the column from and how many cards it holds:
  * `allowedFrom` the ids of other columns of its board (`null` for any, `[]` for
- * none), kept once each in board order; `wipLimit` 1 or more, or `null`. A
+ * none), kept once each in board order; `wipLimit` a whole number from 1 to 2147483647, or `null`. A
  * person's to set, like the entry rules: an agent that could open a column
  * could walk any card into it.
  */
@@ -297,7 +300,7 @@ export async function setColumnFlowRules<TStore extends BoardStore>(
   // Checked before the write starts: an actor who is not a person, or a limit
   // that is no limit, changes nothing.
   assertPersonSetsEntryRules(actor, { statusId: columnId })
-  if (rules.wipLimit !== null && !(Number.isInteger(rules.wipLimit) && rules.wipLimit >= 1)) {
+  if (rules.wipLimit !== null && !(Number.isSafeInteger(rules.wipLimit) && rules.wipLimit >= 1 && rules.wipLimit <= MAX_WIP_LIMIT)) {
     throw new BoardError('board_flow_rule_invalid', { statusId: columnId, wipLimit: rules.wipLimit })
   }
   return await runBoardWrite(store, async ({ tx }) => {

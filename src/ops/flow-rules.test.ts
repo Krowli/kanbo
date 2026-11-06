@@ -115,6 +115,20 @@ describe.each(BOARD_STORE_FACTORIES)('column flow rules on $name', (factory) => 
     expect(await readChangeSeq(store)).toBe(version)
   })
 
+  it('refuses a limit past the largest 32-bit integer, writing nothing; that largest one passes', async () => {
+    const inReview = await column('In Review')
+    const version = await readChangeSeq(store)
+
+    for (const wipLimit of [2_147_483_648, 3_000_000_000, 1e20]) {
+      const failure = await refusal(async () => await setColumnFlowRules(store, inReview.id, { allowedFrom: null, wipLimit }, USER))
+      expect(failure).toMatchObject({ code: 'board_flow_rule_invalid', details: { statusId: inReview.id, wipLimit } })
+    }
+    expect(await readChangeSeq(store)).toBe(version)
+    expect(readFlowRules(await column('In Review')).wipLimit).toBeNull()
+
+    expect(readFlowRules(await setColumnFlowRules(store, inReview.id, { allowedFrom: null, wipLimit: 2_147_483_647 }, USER)).wipLimit).toBe(2_147_483_647)
+  })
+
   it('applies the standard flow to a board that predates it, leaving Done\'s limit and every other column alone', async () => {
     const [toDo, inProgress, done] = [await column('To Do'), await column('In Progress'), await column('Done')]
     await setColumnFlowRules(store, done.id, { allowedFrom: null, wipLimit: 5 }, USER)
