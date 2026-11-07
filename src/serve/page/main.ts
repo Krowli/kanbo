@@ -14,7 +14,10 @@ import { filterOptions, matchesFilters, readFilters, writeFilters } from './filt
 import { columnBadge, columnRules, countByStatus } from './column-badges'
 import { lockIcon, plusIcon, statusIcon } from './icons'
 import { readCollapsed, renderList, writeCollapsed } from './list-view'
-import { clearSelection, EMPTY_SELECTION, pruneSelection, selectRange, toggleSelection } from './selection'
+import type { KeyboardHost } from './keyboard'
+import { handleKey, isTypingTarget, readLayout } from './keyboard'
+import { isPopoverOpen, closeOpenPopover } from './popover'
+import { clearSelection, EMPTY_SELECTION, extendSelection, pruneSelection, selectRange, toggleSelection } from './selection'
 import type { Selection } from './selection'
 import { createSelectionBar } from './selection-bar'
 import type { BoardColumn } from './grouping'
@@ -792,22 +795,26 @@ function closePanel(): void {
   }
 }
 
-document.addEventListener('keydown', (event) => {
-  if (event.key === 'Escape' && openCardId) {
-    closePanel()
-  }
-  else if (event.key === 'Escape' && selection.ids.size > 0 && !isTyping(event.target)) {
-    changeSelection(clearSelection())
-  }
-  else if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey && !isTyping(event.target)) {
+const keyboardHost: KeyboardHost = {
+  layout: () => readLayout(boardElement),
+  focusedId: () => (document.activeElement as HTMLElement | null)?.closest<HTMLElement>('.card, .list-row')?.dataset.cardId ?? null,
+  focus: focusCard,
+  state: () => ({ typing: isTypingTarget(document.activeElement), popoverOpen: isPopoverOpen(), dialogOpen: openCardId !== null, hasSelection: selection.ids.size > 0 }),
+  open: cardId => void openCard(cardId),
+  toggle: cardId => changeSelection(toggleSelection(selection, cardId)),
+  extend: (from, to) => changeSelection(extendSelection(selection, from, to)),
+  search: () => filterSlot.querySelector<HTMLInputElement>('.filter-search')?.focus(),
+  closeDialog: closePanel,
+  closePopover: () => void closeOpenPopover(),
+  clearSelection: () => changeSelection(clearSelection()),
+}
+document.addEventListener('keydown', event => void handleKey(event, keyboardHost))
+// Space opens a card on keydown (above); its button would otherwise click again when the key comes up.
+document.addEventListener('keyup', (event) => {
+  if (event.key === ' ' && event.target instanceof HTMLElement && event.target.closest('.card-title, .list-title')) {
     event.preventDefault()
-    filterSlot.querySelector<HTMLInputElement>('.filter-search')?.focus()
   }
 })
-
-function isTyping(target: EventTarget | null): boolean {
-  return target instanceof HTMLElement && (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-}
 document.addEventListener('visibilitychange', () => void poll())
 
 mountShell()
