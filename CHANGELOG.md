@@ -4,6 +4,10 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-11-07
+
+kanbo 0.8 gives the board page Modular's look, puts sub-tasks inside their parent card, and adds an Analytics view and a List view. No board migration.
+
 ### Added
 
 - An **Analytics** view on the board page (`?view=analytics`): a range of 4, 12 or 26 weeks or a sprint, figure cards, finished per week, cumulative flow and time in column drawn in SVG, aging work, agents and people tables. It reads the same numbers as `kanbo stats` and fetches nothing while another view or a hidden tab is showing.
@@ -15,7 +19,6 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 - The board page takes Modular's look: Geist type, a near-white neutral palette in light and dark, white cards with a hairline ring on quiet column bays, a 28 px toolbar with **Filter** and **Display** menus, status-category and priority icons, and toned label chips. It replaces the strip-board design.
 - **Sub-tasks** (a card with a parent) now live inside the parent's card as rows with a progress bar (`1/3 done`), and a waiting or running sub-task is never hidden (the parent shows a **Sub-task waiting for you** pill). **Display → Show sub-tasks as cards** (`?subtasks=cards`) draws them as cards of their own, marked **Sub-task of …**. The card dialog gets a breadcrumb to the parent, a sibling switcher, a **Sub-tasks** section and a property grid. "Sub-card" is now "sub-task" on the page.
-
 - The `kanbo init` wizard no longer asks "Add a first card?" or "Write these changes?": it asks where the board lives, the card key, the columns and which agents to connect, then writes and prints what it did. `--first-card <title>` still adds a first card.
 - In a folder with no board of its own, when only `KANBO_DB_PATH` names an app's database that is older than this kanbo or has no project for the folder, kanbo answers "This folder has no kanbo board of its own … run kanbo init here" instead of blaming the app's database. A binding or `--db` naming that database keeps the old sentence.
 
@@ -262,6 +265,7 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
+[0.8.0]: https://github.com/Krowli/kanbo/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Krowli/kanbo/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Krowli/kanbo/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Krowli/kanbo/releases/tag/v0.5.0
