@@ -13,6 +13,8 @@ import { readBinding } from '../binding'
 import { CONNECT_LATER_TIP, registerInitCommand } from '../commands/init'
 import { openBoardSession } from '../command'
 import { CancelledError, setUiForTests } from '../ui/ui'
+import { claudeUserAddArgv, displayCommand } from './mcp-config'
+import { mcpLaunchSpec } from './mcp-launch'
 
 /** Every file under the folder, by path, with its bytes — what "left exactly as it was" is checked against. */
 function snapshot(root: string): Record<string, string> {
@@ -207,7 +209,7 @@ describe('kanbo init with nothing naming a board', () => {
       const preview = driver.transcript()
       expect(preview).toContain(`create  ${join('.kanbo', 'board.db')}`)
       expect(preview).toContain(`write   ${join('.kanbo', 'binding.json')}`)
-      expect(preview).toContain('run     claude mcp add --scope user kanbo -- kanbo mcp')
+      expect(preview).toContain(`run     ${displayCommand(claudeUserAddArgv(mcpLaunchSpec({ scope: 'user' })))}`)
       expect(preview).not.toContain('CLAUDE.md')
     })
 

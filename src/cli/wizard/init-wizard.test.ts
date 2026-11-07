@@ -205,11 +205,12 @@ describe('kanbo init wizard', () => {
 
   /** The transcript as the golden file keeps it: machine paths replaced, trailing spaces dropped. */
   function transcript(outcome: unknown): string {
-    const text = driver.transcript()
-      .replaceAll(projectDir, '<project>')
-      .replaceAll(home, '<home>')
-      .replaceAll(root, '<root>')
-      .replaceAll('\\', '/')
+    // Paths are printed with forward slashes, so they are matched in that form (they have backslashes on Windows).
+    const slashed = (path: string): string => path.replaceAll('\\', '/')
+    const text = slashed(driver.transcript())
+      .replaceAll(slashed(projectDir), '<project>')
+      .replaceAll(slashed(home), '<home>')
+      .replaceAll(slashed(root), '<root>')
       .split('\n')
       .map(line => line.trimEnd())
       .join('\n')

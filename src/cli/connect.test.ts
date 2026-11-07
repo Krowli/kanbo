@@ -139,7 +139,8 @@ describe('kanbo connect', () => {
 
     await connect('claude', '--yes')
 
-    expect(readFileSync(calls, 'utf8')).toBe('mcp add --scope user kanbo -- kanbo mcp\n')
+    // This platform's launch: `kanbo mcp`, or on Windows this Node and this script.
+    expect(readFileSync(calls, 'utf8')).toBe(`${claudeUserAddArgv(mcpLaunchSpec({ scope: 'user' })).slice(1).join(' ')}\n`)
     expect(existsSync(join(projectDir, 'CLAUDE.md'))).toBe(false)
     expect(readdirSync(projectDir)).toEqual([])
   })
@@ -244,7 +245,7 @@ describe('kanbo connect', () => {
 
     it('calls the registration Claude Code writes itself (with an empty env) ok, not yours', async () => {
       writeFileSync(join(home, '.claude.json'), JSON.stringify({
-        mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: {} } },
+        mcpServers: { kanbo: { type: 'stdio', ...mcpLaunchSpec({ scope: 'user' }), env: {} } },
       }))
 
       const rows = await check('--global')
@@ -257,7 +258,7 @@ describe('kanbo connect', () => {
       mkdirSync(claudeDir)
       vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
       writeFileSync(join(claudeDir, '.claude.json'), JSON.stringify({
-        mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: {} } },
+        mcpServers: { kanbo: { type: 'stdio', ...mcpLaunchSpec({ scope: 'user' }), env: {} } },
       }))
 
       const rows = await check('--global')
@@ -270,7 +271,7 @@ describe('kanbo connect', () => {
       mkdirSync(claudeDir)
       vi.stubEnv('CLAUDE_CONFIG_DIR', claudeDir)
       writeFileSync(join(claudeDir, '.claude.json'), JSON.stringify({
-        mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'], env: {} } },
+        mcpServers: { kanbo: { type: 'stdio', ...mcpLaunchSpec({ scope: 'user' }), env: {} } },
       }))
       const calls = join(root, 'claude-calls')
       writeRecordingBin(bin, 'claude', calls)

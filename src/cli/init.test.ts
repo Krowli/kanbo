@@ -12,6 +12,8 @@ import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
 import { readBinding } from './binding'
 import { CONNECT_LATER_TIP, registerInitCommand } from './commands/init'
+import { readCodexMcpEntry } from './setup/mcp-config'
+import { mcpLaunchSpec } from './setup/mcp-launch'
 
 /**
  * The one way to interrupt a migration half-way from outside it. Off for every
@@ -220,11 +222,13 @@ describe('kanbo init', () => {
     it('registers the server in the person\'s own settings, as kanbo connect does, and writes no instruction file', async () => {
       await run(['--connect', 'cursor,codex'])
 
+      // This platform's launch: `kanbo mcp`, or on Windows this Node and this script.
+      const launch = mcpLaunchSpec({ scope: 'user' })
       expect(JSON.parse(readFileSync(join(home, '.cursor', 'mcp.json'), 'utf8'))).toEqual({
-        mcpServers: { kanbo: { type: 'stdio', command: 'kanbo', args: ['mcp'] } },
+        mcpServers: { kanbo: { type: 'stdio', ...launch } },
       })
-      expect(readFileSync(join(home, 'codex', 'config.toml'), 'utf8'))
-        .toBe('[mcp_servers.kanbo]\ncommand = "kanbo"\nargs = ["mcp"]\ndefault_tools_approval_mode = "approve"\n')
+      expect(readCodexMcpEntry(join(home, 'codex', 'config.toml'))).toEqual({ ...launch, otherFields: [] })
+      expect(readFileSync(join(home, 'codex', 'config.toml'), 'utf8')).toContain('default_tools_approval_mode = "approve"')
       expect(existsSync(join(projectDir, 'AGENTS.md'))).toBe(false)
       expect(existsSync(join(projectDir, '.cursor'))).toBe(false)
     })
