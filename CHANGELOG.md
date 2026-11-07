@@ -4,6 +4,11 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Changed
+
+- The `kanbo init` wizard no longer asks "Add a first card?" or "Write these changes?": it asks where the board lives, the card key, the columns and which agents to connect, then writes and prints what it did. `--first-card <title>` still adds a first card.
+- In a folder with no board of its own, when only `KANBO_DB_PATH` names an app's database that is older than this kanbo or has no project for the folder, kanbo answers "This folder has no kanbo board of its own … run kanbo init here" instead of blaming the app's database. A binding or `--db` naming that database keeps the old sentence.
+
 ## [0.7.0] — 2026-11-07
 
 kanbo 0.7 gives agents one way onto the board: the MCP server. The terminal keeps the person's commands. No board migration.
