@@ -3,7 +3,7 @@ import { DEFAULT_DISPLAY } from './display'
 import { button, el } from './dom'
 import type { CardFilters, Priority } from './filters'
 import { isFiltering, NO_FILTERS, PRIORITIES } from './filters'
-import { closeIcon, displayIcon, filterIcon, plusIcon, priorityIcon, searchIcon } from './icons'
+import { boardIcon, closeIcon, displayIcon, filterIcon, listIcon, plusIcon, priorityIcon, searchIcon } from './icons'
 import type { PopoverHandle } from './popover'
 import { attachPopover } from './popover'
 
@@ -124,12 +124,31 @@ export function createToolbar(actions: ToolbarActions): Toolbar {
   displayButton.append(displayIcon(), 'Display')
   displayAnchor.append(displayButton)
 
+  const viewSwitch = el('div', 'view-switch')
+  viewSwitch.setAttribute('role', 'group')
+  viewSwitch.setAttribute('aria-label', 'View')
+  const viewButtons = (['board', 'list'] as const).map((view) => {
+    const viewButton = el('button')
+    viewButton.type = 'button'
+    viewButton.dataset.view = view
+    viewButton.title = view === 'board' ? 'Board' : 'List'
+    viewButton.setAttribute('aria-label', viewButton.title)
+    viewButton.append(view === 'board' ? boardIcon() : listIcon())
+    viewButton.addEventListener('click', () => {
+      if (state.display.view !== view) {
+        actions.onDisplay({ ...state.display, view })
+      }
+    })
+    return viewButton
+  })
+  viewSwitch.append(...viewButtons)
+
   const addButton = el('button', 'primary')
   addButton.type = 'button'
   addButton.append(plusIcon(), 'New')
   addButton.addEventListener('click', actions.onNew)
 
-  bar.append(searchBox, count, el('span', 'spacer'), filterAnchor, displayAnchor, addButton)
+  bar.append(searchBox, count, el('span', 'spacer'), filterAnchor, displayAnchor, viewSwitch, addButton)
 
   const chips = el('div', 'filter-chips')
   chips.hidden = true
@@ -228,6 +247,9 @@ export function createToolbar(actions: ToolbarActions): Toolbar {
       const active = activeFilterCount(next.filters)
       filterBadge.textContent = String(active)
       filterBadge.hidden = active === 0
+      for (const viewButton of viewButtons) {
+        viewButton.setAttribute('aria-pressed', String(viewButton.dataset.view === next.display.view))
+      }
       renderChips()
       filterPopover.refresh()
       displayPopover.refresh()

@@ -125,8 +125,20 @@ describe('createToolbar', () => {
     expect(box.parentElement?.textContent).toContain('Show sub-tasks as cards')
     expect(box.checked).toBe(false)
     box.click()
-    expect(onDisplay).toHaveBeenCalledWith({ subtasks: 'cards' })
-    toolbar.update({ ...base, display: { subtasks: 'cards' } })
+    expect(onDisplay).toHaveBeenCalledWith({ subtasks: 'cards', view: 'board' })
+    toolbar.update({ ...base, display: { subtasks: 'cards', view: 'board' } })
     expect(toolbar.element.querySelector<HTMLInputElement>('.popover [data-key="subtasks"]')?.checked).toBe(true)
+  })
+
+  it('switches between Board and List, the current one pressed', () => {
+    const { toolbar, onDisplay } = setup()
+    const buttons = [...toolbar.element.querySelectorAll<HTMLButtonElement>('.view-switch button')]
+    expect(buttons.map(item => [item.title, item.getAttribute('aria-pressed')])).toEqual([['Board', 'true'], ['List', 'false']])
+    buttons[0]!.click()
+    expect(onDisplay).not.toHaveBeenCalled()
+    buttons[1]!.click()
+    expect(onDisplay).toHaveBeenCalledWith({ subtasks: 'inside', view: 'list' })
+    toolbar.update({ ...base, display: { subtasks: 'inside', view: 'list' } })
+    expect(buttons.map(item => item.getAttribute('aria-pressed'))).toEqual(['false', 'true'])
   })
 })

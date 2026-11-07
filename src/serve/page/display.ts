@@ -7,13 +7,15 @@ import type { SubtaskMode } from './subtasks'
 export interface Display {
   /** `inside`: a sub-task is a row in its parent's card. `cards`: it is a card of its own. */
   subtasks: SubtaskMode
+  /** Columns side by side, or one list grouped by column. */
+  view: 'board' | 'list'
 }
 
-export const DEFAULT_DISPLAY: Display = { subtasks: 'inside' }
+export const DEFAULT_DISPLAY: Display = { subtasks: 'inside', view: 'board' }
 
 export function readDisplay(search: string): Display {
   const params = new URLSearchParams(search)
-  return { subtasks: params.get('subtasks') === 'cards' ? 'cards' : 'inside' }
+  return { subtasks: params.get('subtasks') === 'cards' ? 'cards' : 'inside', view: params.get('view') === 'list' ? 'list' : 'board' }
 }
 
 /** The query string with the display params set (the default left out) and every other param kept. */
@@ -24,6 +26,12 @@ export function writeDisplay(display: Display, search: string): string {
   }
   else {
     params.delete('subtasks')
+  }
+  if (display.view === 'list') {
+    params.set('view', 'list')
+  }
+  else {
+    params.delete('view')
   }
   const written = params.toString()
   return written ? `?${written}` : ''

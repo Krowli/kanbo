@@ -12,6 +12,7 @@ import type { CardFilters } from './filters'
 import { filterOptions, matchesFilters, readFilters, writeFilters } from './filters'
 import { columnBadge, columnRules, countByStatus } from './column-badges'
 import { lockIcon, plusIcon, statusIcon } from './icons'
+import { readCollapsed, renderList, writeCollapsed } from './list-view'
 import type { BoardColumn } from './grouping'
 import { groupBoard, newCardStatus } from './grouping'
 import type { CardDetail, PanelTab } from './panel'
@@ -47,8 +48,37 @@ const api: BoardApi = createBoardApi(() => token, () => projectId === null ? '' 
 
 /** What the bar above the board narrows the cards to; kept in the address so a reload shows the same. */
 let filters: CardFilters = readFilters(location.search)
+/** The List view's folded groups for this project, kept for the browser session. */
+let collapsed: Set<string> = readStoredCollapsed()
 /** How sub-tasks are shown; kept in the address too. */
 let display: Display = readDisplay(location.search)
+
+/** `sessionStorage`, or nothing where the browser refuses it. */
+function sessionStore(): Storage | null {
+  try {
+    return window.sessionStorage
+  }
+  catch {
+    return null
+  }
+}
+
+function readStoredCollapsed(): Set<string> {
+  const store = sessionStore()
+  return store ? readCollapsed(store, projectId ?? 'default') : new Set()
+}
+
+function toggleGroup(groupId: string): void {
+  collapsed = new Set(collapsed)
+  if (!collapsed.delete(groupId)) {
+    collapsed.add(groupId)
+  }
+  const store = sessionStore()
+  if (store) {
+    writeCollapsed(store, projectId ?? 'default', collapsed)
+  }
+  renderBoard()
+}
 
 let statuses: ServeStatusView[] = []
 let cards: ServeCardView[] = []
@@ -259,6 +289,7 @@ function chooseProject(id: string | null): void {
   }
   // Who works a card and which labels exist belong to a project; the rest of the filters carry over.
   filters = { ...filters, worker: null, labels: [] }
+  collapsed = readStoredCollapsed()
   writeFiltersToAddress(url)
   seq = null
   draft = null
@@ -339,14 +370,37 @@ function changeDisplay(next: Display): void {
 function renderBoard(): void {
   renderIdentity()
   const draftHadFocus = draft !== null && document.activeElement === draft.input
-  const focusedCardId = document.activeElement?.closest<HTMLElement>('.card')?.dataset.cardId ?? null
+  const focusedCardId = document.activeElement?.closest<HTMLElement>('.card, .list-row')?.dataset.cardId ?? null
   // A family goes together: a parent shows when it or a sub-task matches.
   const family = familyView(cards, display.subtasks, card => matchesFilters(card, filters))
   const shown = drawnCards(cards, display.subtasks).filter(card => family.drawn.has(card.id))
   toolbar.update({ filters, display, options: filterOptions(cards), counts: { shown: family.count, total: cards.length } })
   // A column counts the cards that are in it, a sub-task drawn inside a parent elsewhere included.
   const tally = { shown: countByStatus(cards, card => matchesFilters(card, filters)), total: countByStatus(cards) }
-  boardElement.replaceChildren(...groupBoard(statuses, shown).map(column => renderColumn(column, family.faded, tally)))
+  const groups = groupBoard(statuses, shown)
+  boardElement.dataset.view = display.view
+  if (display.view === 'list') {
+    const list = renderList({
+      statuses,
+      cards,
+      groups,
+      mode: display.subtasks,
+      faded: family.faded,
+      collapsed,
+      tally,
+      now: Math.floor(Date.now() / 1000),
+      onToggleGroup: toggleGroup,
+      onOpen: id => void openCard(id),
+    })
+    if (draft) {
+      draft.form.classList.add('list-draft')
+      list.prepend(draft.form)
+    }
+    boardElement.replaceChildren(list)
+  }
+  else {
+    boardElement.replaceChildren(...groups.map(column => renderColumn(column, family.faded, tally)))
+  }
   // Every card, shown or not: a filter that brings a card into view does not make it new.
   lastPlacement = placementsOf(cards)
   markOpenCard()
@@ -361,15 +415,15 @@ function renderBoard(): void {
 
 /** The card whose panel is open carries `data-open`, so it reads as open on the board. */
 function markOpenCard(): void {
-  for (const card of boardElement.querySelectorAll<HTMLElement>('.card')) {
+  for (const card of boardElement.querySelectorAll<HTMLElement>('.card, .list-row')) {
     card.toggleAttribute('data-open', card.dataset.cardId === openCardId)
   }
 }
 
 function focusCard(cardId: string): void {
-  for (const card of boardElement.querySelectorAll<HTMLElement>('.card')) {
+  for (const card of boardElement.querySelectorAll<HTMLElement>('.card, .list-row')) {
     if (card.dataset.cardId === cardId) {
-      card.querySelector<HTMLElement>('.card-title')?.focus()
+      card.querySelector<HTMLElement>('.card-title, .list-title')?.focus()
     }
   }
 }
