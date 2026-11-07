@@ -22,7 +22,6 @@ import { findMissingBoardFile } from '../db-target'
 import type { InitOptions } from '../commands/init'
 import { deriveProjectSlug } from '../commands/init'
 import { describeFailure } from '../failure'
-import { CliError } from '../output'
 import type { AgentDetection, AgentId } from '../setup/agents'
 import { AGENTS } from '../setup/agents'
 import { describeManualOutcome, describeOutcomeState, displayPath, readMcpState } from '../setup/connect-plan'
@@ -30,7 +29,6 @@ import type { ExistingWorkspace } from '../setup/existing-workspace'
 import { inspectBoardFile, inspectPostgresWorkspace } from '../setup/existing-workspace'
 import { findGitRoot } from '../setup/git-root'
 import type { AppliedInitPlan, InitPlan } from '../setup/init-plan'
-import { describeInitPlan } from '../setup/init-plan'
 import { tildify } from '../tildify'
 import type { Ui } from '../ui/ui'
 import { CancelledError } from '../ui/ui'
@@ -46,9 +44,9 @@ import { CancelledError } from '../ui/ui'
  * A question a flag already answered is not asked, and a project that already
  * has a board is not asked about its board again.
  *
- * Nothing is written here. The last question is "Write these changes?", and
- * the caller applies the plan only after a yes; Ctrl-C at any question throws
- * `CancelledError` and leaves the folder as it was.
+ * Nothing is written here. The caller applies the plan once the questions are
+ * answered; Ctrl-C at any question throws `CancelledError` and leaves the
+ * folder as it was.
  */
 
 export interface InitWizardContext {
@@ -70,7 +68,7 @@ export interface InitWizardResult {
   projectDir: string
   /** The answers, as the flags that say the same. */
   options: InitOptions
-  /** What will be written — the plan the person said yes to. */
+  /** What will be written — the plan the answers make. */
   plan: InitPlan
   /** The agents used here that already reach kanbo through its MCP server, before this run. */
   alreadyConnected: AgentId[]
@@ -129,19 +127,6 @@ export async function runInitWizard(context: InitWizardContext): Promise<InitWiz
   }
 
   const plan = await context.plan(projectDir, options)
-
-  if (options.firstCard === undefined && canAddCard(plan)) {
-    const title = (await ui.text({ message: 'Add a first card? (optional — Enter to skip)', placeholder: 'e.g. Add a README' })).trim()
-    if (title) {
-      options.firstCard = title
-      plan.firstCard = title
-    }
-  }
-
-  say(ui, describeInitPlan(plan))
-  if (!await ui.confirm({ message: 'Write these changes?', initialValue: true })) {
-    throw new CliError(1, 'Nothing was written.')
-  }
   return { projectDir, options, plan, alreadyConnected, launchWarning: context.launchWarning }
 }
 
@@ -408,11 +393,6 @@ async function askConnect(ui: Ui): Promise<ConnectChoice> {
       { value: 'not-now', label: 'Not now — set up the board only (later: kanbo connect)' },
     ],
   })
-}
-
-/** A shared board whose tables were not created here may have none yet, so there is nowhere to put a card. */
-function canAddCard(plan: InitPlan): boolean {
-  return plan.target.kind !== 'postgres' || plan.migrate
 }
 
 /** (9) What was done, and what to do next. */

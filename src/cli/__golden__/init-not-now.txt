@@ -52,22 +52,6 @@ kanbo — set up a board for this project
 └
 ◇  Connect them now?
 │  Not now — set up the board only (later: kanbo connect)
-│
-◆  Add a first card? (optional — Enter to skip)
-│  e.g. Add a README
-└
-◇  Add a first card? (optional — Enter to skip)
-│
-kanbo init will:
-  create  .kanbo/board.db (a board file of this project's own, with the columns To Do, In Progress, Done)
-  write   .kanbo/binding.json (this project uses board MET)
-Nothing else is changed.
-│
-◆  Write these changes?
-│  ● Yes / ○ No
-└
-◇  Write these changes?
-│  Yes
 ✔ Board: .kanbo/board.db
 ✔ Columns: To Do, In Progress, Done
 ✔ Card numbers: MET-001, MET-002, …

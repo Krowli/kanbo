@@ -19,7 +19,7 @@ cd your-project
 kanbo
 ```
 
-A folder with no board starts the setup wizard — the same thing as running `kanbo init`. In a terminal, it asks one question at a time. Nothing is written until the last question.
+A folder with no board starts the setup wizard — the same thing as running `kanbo init`. In a terminal, it asks one question at a time: where the board lives, the card key, the columns, and which agents to connect. Nothing is written until the last question is answered; Ctrl-C at any question writes nothing.
 
 **Where should the board live?**
 
@@ -75,48 +75,22 @@ kanbo ticks the ones it found already installed on your machine or in the projec
 
 These two questions are asked only when an agent kanbo found has no kanbo registration yet; if every agent it found already has one, it says "Your agents already reach kanbo through its MCP server." and asks nothing.
 
-Say Yes and the plan below shows exactly what is changed before anything is. kanbo registers the MCP server in your own agent settings, so one registration serves every project; it writes nothing into the project's `CLAUDE.md` or `AGENTS.md`, because the server tells the agent the rules itself.
+Say Yes and kanbo registers the MCP server in your own agent settings, so one registration serves every project; it writes nothing into the project's `CLAUDE.md` or `AGENTS.md`, because the server tells the agent the rules itself. There is no further question: the wizard writes, then prints what it did.
 
-**Add a first card?**
-
-```
-◆  Add a first card? (optional — Enter to skip)
-│  e.g. Add a README
-```
-
-Optional — type a title and press Enter, or skip it and add one later from the home screen.
-
-**Write these changes?**
-
-The wizard prints everything it is about to do, then asks once:
-
-```
-kanbo init will:
-  create  .kanbo/board.db (a board file of this project's own, with the columns Backlog, To Do, In Progress, In Review, Done, Canceled)
-  write   .kanbo/binding.json (binds this project to WST)
-  run     claude mcp add --scope user kanbo -- kanbo mcp
-  add     a first card to To Do: Write the README
-Nothing else is changed.
-
-◆  Write these changes?
-│  ● Yes / ○ No
-```
-
-Yes, and it is done:
+Done:
 
 ```
 ✔ Board: .kanbo/board.db
 ✔ Columns: Backlog, To Do, In Progress, In Review, Done, Canceled
 ✔ Card numbers: WST-001, WST-002, …
 ✔ Claude Code: ~/.claude.json (ran claude mcp add --scope user kanbo -- kanbo mcp)
-✔ First card: WST-001 Write the README
 
 Next: start Claude Code in this folder and say "take the next card from kanbo".
 See the board: kanbo board · in your browser: kanbo serve
 Run kanbo any time to come back here.
 ```
 
-Ctrl-C at any question cancels with nothing written; No at the last question does the same.
+Ctrl-C at any question cancels with nothing written. To start the board with a card, run `kanbo init --first-card "Write the README"`, or add one later from the home screen.
 
 ## 3. The home screen
 
@@ -153,15 +127,15 @@ The card lands in To Do. (An agent's own `kanbo_card_create` defaults to the boa
 
 ## 5. Connecting an agent
 
-If you skipped this in the wizard, run it once from anywhere:
+If you skipped this in the wizard (or picked Not now), run it once from anywhere:
 
 ```bash
 kanbo connect claude --yes
 ```
 
-This registers kanbo's MCP server in Claude Code's own settings (`claude mcp add --scope user kanbo -- kanbo mcp`), so Claude Code can call the board as typed tools in every project. `kanbo connect codex cursor gemini` does the same for the others; `--project` writes the project's files instead of your own settings — see [agents](agents.md) for what each client's connection looks like. If an older kanbo wrote a section into your `CLAUDE.md`, `AGENTS.md` or `GEMINI.md`, `kanbo connect` takes it out.
+This registers kanbo's MCP server in Claude Code's own settings (`claude mcp add --scope user kanbo -- kanbo mcp`), so Claude Code can call the board as typed tools in every project. `kanbo connect codex cursor` (any of `claude`, `codex`, `cursor`, `gemini`) does the same for the others, and several at once; it registers them for every project; `--project` registers them for this project only, in the project's files instead of your own settings — see [agents](agents.md) for what each client's connection looks like. If an older kanbo wrote a section into your `CLAUDE.md`, `AGENTS.md` or `GEMINI.md`, `kanbo connect` takes it out.
 
-Every change is shown before it is written, same as the wizard. Run `kanbo connect --check` any time to see what is connected.
+`kanbo connect` shows every change before it is written. Run `kanbo connect --check` any time to see what is connected.
 
 ## 6. What the agent does
 

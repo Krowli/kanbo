@@ -76,22 +76,6 @@ To Do stays on the board: agents take their work from it.
 └
 ◇  Which coding agents do you use here?
 │  none
-│
-◆  Add a first card? (optional — Enter to skip)
-│  e.g. Add a README
-└
-◇  Add a first card? (optional — Enter to skip)
-│
-kanbo init will:
-  create  .kanbo/board.db (a board file of this project's own, with the columns Backlog, To Do, In Progress, In Review, QA, Blocked, Design, Done, Canceled)
-  write   .kanbo/binding.json (this project uses board WST)
-Nothing else is changed.
-│
-◆  Write these changes?
-│  ● Yes / ○ No
-└
-◇  Write these changes?
-│  Yes
 ✔ Board: .kanbo/board.db
 ✔ Columns: Backlog, To Do, In Progress, In Review, QA, Blocked, Design, Done, Canceled
 ✔ Card numbers: WST-001, WST-002, …

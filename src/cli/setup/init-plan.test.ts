@@ -168,8 +168,6 @@ describe('kanbo init with nothing naming a board', () => {
         ['Where should the board live?', ['enter']],
         ['Card numbers start with', ['enter']],
         ['Which columns should the board start with?', ['enter']],
-        ['Add a first card?', ['enter']],
-        ['Write these changes?', ['enter']],
       ]
       for (const [question, answer] of questions) {
         await driver.waitFor(question)
@@ -186,8 +184,6 @@ describe('kanbo init with nothing naming a board', () => {
       'Where should the board live?',
       'Card numbers start with',
       'Which columns should the board start with?',
-      'Add a first card?',
-      'Write these changes?',
     ]) {
       it(`leaves the folder byte for byte as it was on Ctrl-C at "${question}"`, async () => {
         writeFileSync(join(projectDir, 'CLAUDE.md'), '# Mine\n')
@@ -199,23 +195,30 @@ describe('kanbo init with nothing naming a board', () => {
       })
     }
 
-    it('shows what it will write before asking, and writes nothing on a no', async () => {
+    it('leaves the folder byte for byte as it was on Ctrl-C at "Connect them now?"', async () => {
+      writeFileSync(join(projectDir, 'CLAUDE.md'), '# Mine\n')
       const before = snapshot(projectDir)
 
-      const outcome = await answerUpTo('Write these changes?', ['down', 'enter'])
+      const running = kanbo('init').catch((error: unknown) => error)
+      for (const [question, keys] of [
+        ['Where should the board live?', ['enter']],
+        ['Card numbers start with', ['enter']],
+        ['Which columns should the board start with?', ['enter']],
+        ['Which coding agents do you use here?', ['space', 'enter']],
+      ] as [string, PromptKey[]][]) {
+        await driver.waitFor(question)
+        driver.press(...keys)
+      }
+      await driver.waitFor('Connect them now?')
+      driver.press('ctrl-c')
 
-      expect(outcome).toEqual(expect.objectContaining({ message: 'Nothing was written.' }))
+      expect(await running).toBeInstanceOf(CancelledError)
       expect(snapshot(projectDir)).toEqual(before)
-      const preview = driver.transcript()
-      expect(preview).toContain(`create  ${join('.kanbo', 'board.db')}`)
-      expect(preview).toContain(`write   ${join('.kanbo', 'binding.json')}`)
-      expect(preview).toContain(`run     ${displayCommand(claudeUserAddArgv(mcpLaunchSpec({ scope: 'user' })))}`)
-      expect(preview).not.toContain('CLAUDE.md')
     })
 
-    it('writes everything it showed once the person says yes, and no instruction file', async () => {
+    it('writes the board once the questions are answered, and no instruction file', async () => {
       writeFileSync(join(projectDir, 'CLAUDE.md'), '# Mine\n')
-      await answerUpTo('Write these changes?', ['enter'])
+      expect(await answerUpTo('Which columns should the board start with?', ['enter'])).not.toBeInstanceOf(Error)
 
       expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(true)
       expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe('# Mine\n')

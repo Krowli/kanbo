@@ -270,7 +270,7 @@ describe('kanbo with no words', () => {
       await driver.waitFor(`This project's board file is missing: ${boardFile()}.`)
       await driver.waitFor('Create a new empty board at .kanbo/board.db (the old cards are gone)')
       driver.press('enter')
-      for (const question of ['Which columns should the board start with?', 'Which coding agents do you use here?', 'Add a first card?', 'Write these changes?']) {
+      for (const question of ['Which columns should the board start with?', 'Which coding agents do you use here?']) {
         await driver.waitFor(question)
         driver.press('enter')
       }

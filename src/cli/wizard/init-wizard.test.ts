@@ -228,8 +228,6 @@ describe('kanbo init wizard', () => {
     ['Which columns should the board start with?', enter],
     ['Which coding agents do you use here?', enter],
     ['Connect them now?', enter],
-    ['Add a first card?', typeLine('Write the README')],
-    ['Write these changes?', enter],
   ]
 
   it('sets up a file board with the standard columns and connects Claude Code', async () => {
@@ -254,8 +252,6 @@ describe('kanbo init wizard', () => {
       ['Which columns should the board start with?', (d) => d.press('down', 'enter')],
       ['Which coding agents do you use here?', enter],
       ['Connect them now?', d => d.press('down', 'enter')],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -275,8 +271,6 @@ describe('kanbo init wizard', () => {
       ['Any columns of your own?', typeLine('Design, Blocked')],
       ['One line about "Design"', typeLine('Being sketched before anyone builds it')],
       ['Which coding agents do you use here?', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -298,8 +292,6 @@ describe('kanbo init wizard', () => {
       ['Pick the columns', d => d.press('space', 'down', 'down', 'down', 'down', 'down', 'down', 'down', 'space', 'enter')],
       ['Any columns of your own?', typeLine('canceled, Backlog')],
       ['Which coding agents do you use here?', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -320,7 +312,6 @@ describe('kanbo init wizard', () => {
       ['Create the board\'s tables in that database now?', d => d.type('n')],
       ['Card numbers start with', enter],
       ['Which coding agents do you use here?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -349,8 +340,6 @@ describe('kanbo init wizard', () => {
       ['This board already numbers its cards WEA-001, … — new cards go on from there.', () => {}],
       ['This workspace already has its columns.', () => {}],
       ['Which coding agents do you use here?', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -370,7 +359,6 @@ describe('kanbo init wizard', () => {
       ['Create the board\'s tables in that database now?', d => d.type('n')],
       ['Card numbers start with', typeLine('sta')],
       ['Which coding agents do you use here?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -391,7 +379,6 @@ describe('kanbo init wizard', () => {
     const outcome = await wizard([
       ['Which coding agents do you use here?', enter],
       ['Connect them now?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -438,8 +425,6 @@ describe('kanbo init wizard', () => {
       ['Where should the board live?', enter],
       ['This board already numbers its cards OLD-001, … — new cards go on from there.', () => {}],
       ['Which coding agents do you use here?', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -457,8 +442,6 @@ describe('kanbo init wizard', () => {
     const outcome = await wizard([
       ['Which coding agents do you use here?', enter],
       ['Connect them now?', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -475,7 +458,7 @@ describe('kanbo init wizard', () => {
     const outcome = await wizard(standardClaude)
 
     expect(outcome).toBeNull()
-    expect(driver.transcript()).toContain('the old kanbo section: agents now learn the board from the MCP server')
+    expect(driver.transcript()).toContain('old kanbo section removed')
     expect(readFileSync(join(projectDir, 'CLAUDE.md'), 'utf8')).toBe('# Project notes\n')
   })
 
@@ -487,8 +470,6 @@ describe('kanbo init wizard', () => {
       ['Card numbers start with', enter],
       ['Which columns should the board start with?', enter],
       ['Which coding agents do you use here?', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -505,8 +486,6 @@ describe('kanbo init wizard', () => {
       ['Where should the board live?', enter],
       ['Card numbers start with', enter],
       ['Which columns should the board start with?', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -529,8 +508,6 @@ describe('kanbo init wizard', () => {
       ['Which columns should the board start with?', enter],
       ['Which coding agents do you use here?', enter],
       ['Connect them now?', d => d.press('down', 'enter')],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -549,8 +526,6 @@ describe('kanbo init wizard', () => {
       ['Card numbers start with', enter],
       ['Which columns should the board start with?', enter],
       ['Which coding agents do you use here?', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', enter],
     ])
 
     expect(outcome).toBeNull()
@@ -576,20 +551,32 @@ describe('kanbo init wizard', () => {
     }
   })
 
-  it('writes nothing when the person says no at the end', async () => {
-    const before = snapshot(projectDir)
+  it('never asks for a first card or for a last yes, and writes once the questions are answered', async () => {
+    machine.detected = ['claude']
 
-    const outcome = await wizard([
-      ['Where should the board live?', enter],
-      ['Card numbers start with', enter],
-      ['Which columns should the board start with?', enter],
-      ['Which coding agents do you use here?', enter],
-      ['Add a first card?', enter],
-      ['Write these changes?', d => d.type('n')],
-    ])
+    const outcome = await wizard(standardClaude)
 
-    expect(outcome).toEqual(expect.objectContaining({ message: 'Nothing was written.', exitCode: 1 }))
-    expect(snapshot(projectDir)).toEqual(before)
+    expect(outcome).toBeNull()
+    expect(driver.transcript()).not.toContain('Add a first')
+    expect(driver.transcript()).not.toContain('Write these')
+    expect(existsSync(join(projectDir, '.kanbo', 'board.db'))).toBe(true)
+  })
+
+  it('still puts the card of --first-card on the board', async () => {
+    machine.detected = ['claude']
+
+    const outcome = await wizard(standardClaude, '--first-card', 'Write the README')
+
+    expect(outcome).toBeNull()
+    expect(driver.transcript()).not.toContain('Add a first')
+    const session = await openBoardSession({}, 'read')
+    try {
+      const ready = await session.ops.queryReady({ workspaceId: session.workspace.id })
+      expect(ready.cards.map(card => card.title)).toEqual(['Write the README'])
+    }
+    finally {
+      await session.close()
+    }
   })
 
   it('plans exactly what the equivalent flags plan', async () => {
@@ -605,7 +592,7 @@ describe('kanbo init wizard', () => {
 
     const running = runInitWizard({
       cwd: projectDir,
-      options: {},
+      options: { firstCard: 'Check the sensors' },
       ui: driver.ui,
       plan: planInit,
       detect: () => AGENT_IDS.map(agent => ({ agent, detected: machine.detected.includes(agent), evidence: [] })),
@@ -618,8 +605,6 @@ describe('kanbo init wizard', () => {
       ['Which columns should the board start with?', d => d.press('down', 'down', 'enter')],
       ['Which coding agents do you use here?', enter],
       ['Connect them now?', enter],
-      ['Add a first card?', typeLine('Check the sensors')],
-      ['Write these changes?', enter],
     ] satisfies Step[]) {
       await driver.waitFor(question)
       answer(driver)

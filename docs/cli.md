@@ -34,7 +34,7 @@ A card is named as the board prints it — `MAN-012`, `MAN-12` or just `12`. A c
 
 | Command | What it does |
 | --- | --- |
-| `kanbo` | Where to start: the init wizard in a folder with no board, the home screen in one with a board, a short hint with nobody to ask. Exits `0` after the hint, and when you leave the home screen (Exit, or Ctrl-C at the menu); in the wizard, Ctrl-C at any question or No at the last one ("Write these changes?") exits `1` with nothing written. A board file the project is bound to that has gone missing is said so (exit `2` with nobody to ask; in a terminal the wizard offers a new empty board in its place). |
+| `kanbo` | Where to start: the init wizard in a folder with no board, the home screen in one with a board, a short hint with nobody to ask. Exits `0` after the hint, and when you leave the home screen (Exit, or Ctrl-C at the menu); in the wizard, Ctrl-C at any question exits `1` with nothing written. A board file the project is bound to that has gone missing is said so (exit `2` with nobody to ask; in a terminal the wizard offers a new empty board in its place). |
 | `kanbo init` | Set up a board for this project — a wizard in a terminal, defaults with `--yes`. `--connect <agents>` also registers the agents' MCP server. |
 | `kanbo connect [agents...]` | Connect your agents (`claude`, `codex`, `cursor`, `gemini`, or `all`) to kanbo: register its MCP server in their own settings, for every project (`--project`: this project only). Takes out the kanbo section older versions wrote. `--check` shows what is connected, `--remove` takes it out. Alias `kanbo setup`. |
 | `kanbo doctor [--fix [--yes]]` | Check that kanbo, this project's board and your agents' setup work: the install, the project settings (`.kanbo/binding.json`), the board, old instruction blocks and MCP registrations. `--fix` repairs what is kanbo's own after one confirmation, and never deletes anything. |
@@ -98,7 +98,7 @@ Set up a board for this project. Writes `.kanbo/binding.json` (mode `0600`) and 
 
 ### In a terminal: the wizard
 
-Without `--yes` (and without `--json`/`--format`), in a terminal, `init` asks one question at a time:
+Without `--yes` (and without `--json`/`--format`), in a terminal, `init` asks one question at a time (four things: where the board lives, the card key, the columns, and which agents to connect):
 
 1. **Where should the board be set up?** — only when the folder is inside a git repository but not its root: the repository root (recommended) or only this folder.
 2. **Where should the board live?** — *In this project* (the file `.kanbo/board.db`; nothing to run or host) or *In a shared Postgres database* (for a team; Supabase works). For Postgres it asks for the connection string (hidden; stored only in `.kanbo/binding.json`, which git never sees), the workspace id (default: the folder name), and whether to create the board's tables now (`kanbo migrate`), and warns that agents reach the board with that owner's connection string until you set up roles.
@@ -106,8 +106,8 @@ Without `--yes` (and without `--json`/`--format`), in a terminal, `init` asks on
 4. **Which columns should the board start with?** — *Standard* (Backlog → To Do → In Progress → In Review → Done · Canceled), *Simple* (To Do → In Progress → Done), *Review + QA* (… In Review → QA → Done), or *Custom*: pick from Backlog, To Do, In Progress, In Review, QA, Blocked, Done, Canceled, add columns of your own, and give each one line saying when a card belongs there — agents read it. To Do is always there: agents take work from it.
 5. **Which coding agents do you use here?** — Claude Code, Codex, Cursor, Gemini CLI; the ones found on this machine or in the project that have no kanbo registration yet are ticked.
 6. **Connect them now?** — *Yes* (register kanbo's MCP server for them, for every project) or *Not now* (the board only — later: `kanbo connect`). Questions 5 and 6 are asked only when an agent found here has no kanbo MCP registration; when every one has, the wizard says `Your agents already reach kanbo through its MCP server.` and asks nothing.
-7. **Add a first card?** — optional; it goes in To Do.
-8. The full list of changes, then **Write these changes?** — nothing, not even the binding, is written before this yes. At the end: what was done, and what to do next.
+
+The answers are the consent: after the last question the wizard writes the board and the binding, connects the agents you said Yes to, and prints what it did and what to do next. A first card is added only with `--first-card <title>`.
 
 A question a flag already answers is not asked. In a project that already has a board, the board questions (1–4) are skipped and the wizard goes straight to the agents — a project bound to a shared Postgres board included: its workspace and key come from the binding. When `--database-url` or `KANBO_DATABASE_URL` names a shared board and the project has no binding yet, question 2 is settled but the workspace id, the tables question and the key are still asked.
 

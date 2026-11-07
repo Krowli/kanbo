@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, rmSync } from 'node:fs'
-import { dirname, relative } from 'node:path'
+import { dirname } from 'node:path'
 
 import type { ColumnSpec } from '../../domain/column-templates'
-import { maskDatabaseUrl } from '../../domain/database-url'
 import type { BoardWorkspaceIdentity } from '../../domain/numbering'
 import type { BoardOps } from '../../ops'
 import { createBoardOps } from '../../ops'
@@ -13,13 +12,13 @@ import type { BoardFileContents } from '../../sqlite/open-database'
 import { markBoardFileOwnedByKanbo, openBoardDatabase, readBoardFileContents } from '../../sqlite/open-database'
 import { createPlacementActor } from '../actor'
 import type { KanboBinding } from '../binding'
-import { BINDING_FILE_PATH, ignoreBoardFile, writeBinding } from '../binding'
+import { ignoreBoardFile, writeBinding } from '../binding'
 import type { BoardTarget } from '../db-target'
 import { CliError } from '../output'
 import { openPostgresBoard } from '../postgres-board'
 import { rememberProjectQuietly } from '../project-registry'
 import type { ConnectOutcome, ConnectPlan } from './connect-plan'
-import { applyConnectPlan, displayPath, explainItem, itemPath, pendingItems } from './connect-plan'
+import { applyConnectPlan } from './connect-plan'
 import { renameWithRetry } from './fs-retry'
 
 /**
@@ -27,7 +26,7 @@ import { renameWithRetry } from './fs-retry'
  * anything is written.
  *
  * `init` resolves its inputs and asks its questions first, builds this plan,
- * shows it to a person at a terminal and asks once, and only then applies it.
+ * and only then applies it.
  * Stopping at any question — Ctrl-C included — leaves the folder exactly as it
  * was: not even the binding is written before the plan is applied.
  */
@@ -83,40 +82,6 @@ export function assertOwnBoardFile(absolutePath: string): void {
 function notABoardFileMessage(absolutePath: string): string {
   return `${absolutePath} already holds a database of its own. Name another path with --file, `
     + 'or move that file out of the way.'
-}
-
-/** The plan as a person reads it before saying yes. */
-export function describeInitPlan(plan: InitPlan): string {
-  const lines = ['kanbo init will:']
-  const columns = plan.columns ? `, with the columns ${plan.columns.map(column => column.name).join(', ')}` : ''
-  if (plan.boardFile) {
-    const what = plan.boardFile.exists
-      ? 'the board file of this project, brought up to date'
-      : `a board file of this project's own${columns}`
-    lines.push(`  ${plan.boardFile.exists ? 'update' : 'create'}  ${relativeTo(plan, plan.boardFile.path)} (${what})`)
-  }
-  if (plan.target.kind === 'postgres' && plan.migrate) {
-    lines.push(`  create  the board's tables in ${maskDatabaseUrl(plan.target.url)}${columns}`)
-  }
-  lines.push(`  write   ${BINDING_FILE_PATH} (this project uses board ${plan.workspace.name})`)
-  for (const item of plan.connect ? pendingItems(plan.connect) : []) {
-    lines.push(item.kind === 'claude-cli'
-      ? `  run     ${explainItem(item)}`
-      : `  ${item.kind === 'instructions' ? 'remove ' : 'write  '} ${displayPath(plan, itemPath(item))} (${explainItem(item)})`)
-  }
-  if (plan.firstCard) {
-    lines.push(`  add     a first card to To Do: ${plan.firstCard}`)
-  }
-  for (const note of plan.connect?.notes ?? []) {
-    lines.push(`Note: ${note}`)
-  }
-  lines.push('Nothing else is changed.')
-  return lines.join('\n')
-}
-
-function relativeTo(plan: InitPlan, path: string): string {
-  const inside = relative(plan.projectDir, path)
-  return inside.startsWith('..') ? path : inside
 }
 
 /**

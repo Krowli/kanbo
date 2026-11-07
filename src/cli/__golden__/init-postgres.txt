@@ -49,15 +49,6 @@ kanbo: agents in this project will reach the board with the connection string yo
 └
 ◇  Which coding agents do you use here?
 │  none
-kanbo init will:
-  write   .kanbo/binding.json (this project uses board WST)
-Nothing else is changed.
-│
-◆  Write these changes?
-│  ● Yes / ○ No
-└
-◇  Write these changes?
-│  Yes
 ✔ Board: shared Postgres postgres://u:***@db/x, workspace weather-station (tables not created here — run kanbo migrate when they are needed)
 ✔ Card numbers: WST-001, WST-002, …
 

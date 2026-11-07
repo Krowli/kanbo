@@ -42,29 +42,10 @@ kanbo — set up a board for this project
 └
 ◇  Connect them now?
 │  Yes — register kanbo's MCP server for them, for every project
-│
-◆  Add a first card? (optional — Enter to skip)
-│  e.g. Add a README
-└
-│  W█│  Wr█│  Wri█│  Writ█│  Write█│  Write █│  Write t█│  Write th█│  Write the█│  Write the █│  Write the R█│  Write the RE█│  Write the REA█│  Write the READ█│  Write the READM█│  Write the README█◇  Add a first card? (optional — Enter to skip)
-│  Write the README
-kanbo init will:
-  create  .kanbo/board.db (a board file of this project's own, with the columns Backlog, To Do, In Progress, In Review, Done, Canceled)
-  write   .kanbo/binding.json (this project uses board WST)
-  run     claude mcp add --scope user kanbo -- kanbo mcp
-  add     a first card to To Do: Write the README
-Nothing else is changed.
-│
-◆  Write these changes?
-│  ● Yes / ○ No
-└
-◇  Write these changes?
-│  Yes
 ✔ Board: .kanbo/board.db
 ✔ Columns: Backlog, To Do, In Progress, In Review, Done, Canceled
 ✔ Card numbers: WST-001, WST-002, …
 ✔ Claude Code: <home>/.claude.json (ran claude mcp add --scope user kanbo -- kanbo mcp)
-✔ First card: WST-001 Write the README
 ! kanbo runs from npx; agents can't start `kanbo mcp` until it's installed: npm install -g kanbo-cli
 
 Next: start Claude Code in this folder and say "take the next card from kanbo".

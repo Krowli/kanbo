@@ -18,22 +18,6 @@ This project already has a board: .kanbo/board.db (cards WEA-001, WEA-002, …).
 └
 ◇  Connect them now?
 │  Yes — register kanbo's MCP server for them, for every project
-│
-◆  Add a first card? (optional — Enter to skip)
-│  e.g. Add a README
-└
-◇  Add a first card? (optional — Enter to skip)
-│
-kanbo init will:
-  write   .kanbo/binding.json (this project uses board WEA)
-  run     claude mcp add --scope user kanbo -- kanbo mcp
-Nothing else is changed.
-│
-◆  Write these changes?
-│  ● Yes / ○ No
-└
-◇  Write these changes?
-│  Yes
 ✔ Board: .kanbo/board.db (kept as it is)
 ✔ Card numbers: WEA-001, WEA-002, …
 ✔ Claude Code: <home>/.claude.json (ran claude mcp add --scope user kanbo -- kanbo mcp)
