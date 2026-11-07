@@ -38,3 +38,12 @@ export function groupBoard(statuses: readonly ServeStatusView[], cards: readonly
   }
   return columns
 }
+
+/** Where a new card from the toolbar goes: the To Do column, else the first unstarted one, else the first that is not canceled. */
+export function newCardStatus(statuses: readonly ServeStatusView[]): ServeStatusView | null {
+  const open = statuses.filter(status => status.category !== 'canceled')
+  return open.find(status => /^to ?do$/i.test(status.name.trim()))
+    ?? open.find(status => status.category === 'unstarted')
+    ?? open[0]
+    ?? null
+}

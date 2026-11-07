@@ -6,16 +6,17 @@ import { renderCard } from './card-element'
 import { button, el } from './dom'
 import type { Placement } from './enter'
 import { enterOf, placementsOf, startsWaiting } from './enter'
-import { renderFilterBar, updateFilterCount } from './filter-bar'
 import type { CardFilters } from './filters'
 import { filterOptions, matchesFilters, readFilters, writeFilters } from './filters'
+import { plusIcon, statusIcon } from './icons'
 import type { BoardColumn } from './grouping'
-import { groupBoard } from './grouping'
+import { groupBoard, newCardStatus } from './grouping'
 import type { CardDetail, PanelTab } from './panel'
 import { readScroll, renderPanel } from './panel'
 import { childrenOf, parentOf, subtaskSummary } from './subtasks'
 import { startPresence } from './presence'
 import { renderProjectSwitcher, renderWhere } from './project-switcher'
+import { createToolbar } from './toolbar'
 import { adoptTokenFromLocation, readStoredToken, storeToken } from './token'
 
 /**
@@ -43,8 +44,6 @@ const api: BoardApi = createBoardApi(() => token, () => projectId === null ? '' 
 
 /** What the bar above the board narrows the cards to; kept in the address so a reload shows the same. */
 let filters: CardFilters = readFilters(location.search)
-/** What the filter bar was last built from. */
-let filterBarKey = ''
 
 let statuses: ServeStatusView[] = []
 let cards: ServeCardView[] = []
@@ -80,6 +79,15 @@ const boardElement = el('main', 'board')
 const panelHost = el('div', 'panel-host')
 const projectSlot = el('span', 'project-slot')
 const filterSlot = el('div', 'filter-slot')
+const toolbar = createToolbar({
+  onFilters: next => changeFilters(next),
+  onNew: () => {
+    const status = newCardStatus(statuses)
+    if (status) {
+      openDraft(status)
+    }
+  },
+})
 
 /** The last load of the board worked. */
 let loadWorked = false
@@ -135,6 +143,7 @@ function mountShell(): void {
   updateTokenFold()
   notice.setAttribute('role', 'status')
   notice.hidden = true
+  filterSlot.append(toolbar.element)
   root.replaceChildren(header, notice, filterSlot, boardElement, panelHost)
 }
 
@@ -319,35 +328,15 @@ function renderBoard(): void {
   renderIdentity()
   const draftHadFocus = draft !== null && document.activeElement === draft.input
   const focusedCardId = document.activeElement?.closest<HTMLElement>('.card')?.dataset.cardId ?? null
-  const searchInput = filterSlot.querySelector<HTMLInputElement>('.filter-search')
-  const searchHadFocus = searchInput !== null && document.activeElement === searchInput
-  const caret = searchInput ? [searchInput.selectionStart, searchInput.selectionEnd, searchInput.selectionDirection] as const : null
-
   const shown = cards.filter(card => matchesFilters(card, filters))
   const counts = { shown: shown.length, total: cards.length }
-  const options = filterOptions(cards)
-  // Rebuilt only when what it is built from changed: a poll that only moved a status line leaves an open dropdown alone.
-  const barKey = JSON.stringify([filters, options])
-  if (barKey !== filterBarKey || !filterSlot.firstElementChild) {
-    filterBarKey = barKey
-    filterSlot.replaceChildren(renderFilterBar(filters, options, counts, changeFilters))
-  }
-  else {
-    updateFilterCount(filterSlot.firstElementChild as HTMLElement, counts)
-  }
+  toolbar.update({ filters, options: filterOptions(cards), counts })
   boardElement.replaceChildren(...groupBoard(statuses, shown).map(renderColumn))
   // Every card, shown or not: a filter that brings a card into view does not make it new.
   lastPlacement = placementsOf(cards)
   markOpenCard()
 
-  if (searchHadFocus) {
-    const next = filterSlot.querySelector<HTMLInputElement>('.filter-search')
-    next?.focus()
-    if (next && caret) {
-      next.setSelectionRange(caret[0], caret[1], caret[2] ?? undefined)
-    }
-  }
-  else if (draftHadFocus) {
+  if (draftHadFocus) {
     draft?.input.focus()
   }
   else if (focusedCardId) {
@@ -374,11 +363,15 @@ function renderColumn(column: BoardColumn): HTMLElement {
   const element = el('section', 'column')
   element.setAttribute('aria-label', column.name)
   const head = el('header', 'column-head')
-  head.append(el('span', 'column-name', column.name), el('span', 'column-count', String(column.cards.length)))
   const status = column.status
+  head.append(statusIcon(status?.category ?? null), el('span', 'column-name', column.name), el('span', 'column-count', String(column.cards.length)), el('span', 'spacer'))
   if (status) {
-    const add = button('+ New', 'ghost column-add', () => openDraft(status))
+    const add = el('button', 'ghost column-add')
+    add.type = 'button'
+    add.append(plusIcon())
     add.setAttribute('aria-label', `New card in ${column.name}`)
+    add.title = `New card in ${column.name}`
+    add.addEventListener('click', () => openDraft(status))
     head.append(add)
   }
   const list = el('div', 'column-cards')
