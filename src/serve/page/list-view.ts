@@ -4,7 +4,7 @@ import { columnBadge, columnRules } from './column-badges'
 import { el } from './dom'
 import type { BoardColumn } from './grouping'
 import { chevronIcon, lockIcon, parentIcon, priorityIcon, statusIcon } from './icons'
-import { avatar, isRunning, labelChips, runDot, waitingPill } from './parts'
+import { avatar, isRunning, labelChips, runDot, selectBox, waitingPill } from './parts'
 import type { SubtaskMode } from './subtasks'
 import { childrenOf } from './subtasks'
 
@@ -92,7 +92,7 @@ function renderRow(row: ListRow, options: ListOptions): HTMLElement {
 
   const icons = el('span', 'row-icons')
   icons.append(statusIcon(category), priorityIcon(card.priority))
-  element.append(icons, el('span', 'card-key', card.id))
+  element.append(selectBox(card.id), icons, el('span', 'card-key', card.id))
 
   if (row.depth === 0 && options.mode === 'cards' && card.parentIssueId && card.parentIssueId !== card.id) {
     const parent = options.cards.find(candidate => candidate.id === card.parentIssueId)

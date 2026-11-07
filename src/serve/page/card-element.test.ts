@@ -38,6 +38,13 @@ describe('renderCard', () => {
     expect(card.querySelector('.card-meta .avatar')).not.toBeNull()
   })
 
+  it('starts the meta row with a selection checkbox labelled by the key', () => {
+    const box = renderCard(cardFixture({ id: 'WOR-001' }), null, () => {}).querySelector<HTMLInputElement>('.card-meta > input.select-box')
+    expect(box?.type).toBe('checkbox')
+    expect(box?.getAttribute('aria-label')).toBe('Select WOR-001')
+    expect(box?.nextElementSibling?.className).toBe('card-key')
+  })
+
   it('leaves out a status row and a footer that have nothing in them', () => {
     const card = renderCard(cardFixture({ id: 'WOR-001' }), null, () => {})
     expect([...card.children].map(row => row.className)).toEqual(['card-meta', 'card-title'])

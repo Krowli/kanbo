@@ -1,7 +1,8 @@
 import type { ServeProjectView } from '../projects'
 import type { ServeCardView, ServeStatusView } from '../views'
-import type { BoardApi } from './api'
+import type { BoardApi, BulkChange } from './api'
 import { ApiError, createBoardApi } from './api'
+import { applyBulk } from './bulk'
 import { renderCard } from './card-element'
 import type { Display } from './display'
 import { readDisplay, writeDisplay } from './display'
@@ -13,6 +14,9 @@ import { filterOptions, matchesFilters, readFilters, writeFilters } from './filt
 import { columnBadge, columnRules, countByStatus } from './column-badges'
 import { lockIcon, plusIcon, statusIcon } from './icons'
 import { readCollapsed, renderList, writeCollapsed } from './list-view'
+import { clearSelection, EMPTY_SELECTION, pruneSelection, selectRange, toggleSelection } from './selection'
+import type { Selection } from './selection'
+import { createSelectionBar } from './selection-bar'
 import type { BoardColumn } from './grouping'
 import { groupBoard, newCardStatus } from './grouping'
 import type { CardDetail, PanelTab } from './panel'
@@ -80,6 +84,9 @@ function toggleGroup(groupId: string): void {
   renderBoard()
 }
 
+/** The cards picked for a change of several at once. */
+let selection: Selection = EMPTY_SELECTION
+
 let statuses: ServeStatusView[] = []
 let cards: ServeCardView[] = []
 let seq: number | null = null
@@ -114,6 +121,14 @@ const boardElement = el('main', 'board')
 const panelHost = el('div', 'panel-host')
 const projectSlot = el('span', 'project-slot')
 const filterSlot = el('div', 'filter-slot')
+const selectionBar = createSelectionBar({
+  onMove: (statusId) => {
+    const column = statuses.find(status => status.id === statusId)
+    void changeSelected({ statusId }, column?.name)
+  },
+  onPriority: priority => void changeSelected({ priority }),
+  onClear: () => changeSelection(clearSelection()),
+})
 const toolbar = createToolbar({
   onFilters: next => changeFilters(next),
   onDisplay: next => changeDisplay(next),
@@ -180,7 +195,7 @@ function mountShell(): void {
   notice.setAttribute('role', 'status')
   notice.hidden = true
   filterSlot.append(toolbar.element)
-  root.replaceChildren(header, notice, filterSlot, boardElement, panelHost)
+  root.replaceChildren(header, notice, filterSlot, boardElement, selectionBar.element, panelHost)
 }
 
 /** Whether the notice on screen says the board could not be loaded, so that the next good load takes it away. */
@@ -241,6 +256,8 @@ async function refresh(): Promise<void> {
     seq = version
     statuses = nextStatuses
     cards = nextCards
+    // A card that was picked and is gone stays out; the rest stay picked.
+    selection = pruneSelection(selection, new Set(nextCards.map(card => card.id)))
     projects = nextProjects
     workspaceInfo = nextWorkspace
     renderBoard()
@@ -290,6 +307,7 @@ function chooseProject(id: string | null): void {
   // Who works a card and which labels exist belong to a project; the rest of the filters carry over.
   filters = { ...filters, worker: null, labels: [] }
   collapsed = readStoredCollapsed()
+  selection = EMPTY_SELECTION
   writeFiltersToAddress(url)
   seq = null
   draft = null
@@ -404,6 +422,7 @@ function renderBoard(): void {
   // Every card, shown or not: a filter that brings a card into view does not make it new.
   lastPlacement = placementsOf(cards)
   markOpenCard()
+  markSelection()
 
   if (draftHadFocus) {
     draft?.input.focus()
@@ -412,6 +431,68 @@ function renderBoard(): void {
     focusCard(focusedCardId)
   }
 }
+
+/** The picked cards carry `data-selected` and a ticked box, and the bar says how many. */
+function markSelection(): void {
+  for (const card of boardElement.querySelectorAll<HTMLElement>('.card, .list-row')) {
+    const picked = card.dataset.cardId !== undefined && selection.ids.has(card.dataset.cardId)
+    card.toggleAttribute('data-selected', picked)
+    const box = card.querySelector<HTMLInputElement>('input.select-box')
+    if (box) {
+      box.checked = picked
+    }
+  }
+  selectionBar.update({ count: selection.ids.size, statuses })
+}
+
+function changeSelection(next: Selection): void {
+  selection = next
+  markSelection()
+}
+
+/** Change every picked card at once, as one write, and say which went in short of a column's rules. */
+async function changeSelected(change: BulkChange, column?: string): Promise<void> {
+  try {
+    showNotice(await applyBulk(api, [...selection.ids], change, { column }))
+  }
+  catch (error) {
+    showNotice(describeFailure(error), 'error')
+  }
+  await refresh()
+}
+
+/** Shift-click: pick the cards from the anchor to this one within its column or group. */
+function selectThrough(row: HTMLElement, cardId: string): void {
+  const container = row.closest('.column-cards, .list-group')
+  const order = [...(container ?? boardElement).querySelectorAll<HTMLElement>('[data-card-id]')].map(item => item.dataset.cardId!)
+  changeSelection(selectRange(selection, order, cardId))
+}
+
+// Capture phase: a shift- or cmd-click picks a card instead of opening it.
+boardElement.addEventListener('click', (event) => {
+  const target = event.target as HTMLElement
+  const row = target.closest<HTMLElement>('.card, .list-row')
+  const cardId = row?.dataset.cardId
+  if (!row || !cardId) {
+    return
+  }
+  if (event.shiftKey || event.metaKey || event.ctrlKey) {
+    if (target.closest('.subtask-row, .subtask-more, .subtask-strip')) {
+      return
+    }
+    event.preventDefault()
+    event.stopPropagation()
+    if (event.shiftKey) {
+      selectThrough(row, cardId)
+    }
+    else {
+      changeSelection(toggleSelection(selection, cardId))
+    }
+  }
+  else if (target.classList.contains('select-box')) {
+    changeSelection(toggleSelection(selection, cardId))
+  }
+}, true)
 
 /** The card whose panel is open carries `data-open`, so it reads as open on the board. */
 function markOpenCard(): void {
@@ -687,7 +768,7 @@ async function act(action: () => Promise<void>): Promise<void> {
 
 /** While the dialog is open the board behind it can't be reached by Tab or a screen reader. */
 function setBackgroundInert(inert: boolean): void {
-  for (const region of [header, notice, filterSlot, boardElement]) {
+  for (const region of [header, notice, filterSlot, boardElement, selectionBar.element]) {
     region.inert = inert
   }
 }
@@ -714,6 +795,9 @@ function closePanel(): void {
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape' && openCardId) {
     closePanel()
+  }
+  else if (event.key === 'Escape' && selection.ids.size > 0 && !isTyping(event.target)) {
+    changeSelection(clearSelection())
   }
   else if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey && !isTyping(event.target)) {
     event.preventDefault()

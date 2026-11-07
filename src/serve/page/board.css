@@ -1591,6 +1591,99 @@ button.subtask-strip:hover {
   margin-bottom: var(--space-8);
 }
 
+/* Selecting cards for a change of several */
+
+.select-box {
+  position: relative;
+  z-index: var(--z-raised);
+  flex: none;
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+  /* Seen on hover, focus and once ticked, but always taking its place. */
+  opacity: 0;
+  transition: opacity var(--duration-base) var(--ease-out);
+}
+
+.card:hover .select-box,
+.list-row:hover .select-box,
+.select-box:focus-visible,
+.select-box:checked {
+  opacity: 1;
+}
+
+.selection-bar {
+  position: fixed;
+  right: 0;
+  bottom: var(--space-12);
+  left: 0;
+  z-index: var(--z-bar);
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  width: fit-content;
+  min-height: 2.5rem;
+  margin: 0 auto;
+  padding: var(--space-4) var(--space-8);
+  border-radius: var(--radius-10);
+  background: var(--color-popover);
+  box-shadow: var(--shadow-lg), 0 0 0 1px color-mix(in srgb, var(--color-foreground) 10%, transparent);
+  font-size: var(--text-12);
+}
+
+.selection-bar .selection-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: 0 var(--space-6);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.selection-bar .divider {
+  align-self: stretch;
+  width: 1px;
+  margin: var(--space-4) 0;
+  background: var(--color-border);
+}
+
+.tool-button .icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.popover[data-side='top'] {
+  top: auto;
+  bottom: calc(100% + var(--space-6));
+}
+
+.menu-item {
+  all: unset;
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 1.75rem;
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-4);
+  font-size: var(--text-12);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.menu-item:hover,
+.menu-item:focus-visible {
+  background: var(--color-fill);
+}
+
+.menu-item .icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
 /* The dialog */
 
 .panel-head {
@@ -2430,6 +2523,10 @@ button.breadcrumb:focus-visible,
     animation: panel-in var(--duration-slow) var(--ease-out);
   }
 
+  .selection-bar:not([hidden]) {
+    animation: bar-in var(--duration-slow) var(--ease-out);
+  }
+
   .card[data-enter] {
     animation: card-in var(--duration-base) var(--ease-out);
   }
@@ -2477,5 +2574,13 @@ button.breadcrumb:focus-visible,
   100% {
     opacity: 0;
     transform: scale(2.75);
+  }
+}
+
+
+@keyframes bar-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-12)) scale(0.98);
   }
 }

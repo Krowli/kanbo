@@ -1,4 +1,5 @@
 import type { IssueActivityItemView } from '../../domain/activity-types'
+import type { BulkUpdateCardsResult } from '../../ops/card-batch'
 import type { BoardRunView } from '../../ops/runs'
 import type { IssueFieldChange } from '../../sqlite/schema'
 import type { ServeErrorBody } from '../errors'
@@ -10,6 +11,12 @@ import type { ServeCardView, ServeCommentView, ServeStatusView } from '../views'
  * request carries the token the person gave, when they gave one; a failure is
  * an `ApiError` with the server's status, code and message.
  */
+
+/** The fields the selection bar changes on several cards at once. */
+export interface BulkChange {
+  statusId?: string
+  priority?: ServeCardView['priority']
+}
 
 export class ApiError extends Error {
   constructor(readonly status: number, readonly code: string, message: string) {
@@ -27,6 +34,8 @@ export interface BoardApi {
   cards: () => Promise<ServeCardView[]>
   createCard: (input: { workspaceId: string, statusId: string, description: string }) => Promise<ServeCardView>
   moveCard: (cardId: string, statusId: string) => Promise<ServeCardView>
+  /** One write for all the cards: a person's, so a column's unmet rules come back as warnings. */
+  bulkUpdate: (cardIds: readonly string[], change: BulkChange) => Promise<BulkUpdateCardsResult>
   comments: (cardId: string) => Promise<ServeCommentView[]>
   addComment: (cardId: string, content: string) => Promise<ServeCommentView>
   activity: (cardId: string) => Promise<IssueActivityItemView[]>
@@ -83,6 +92,7 @@ export function createBoardApi(readToken: () => string | null, readBase: () => s
     cards: async () => await request('GET', board('/issues')),
     createCard: async input => await request('POST', board('/issues'), input),
     moveCard: async (cardId, statusId) => await request('PATCH', `${card(cardId)}/status/${encodeURIComponent(statusId)}`),
+    bulkUpdate: async (cardIds, change) => await request('PATCH', board('/issues/bulk'), { issueIds: cardIds, update: change }),
     comments: async cardId => await request('GET', `${card(cardId)}/comments`),
     addComment: async (cardId, content) => await request('POST', `${card(cardId)}/comments`, { content }),
     activity: async cardId => await request('GET', `${card(cardId)}/activity`),

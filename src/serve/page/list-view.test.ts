@@ -110,6 +110,7 @@ describe('renderList', () => {
     const card = cardFixture({ id: 'WOR-003', title: 'Alone', statusId: 'todo', priority: 'high', labels: ['a', 'b', 'c'], waitingFor: 'human', activeRun: run, createdAt: NOW - 3 * 86_400 })
     const row = renderList(options([card])).querySelector<HTMLElement>('.list-row')!
     expect(row.dataset.cardId).toBe('WOR-003')
+    expect(row.querySelector('input.select-box')?.getAttribute('aria-label')).toBe('Select WOR-003')
     expect(row.querySelector('.status-icon')).not.toBeNull()
     expect(row.querySelector('.priority-icon')?.getAttribute('data-priority')).toBe('high')
     expect(row.querySelector('.card-key')?.textContent).toBe('WOR-003')

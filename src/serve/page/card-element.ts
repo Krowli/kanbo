@@ -2,7 +2,7 @@ import { cardDisplayTitle } from '../../domain/card-display-title'
 import type { ServeCardView, ServeStatusView } from '../views'
 import { el } from './dom'
 import { parentIcon } from './icons'
-import { avatar, isRunning, labelChips, priorityTag, progressBar, subtaskRow, waitingPill } from './parts'
+import { avatar, isRunning, labelChips, priorityTag, progressBar, selectBox, subtaskRow, waitingPill } from './parts'
 import type { SubtaskBlock, SubtaskSummary } from './subtasks'
 
 /** What a card's look says, the first match winning: it waits for you, an agent is running it, it is done, canceled, or none of these. */
@@ -111,7 +111,7 @@ export function renderCard(
   }
 
   const meta = el('div', 'card-meta')
-  meta.append(el('span', 'card-key', card.id), el('span', 'spacer'))
+  meta.append(selectBox(card.id), el('span', 'card-key', card.id), el('span', 'spacer'))
   const worker = avatar(card, isRunning(card) || context?.runsBelow === true)
   if (worker) {
     meta.append(worker)

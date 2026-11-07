@@ -136,3 +136,15 @@ export function subtaskRow(row: SubtaskRow, onOpen: (cardId: string) => void): H
   item.append(button)
   return item
 }
+
+/**
+ * The checkbox that picks a card for a change of several. It keeps its place in
+ * the row but is only seen on hover, focus or once checked (the stylesheet
+ * does that); the page reads its clicks by delegation, not here.
+ */
+export function selectBox(cardId: string): HTMLInputElement {
+  const box = el('input', 'select-box')
+  box.type = 'checkbox'
+  box.setAttribute('aria-label', `Select ${cardId}`)
+  return box
+}

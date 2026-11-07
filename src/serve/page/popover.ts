@@ -41,6 +41,7 @@ export function attachPopover(
   label: string,
   build: () => HTMLElement,
   align: 'start' | 'end' = 'start',
+  side: 'bottom' | 'top' = 'bottom',
 ): PopoverHandle {
   let panel: HTMLElement | null = null
   trigger.setAttribute('aria-haspopup', 'dialog')
@@ -69,6 +70,7 @@ export function attachPopover(
     panel.setAttribute('role', 'dialog')
     panel.setAttribute('aria-label', label)
     panel.dataset.align = align
+    panel.dataset.side = side
     panel.append(...build().children)
     anchor.append(panel)
     trigger.setAttribute('aria-expanded', 'true')
