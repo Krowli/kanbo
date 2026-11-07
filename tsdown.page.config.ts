@@ -7,7 +7,7 @@ import { defineConfig } from 'tsdown'
  * A browser runs it, so it is a single IIFE with nothing left to import — the
  * page's CSP allows scripts from the server itself and nowhere else — and it
  * carries no source map, which the server does not serve. The stylesheet is
- * one hand-written file and is copied as it is.
+ * one hand-written file and is copied as it is, with the font files in `fonts/`.
  */
 export default defineConfig({
   entry: { board: 'src/serve/page/main.ts' },
@@ -21,5 +21,5 @@ export default defineConfig({
   clean: true,
   dts: false,
   outputOptions: { entryFileNames: 'board.js' },
-  copy: [{ from: 'src/serve/page/board.css', to: 'dist/page' }],
+  copy: [{ from: 'src/serve/page/board.css', to: 'dist/page' }, { from: 'src/serve/page/fonts', to: 'dist/page' }],
 })

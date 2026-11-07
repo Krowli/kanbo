@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import type { ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,6 +22,7 @@ const BOARD_PAGE_CSP = [
   'style-src \'self\'',
   'connect-src \'self\'',
   'img-src \'self\' data:',
+  'font-src \'self\'',
   'base-uri \'none\'',
   'form-action \'none\'',
   'frame-ancestors \'none\'',
@@ -29,6 +30,7 @@ const BOARD_PAGE_CSP = [
 
 const SCRIPT_PATH = '/assets/board.js'
 const STYLESHEET_PATH = '/assets/board.css'
+const FONT_PATH = /^\/assets\/fonts\/([a-z0-9-]+\.woff2)$/
 
 /** The document itself. No data in it; the `data:` icon keeps the browser from asking for `/favicon.ico`. */
 const BOARD_PAGE_HTML = `<!doctype html>
@@ -47,10 +49,11 @@ const BOARD_PAGE_HTML = `<!doctype html>
 </html>
 `
 
-/** The built script and stylesheet, read once when the server starts. */
+/** The built script, stylesheet and font files (by file name), read once when the server starts. */
 export interface BoardPageAssets {
   script: string
   stylesheet: string
+  fonts: ReadonlyMap<string, Buffer>
 }
 
 /**
@@ -64,19 +67,26 @@ export function resolveBoardPageDirectory(): string {
   return candidates.find(directory => existsSync(join(directory, 'board.js'))) ?? candidates[1]
 }
 
-/** The page's two files from `directory`, or `null` when the page has not been built there. */
+/** The page's files from `directory`, or `null` when the page has not been built there. */
 export function readBoardPageAssets(directory: string): BoardPageAssets | null {
   const script = join(directory, 'board.js')
   const stylesheet = join(directory, 'board.css')
   if (!existsSync(script) || !existsSync(stylesheet)) {
     return null
   }
-  return { script: readFileSync(script, 'utf8'), stylesheet: readFileSync(stylesheet, 'utf8') }
+  const fontDirectory = join(directory, 'fonts')
+  const fonts = new Map<string, Buffer>()
+  if (existsSync(fontDirectory)) {
+    for (const name of readdirSync(fontDirectory).filter(file => FONT_PATH.test(`/assets/fonts/${file}`))) {
+      fonts.set(name, readFileSync(join(fontDirectory, name)))
+    }
+  }
+  return { script: readFileSync(script, 'utf8'), stylesheet: readFileSync(stylesheet, 'utf8'), fonts }
 }
 
 /** Whether a path is one of the page's own. */
 export function isBoardPagePath(pathname: string): boolean {
-  return pathname === '/' || pathname === SCRIPT_PATH || pathname === STYLESHEET_PATH
+  return pathname === '/' || pathname === SCRIPT_PATH || pathname === STYLESHEET_PATH || FONT_PATH.test(pathname)
 }
 
 /**
@@ -88,6 +98,25 @@ export function sendBoardPage(response: ServerResponse, pathname: string, assets
     const body = JSON.stringify({ code: 'not_found', message: 'The board page is not built. Run: npm run build' })
     response.writeHead(404, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) })
     response.end(body)
+    return
+  }
+  const fontName = FONT_PATH.exec(pathname)?.[1]
+  if (fontName !== undefined) {
+    const font = assets.fonts.get(fontName)
+    if (!font) {
+      const body = JSON.stringify({ code: 'not_found', message: 'No such font' })
+      response.writeHead(404, { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) })
+      response.end(body)
+      return
+    }
+    response.writeHead(200, {
+      'content-type': 'font/woff2',
+      'content-length': font.length,
+      'cache-control': 'no-cache',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
+    })
+    response.end(font)
     return
   }
   const [contentType, body] = pathname === SCRIPT_PATH

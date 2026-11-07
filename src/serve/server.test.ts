@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { request as httpRequest } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -694,6 +694,8 @@ describe('kanbo serve\'s board page', () => {
     pageDirectory = mkdtempSync(join(tmpdir(), 'kanbo-page-'))
     writeFileSync(join(pageDirectory, 'board.js'), 'console.log("board")')
     writeFileSync(join(pageDirectory, 'board.css'), 'body{}')
+    mkdirSync(join(pageDirectory, 'fonts'))
+    writeFileSync(join(pageDirectory, 'fonts', 'geist-latin-wght-normal.woff2'), Buffer.from([0x77, 0x4f, 0x46, 0x32, 0xff]))
   })
 
   afterEach(async () => {
@@ -730,7 +732,7 @@ describe('kanbo serve\'s board page', () => {
     expect(page.headers.get('content-type')).toBe('text/html; charset=utf-8')
     expect(page.headers.get('content-security-policy')).toBe(
       'default-src \'none\'; script-src \'self\'; style-src \'self\'; connect-src \'self\'; img-src \'self\' data:; '
-      + 'base-uri \'none\'; form-action \'none\'; frame-ancestors \'none\'',
+      + 'font-src \'self\'; base-uri \'none\'; form-action \'none\'; frame-ancestors \'none\'',
     )
     expect(page.headers.get('x-content-type-options')).toBe('nosniff')
     expect(page.headers.get('referrer-policy')).toBe('no-referrer')
@@ -750,6 +752,18 @@ describe('kanbo serve\'s board page', () => {
     const cards = await call({ server: client.server }, 'GET', '/issues')
     expect(cards.status).toBe(401)
     expect((await fetchPage(client, '/assets/other.js')).status).toBe(401)
+  })
+
+  it('serves the font files without the token, as bytes, and answers 404 for a font it does not hold', async () => {
+    const client = await start()
+    const font = await fetch(`${client.server.url}/assets/fonts/geist-latin-wght-normal.woff2`)
+    expect(font.status).toBe(200)
+    expect(font.headers.get('content-type')).toBe('font/woff2')
+    expect(font.headers.get('cache-control')).toBe('no-cache')
+    expect(font.headers.get('x-content-type-options')).toBe('nosniff')
+    expect([...new Uint8Array(await font.arrayBuffer())]).toEqual([0x77, 0x4f, 0x46, 0x32, 0xff])
+    expect((await fetchPage(client, '/assets/fonts/nope.woff2')).status).toBe(404)
+    expect((await fetchPage(client, '/assets/fonts/..%2Fboard.js')).status).toBe(401)
   })
 
   it('says how to build the page when it is not built', async () => {

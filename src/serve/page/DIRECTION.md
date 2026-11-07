@@ -1,159 +1,103 @@
 # kanbo board page — design direction
 
 The source of truth for how the board page looks and moves. Edit this first, then `board.css`.
-Mockup: `/tmp/kanbo-mockup/index.html` + `board.css` (its tokens layer is the one to copy).
-Status: approved by the owner on 2026-11-03 (see the last line); built in plan 006.
+Direction: **Modular's board**, chosen by the owner on 2026-11-07. It replaces the 2026-11-03 "controller's strip board" (plan 006). Plan 015 builds it.
+Reference: Modular's `kanban-surfaces--catalog` and `kanban-columnagents--header-badges` shots, and the token values of its `apps/web/src/styles.css`. A person moving between Modular and `kanbo serve` should see one product.
 
 ## 1. Core idea
 
-Candidates, all from kanbo's own world (agents ask, a person clears):
+Quiet, near-white, neutral. Geist type, white cards with a hairline ring, translucent column bays, a 28px toolbar, status-category and priority icons, toned label chips. Nothing is loud except the one thing that needs a person: a card waiting for you.
 
-1. **Controller's strip board.** Each card is a flight-progress strip in its holder: a coloured edge says its state, the key reads like a callsign, columns are bays on a board. The controller (you) clears what is asked.
-2. **Kitchen ticket rail.** Tickets clipped to a rail, "order up" when a dish waits for the chef's check before it goes out.
-3. **Proof desk.** Galley proofs with pencil marks; old text struck through, new text written in, a sign-off at the end.
+Colour language, kept from the strip board:
 
-**Pick: 1, the strip board.** kanbo's central ritual is an agent asking and a person clearing, and a strip board is built for exactly that: you read the state of every item from across the room, for hours, without excitement. From 3 we borrow one thing: the history reads like proof marks (old value struck through → new value).
+- **amber (`warning`) = you are needed** (waiting for you): the "Waiting for you" pill, the Decision box while a card waits, the started-category icon. Nothing else is amber except priority medium's bars and the started category.
+- **blue (`info`) = a machine at work**: the run dot, "Running", agent avatars.
+- **ink (`foreground`/`primary`) = you**: Approve, the selected state, the primary button.
+- **green (`success`) = done**, **red (`destructive`) = failed or refused**, **grey = kanbo itself and everything quiet**.
 
-## 2. Motion character
+The four states a card can be in keep their meaning: waiting (amber), running (blue), done and canceled (title in `text-secondary`, no strike-through), idle.
 
-**Instrument** — crisp micro-interactions that confirm an action or show a change. A working tool open all day must never move for its own sake; it moves only to say "done", "this changed" or "you're needed".
+## 2. Motion
 
-## 3. Layout
+Instrument-like: motion only confirms an action or shows a change. Ease `cubic-bezier(0.22, 1, 0.36, 1)`, durations 120 / 150 / 200 / 300 ms, press scale 0.99. A card new or moved since the last render fades in once; the dialog fades in on its first opening; the selection bar rises in 200 ms; the run dot pings. Nothing animates on an ordinary poll. `prefers-reduced-motion: reduce` makes the durations 0 and the press scale 1, and every keyframe sits inside `prefers-reduced-motion: no-preference`.
 
-App-like single screen, one CSS grid on `#app` (no new wrappers):
+## 3. Tokens
 
-| Row | Element | Notes |
+Light and dark; dark follows `prefers-color-scheme` (no toggle). ≈ means converted from oklch.
+
+| Token | Light | Dark |
 |---|---|---|
-| 1 | `.topbar` | wordmark · project switcher · "where" line · token form. Spans every column. Phone: wraps to three rows; once a kept token has loaded the board, the token form folds into a small "Token" button that reveals it (`.topbar[data-token="folded"]`), and a refused token unfolds it by itself. |
-| 2 | `.notice` | collapses when hidden |
-| 3 | `.filter-bar` | one row that wraps on desktop; on phone one sideways-scrolling row with search, "Showing N of M" and Clear first |
-| 4 | `.board` | columns side by side, the board scrolls sideways; each column's card list scrolls on its own, the column head stays put. Phone: columns 86 % wide with scroll snap so the next one peeks. |
-| 1–4 | `.panel-host` | An overlay over rows 1–4 with the scrim; the board stays dimmed behind and is `inert`. From 56.25rem (900 px) the dialog `.panel` is centred, two columns (`minmax(0, 1fr)` + `--dialog-side-width`), the side (Decision, Details) sticky. Below 56.25rem it is full screen, one column, the side before the main. Inside: `.panel-head` (key, ✕) outside the one scrolling box `.panel-scroll` = `.panel-top` (title, state row, status line) + `.panel-body` (`.panel-main`: description, sub-cards, Comments / History / Runs tabs; `.panel-side`). `:empty` → `display: none`. |
+| `--color-background` | #fafafa | #191919 |
+| `--color-foreground` | #262626 | #f5f5f5 |
+| `--color-card` / `--color-popover` | #ffffff | #1d1d1d |
+| `--color-primary` / `--color-on-primary` | #262626 / #fafafa | #f5f5f5 / #262626 |
+| `--color-fill` (hover, bays at 40%) | rgb(0 0 0 / 4%) | rgb(255 255 255 / 4%) |
+| `--color-accent` (hover) | rgb(0 0 0 / 7%) | rgb(255 255 255 / 8%) |
+| `--color-text-secondary` | #737373 | #818181 |
+| `--color-text-dim` (decoration only) | #a1a1a1 | #404040 |
+| `--color-border` | rgb(0 0 0 / 6%) | rgb(255 255 255 / 5%) |
+| `--color-border-strong` (the rule on an attached sub-task card) | rgb(0 0 0 / 15%) | rgb(255 255 255 / 15%) |
+| `--color-input` | rgb(0 0 0 / 7%) | rgb(255 255 255 / 7%) |
+| `--color-ring` (focus) | #a1a1a1 | #737373 |
+| `--color-info` / `--color-info-fg` | #2b7fff / #1447e6 | #2b7fff / #51a2ff |
+| `--color-success` / `--color-success-fg` | #00bc7d / #007a55 | #00bc7d / #00d492 |
+| `--color-warning` / `--color-warning-fg` | #fe9a00 / #bb4d00 | #fe9a00 / #ffb900 |
+| `--color-destructive` | #fb2c36 | ≈ #fc4148 |
 
-Columns: `flex: 1 0 15rem; max-width: 20rem`. The open card is a dialog over the board, so the bays keep their full width behind it.
+Washes (tinted backgrounds) are the colour mixed in at 12%.
 
-Breakpoints, the only two (mobile first, `min-width`): **40rem** (640 px) and **56.25rem** (900 px). Other `@media` allowed: `prefers-color-scheme`, `prefers-reduced-motion`.
+- **Status-category colours:** triage = info; backlog = text-secondary; unstarted = text-dim; started = warning; completed = success; canceled = text-secondary.
+- **Priority:** urgent #ef4444, high #f97316, medium #eab308, low #3b82f6, none #6b7280.
+- **Labels:** seven tones (blue, emerald, amber, rose, violet, cyan, slate), chosen by a hash of the label text, so a label keeps its tone. Chip: border tone-500 at 20% (amber 25%), background tone-500 at 10%, text tone-700 (light) / tone-300 (dark).
+- **Shadows:** xs `0 1px 2px rgb(0 0 0/.04), 0 0 0 1px rgb(0 0 0/.05)`; sm `0 1px 3px rgb(0 0 0/.08), 0 0 0 1px rgb(0 0 0/.06)`; md `0 4px 16px -2px rgb(0 0 0/.10), 0 2px 4px -1px rgb(0 0 0/.06)`; lg `0 8px 40px -8px rgb(0 0 0/.14), 0 2px 8px -2px rgb(0 0 0/.07)`. Dark raises the opacities and adds `inset 0 1px 0 rgb(255 255 255/.06)`. A card has no shadow, only a 1px inset ring of `border`.
+- **Radii:** 4, 6, 8, 10 (card), 14 (column, panels, dialog) px.
+- **Space:** 2, 4, 6, 8, 10, 12, 16, 24 px.
+- **Layers:** numeric `z-index` only through `--z-*` tokens.
 
-## 4. Palette
+## 4. Type
 
-Light is a paper strip board in daylight (warm off-white ground, recessed grey bays, white strips, blue-black ink). Dark is the same board under a desk lamp (ink ground, darker bays, raised strips). No brand accent: colour is spent only on state.
+- **Geist** (variable, upright; latin, latin-ext, cyrillic woff2 files in `fonts/`, SIL OFL 1.1, `LICENSE` beside them; the family is never renamed). `font-feature-settings: 'cv01','cv02','cv03','cv04','calt'`, antialiased. Stack: `'Geist', ui-sans-serif, system-ui, sans-serif`.
+- **Mono** stays the system `ui-monospace` stack (as in Modular): keys, the where-line, counts.
+- **Sizes** (rem): 0.625 (10) · 0.65625 (10.5) · 0.6875 (11) · 0.75 (12) · 0.8125 (13) · 0.875 (14) · 1.5 (24).
+- Weight 500 for titles and names, 600 for section titles. Leading 1.375 on card titles. `tabular-nums` for numbers.
 
-The colour language, four words: **orange = you're needed** (only that), **blue = a machine at work** (a run, an agent), **ink = you**, **grey = kanbo itself**. Green says done, red says something failed.
+## 5. Icons
 
-| Token | Job | Light | Dark |
-|---|---|---|---|
-| `--color-bg` | the board's ground | `#F1EFE9` | `#13161A` |
-| `--color-surface` | top bar, filter bar, panel | `#FAF9F6` | `#181C21` |
-| `--color-well` | a column's bay | `#E6E3DB` | `#0E1013` |
-| `--color-raised` | cards, fields | `#FFFFFF` | `#1F242B` |
-| `--color-text` | text | `#1B2129` | `#E6E8EB` |
-| `--color-text-muted` | secondary text | `#59616C` | `#9AA2AD` |
-| `--color-border` | hairlines that only separate | `#DCD8CF` | `#2B3139` |
-| `--color-border-strong` | edges that identify a control | `#8A867D` | `#6B7480` |
-| `--color-focus` | focus ring | `#1B2129` | `#E6E8EB` |
-| `--color-primary` / `--color-on-primary` | Approve, pressed toggles, Urgent | `#1B2129` / `#FFFFFF` | `#E6E8EB` / `#13161A` |
-| `--color-waiting` / `--color-on-waiting` | **waiting for you** — the one loud colour | `#E8590C` / `#1C0D02` | `#FF8A3D` / `#1C0D02` |
-| `--color-waiting-wash` | a waiting card, the Decision block | `#FFF1E5` | `#2E2119` |
-| `--color-running` (= `--color-agent`) | run dot, "Running", agent chips | `#1E5BC6` | `#7AA7FF` |
-| `--color-running-wash` (= `--color-agent-wash`) | agent chip fill | `#E7EEFB` | `#1B2740` |
-| `--color-done` | Done edge, finished run | `#2C7A4B` | `#5DC58A` |
-| `--color-quiet` | canceled edge, kanbo's hollow dot | `#8B9098` | `#727B86` |
-| `--color-danger` / `--color-danger-wash` | errors, failed run | `#BF2A2A` / `#FCEBEA` | `#FF6F6A` / `#3A1D1D` |
-| `--color-tint` | label chips, hover | ink 6 % | text 8 % |
-| `--color-scrim`, `--color-shadow`, `--color-shadow-strong` | overlay and depth | ink 28 / 7 / 14 % | black 50 / 30 / 45 % |
+Hand-drawn inline SVG built with `document.createElementNS`, `aria-hidden`, drawn in `currentColor`.
 
-**The waiting colour is used for nothing else**: the waiting badge, a waiting card's edge, ring and wash, the Decision block while the card waits, and the small square on the "Waiting for you" filter. Urgent priority is ink, not orange; errors are red, not orange.
+- **Status category:** 16-unit box, circle r=6. triage = 2px ring; backlog = dashed ring; unstarted = ring; started = ring with the right half filled; completed = filled disc; canceled = ring with a horizontal bar.
+- **Priority:** 1–4 bars, 2 wide with 1.5 gaps, heights 4/6/8/10, bottoms at y=12, corner radius 0.5 (low 1, medium 2, high 3, urgent 4). None is one horizontal line.
 
-Measured contrast (WCAG 2.x, script `/tmp/kanbo-qa/contrast.mjs`). Text needs 4.5:1, meaningful edges/chips 3:1. All pass.
+## 6. Layout
 
-| Pair | Light | Dark |
-|---|---|---|
-| text on bg / raised / well / waiting-wash | 14.09 / 16.20 / 12.63 / 14.63 | 14.78 / 12.71 / 15.52 / 12.69 |
-| muted on surface / raised / well / waiting-wash | 5.95 / 6.27 / 4.89 / 5.66 | 6.64 / 6.05 / 7.39 / 6.04 |
-| on-primary on primary | 16.20 | 14.78 |
-| on-waiting on waiting (badge text) | 5.29 | 8.08 |
-| waiting on raised / waiting-wash / surface (edge, badge shape) | 3.58 / 3.23 / 3.40 | 6.66 / 6.64 / 7.30 |
-| running on raised / running-wash (text) | 6.24 / 5.35 | 6.54 / 6.24 |
-| done on raised (edge) / on surface (text) | 5.26 / 5.00 | 7.30 / 8.00 |
-| quiet on raised / surface (edge, dot) | 3.21 / 3.05 | 3.64 / 3.99 |
-| danger on surface / danger-wash (text) | 5.57 / 5.09 | 6.30 / 5.63 |
-| border-strong on raised / surface (control edges) | 3.63 / 3.45 | 3.30 / 3.61 |
-| focus on bg / well / surface | 14.09 / 12.63 / 15.39 | 14.78 / 15.52 / 13.94 |
+One grid on `#app`: top bar (48px: wordmark, project switcher, where-line in mono 11px, token form), notice, toolbar (one row, every control 28px), active-filter row (only while filtering), then the board or the list. The dialog is a modal over them.
 
-Tightest margins: light muted-on-well 4.89, light quiet-on-surface 3.05, light waiting-on-wash 3.23. Re-measure if any of these move.
+- **Toolbar:** search (224px, `/` focuses, Esc clears), "N cards" or "N of M"; at the right Filter and Display popovers, the Board / List view switch, and the primary "+ New".
+- **Columns:** 320px, radius 14, `fill` at 40%, no border. Header: status icon, name, count badge (`n/limit` with a WIP limit, amber at the limit), a lock for entry rules, "+". A card dragged over a column tints it to `fill` at 80%.
+- **Card:** radius 10, padding 10/12, `card` background, 1px inset ring of `border`. Rows: meta (checkbox, key, avatar with run dot) / title 13px/500 / status row (status line, "Waiting for you" pill, ×N) / footer (priority icon and word, up to two labels and "+n"). Hover: ring at foreground 15%. Open or selected: ring primary at 60%, background primary at 4%.
+- **Narrow screens** (390px): the toolbar wraps, columns scroll sideways.
 
-## 5. Type
+## 7. Sub-tasks
 
-- **Text:** system UI stack `system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif` — readable, zero bytes, it is a working tool.
-- **Mono** for keys, times, counts, the "where" line, branch names: `ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace`, always `tabular-nums`.
-- **Display** (`--font-display`; used only for the wordmark, column names, panel title, panel section headings) — the owner chooses:
-  - **(a) none — recommended.** `--font-display: var(--font-text)`. Hierarchy from weight, size and caps: column names and section headings 0.75rem / 700 / uppercase / 0.06em tracking ("bay labels"), panel title 1.25rem / 650. Cost: 0 bytes, no CSP change.
-  - **(b) Big Shoulders** (Patric King, SIL Open Font License — `license: "OFL"` in google/fonts `ofl/bigshoulders/METADATA.pb`), variable (axes `opsz` 10–72, `wght` 100–900). Latin woff2 as Google Fonts serves it: **36 480 bytes** (budget 40 960). A condensed face drawn after Chicago's signage: column names read like bay signs. Needs `font-src 'self'`, one route, the licence file (plan step 4). Preview: `shots/1440x900-light-font-b.png`; sizes under `.font-b` in the mockup CSS (column names and section heads 0.875rem / 750, wordmark 1.25rem / 800).
-- **Scale** (6 steps): `--text-xs` 0.6875rem (keys, times, chips) · `--text-sm` 0.75rem (status line, badges, buttons, labels) · `--text-base` 0.8125rem (body, facts, history) · `--text-md` 0.875rem (card titles, description, fields) · `--text-lg` 1rem (wordmark) · `--text-xl` 1.25rem (panel title below 56.25rem) · `--text-2xl` 1.5rem (the dialog title from 56.25rem up) · `--text-reading` 0.9375rem (description and comment text). Leading `--leading-tight` 1.3, `--leading-normal` 1.5. Never `px` for `font-size`.
-- Weights: 400 body, 500 controls, 600 card titles and values, 650–700 headings and badges. Headings `text-wrap: balance`, body `pretty`; `-webkit-font-smoothing: antialiased` on body.
+A sub-task must never be mistaken for a top-level card, and one waiting for a person is never hidden.
 
-## 6. Spacing & shape
-
-- **Space** (4 px base, 7 steps): `--space-1` 0.25rem · `-2` 0.5rem · `-3` 0.75rem · `-4` 1rem · `-5` 1.5rem · `-6` 2rem · `-7` 3rem.
-- **Radii** (3): `--radius-sm` 0.1875rem (chips, badges) · `--radius-md` 0.375rem (cards, buttons, fields) · `--radius-lg` 0.625rem (bays = md + the bay's 4 px padding, concentric).
-- **Strip edge:** `--edge-width` 3px, drawn as `inset` box-shadow so it follows the card's corner.
-- **Shadows** (3): `--shadow-card` (1 px paper thickness) · `--shadow-lift` (the open card) · `--shadow-panel` (the dialog, `0 24px 64px`).
-- **Z-layers:** `--z-raised` 1 (sticky panel head) · `--z-panel` 10 · `--z-overlay` 20 · `--z-toast` 30. No numeric `z-index` outside tokens.
-- **Sizes:** `--control-height` 2.5rem below 40rem (touch), 1.875rem above; `--chip-height` 2.5rem / 1.5rem; `--column-width` 15rem; `--column-max` 20rem; `--dialog-width` 78rem; `--dialog-side-width` 21.5rem.
-- **Card anatomy, top to bottom** (the required reading order): state row (Waiting badge, or run dot + "Running · agent"; attempt `×N` at the right) → title (600, 3 lines max with ellipsis) → key + worker chip (agent: blue square; You: ink circle; Nobody: nothing; not repeated while running) → status line (muted, rule on the left, 2 lines max) → priority + labels (Urgent ink-filled, High ink outline, Medium/Low grey outline, None hidden; labels on a light tint).
-- Focus: `:focus-visible` ring 2 px `--color-focus`, offset 2 px; on a card the ring is drawn by the title's stretched `::after`. The open card has a flush 2 px ink ring + `--shadow-lift`, so "open" and "focused" never look the same.
-
-## 7. Motion tokens and rules
-
-Tokens: `--duration-fast` 120ms · `--duration-base` 200ms · `--duration-slow` 320ms · `--duration-loop` 1600ms (the run dot and the one waiting call — a token so no literal sits outside `:root`) · `--ease-out` `cubic-bezier(0.2, 0, 0, 1)` · `--ease-in-out` `cubic-bezier(0.45, 0, 0.55, 1)` · `--press-scale` 0.96.
-
-What moves — only this:
-
-| What | How | Why |
-|---|---|---|
-| Panel, first opening only (`.panel--opening` when `renderPanelHost` sees `opening === true`) | fade + scale from 0.98, slow, ease-out | shows where the card went |
-| A card new or changed column since the last render (`data-enter="new"` / `"moved"`) | fade + 4 px lift, base, ease-out, once | shows what changed while you looked away |
-| Drop target column (`.drop-target`) | bay lightens, 2 px strong inset ring, fast | confirms where the card will land |
-| Buttons, toggles, chips on press | `scale(0.96)`, fast; colour change fast | confirms the press |
-| Run dot | a ping ring grows and fades, loop, in-out; the dot itself stays solid | a machine is working right now |
-| Waiting badge, once, when a card starts waiting (`data-enter="waiting"` on the badge) | one orange ring grows to 0.5rem and fades, loop duration, one iteration | you're needed, said once |
-
-Rules:
-- Nothing animates on an ordinary poll refresh. The first render after load animates nothing (`lastPlacement` empty). The step 5 helper decides `new` / `moved` from previous and next placements; the waiting call needs the same bookkeeping for `waitingFor` (previous render not waiting → now waiting).
-- Hover is colour only (card ring → border-strong), never movement. No `transition: all`; list the properties.
-- `prefers-reduced-motion: reduce` → the duration tokens become 0ms and `--press-scale` 1 in a third `:root` block, and every keyframe sits inside `@media (prefers-reduced-motion: no-preference)`. Final states only; the run dot is a still dot and "Running" still says it in words. Checked in the mockup: 5 running animations with no preference, 0 with `reduce`.
-- Motion is never the only signal: every animated state also has a static cue (badge, edge colour, words).
+- A **child** is a card whose `parentIssueId` names a card in the loaded board; an **orphan** is one whose parent is not loaded (drawn as its own card).
+- **Inside mode (default):** a child is not drawn as a card. Its parent gains a sub-task block under the footer: one 28px row per direct child (status-category icon of the child's column, key, title, and on the right the compact "Waiting" pill, a run dot, or "n/m" when it has its own children); at most five rows then "+N more"; a 4px progress bar and "1/3 done" (canceled left out, done = completed category). A click on a row opens the child. Grandchildren are not drawn on the board.
+- **Never hidden:** a waiting child at any depth gives its parent a "Sub-task waiting for you" pill; a running child gives the parent's avatar the run dot.
+- **Filters apply to the family:** a parent shows when it or any child matches; children that do not match are drawn at 50% opacity.
+- **Cards mode** (Display → "Show sub-tasks as cards", `?subtasks=cards`): every card is in its own column. A child gets a "Sub-task of KEY title" strip as its first row (a button that opens the parent), is inset 12px with a 2px `border-strong` rule on its left; a parent shows only the bar and "x/y done".
+- The words are "sub-task" and "x/y done", in step with Modular.
 
 ## 8. Anti-sameness
 
-Three things that make this kanbo and not a generic kanban template:
-
-1. **The strip edge.** Every card carries a 3 px state edge (orange / blue / green / grey) like a strip in its holder, and waiting strips are washed warm. The board reads as colour bands from across the room, not a grid of identical white tiles with tags.
-2. **A four-word colour language and no brand accent.** Orange = you're needed, blue = a machine at work, ink = you, grey = kanbo. Approve is plain ink, not a brand colour; Urgent is ink, not red. Nothing is coloured for decoration.
-3. **Paper and ink, with callsigns and proof marks.** A warm paper ground with recessed bays instead of the cool grey or near-black SaaS ground; keys, times and counts in mono like callsigns; the history as proof marks — old value struck through → new value in weight, on a ruled timeline with a dot per actor (blue square-ish agent, ink you, hollow grey kanbo).
-
-Not used, and why: **custom cursor** — no (a tool; the system cursor is the right one); **smooth-scroll library** — no (dependency, and native scroll is what a board needs); **preloader** — no (the page is two small files); **glass cards** — no (blur costs paint on every poll and fights readability); **blur-in headings** — no (headings never animate in a tool).
+What makes this kanbo and not Modular's copy: the "Waiting for you" pill and the Decision box (a person clears what agents ask), the History as proof marks (old value struck through, new value written in), and the sub-task block that keeps waiting work visible.
 
 ## Builder notes
 
-What today's page code (plus plans 002–005) must add so the CSS can do this — classes and `data-*` only:
-
-- `.card[data-state]`: `waiting` if `waitingFor === 'human'`; else `running` if `activeRun?.state === 'running'`; else `done` if the column's category is `completed`; `quiet` if `canceled`; else `idle`. `.card[data-open]` on the card whose panel is open.
-- Card order (state row first) can be done with CSS `order` / `display: contents` on today's `.card-head` / `.card-status`, or by moving elements in `card-element.ts`.
-- **Not in today's card DOM** (confirm scope before building): the visible words "Running · claude" (today the dot only has a title), the priority chip and labels on a card. If they stay out of scope, the running state is the blue edge + dot + the worker chip in blue.
-- Filter bar (plan 004): `.filter-search`, `.toggle[data-filter="waiting|running"]`, `.chip[data-group="priority|label"][aria-pressed]`, `.filter-count`, `.filter-clear`; selects wrapped in `.select-wrap` (chevron from `::after`). Groups are spaced by sibling selectors — no wrappers needed.
-- Top bar (plan 002): `.project-switcher.select-wrap`, `.where` with `.where-key`.
-- Panel (plan 005): `.facts` (the `<dl>`), `.panel-section[data-waiting]` on Decision while the card waits, `.history-day`, `.history-list`, `.history-entry[data-kind]`, `.history-what`, `.history-field`, `.history-time`, `.history-change`, `.value-from` (`<del>`), `.value-to` (`<ins>`; the arrow is `.value-from + .value-to::before`), `.history-text` (`<details>`) with `.history-text-block[data-side="before|after"]`, `.actor-chip[data-kind]`, `.actor-label`.
-- Run list: `[data-run-state="finished|failed|…"]`.
-
-## Mockup
-
-- `/tmp/kanbo-mockup/index.html`, `/tmp/kanbo-mockup/board.css` (no JS; dark mode follows the system setting; `fonts/` holds only the option (b) preview face).
-- Content: project weather-station (WST), 13 of 16 cards shown (label filter firmware / sensors / dashboard), five columns, two waiting, two running, attempts ×3 and ×2, Urgent and High, a 3-line-clamped title; WST-09 open with facts, Decision, comments, History over three days and one before/after.
-- Shots (`/tmp/kanbo-mockup/shots/`), headless Chrome (1440 at 1×, 390 at 2×): `1440x900-light.png`, `1440x900-dark.png`, `390x844-light.png`, `390x844-dark.png` (required); extras: `1440x900-{light,dark}-history.png` (panel scrolled to History), `390x844-{light,dark}-board.png` (phone, panel closed), `1440x900-light-font-b.png` (option b).
+- Class names the unchanged modules rely on: `.history-*`, `.actor-chip`, `.facts`, `.project-switcher`, `.where-key`.
+- Dialog: `.panel`, `.panel-head`, `.panel-scroll`, `.panel-section[data-waiting]`.
+- Page state in the address: `q`, `who`, `waiting`, `running`, `priority`, `label`, `project`, `view=list`, `subtasks=cards`.
 
 ---
 
-Approved by the owner on 2026-11-03. Type: option (a), the system font stack; no web font.
-
-Dialog approved by the owner on 2026-11-04 (mockup `/tmp/kanbo-mockup-modal/`).
+Direction replaced on 2026-11-07 by the owner's choice of Modular's look (plan 015). Earlier directions: the strip board, approved 2026-11-03; the dialog, 2026-11-04.
