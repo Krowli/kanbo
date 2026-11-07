@@ -516,6 +516,20 @@ select.field {
   display: none;
 }
 
+/* The token sits at the right behind its button; the form opens by itself only when the page needs the token. */
+.token-toggle {
+  order: 5;
+  margin-left: auto;
+}
+
+.token-form {
+  order: 6;
+}
+
+.topbar:not([data-token]) .token-form {
+  margin-left: auto;
+}
+
 /* Toolbar: one row of 28 px controls. */
 
 .toolbar {
@@ -2442,20 +2456,8 @@ button.breadcrumb:focus-visible,
     flex: 1 1 auto;
   }
 
-  .token-form {
-    margin-left: auto;
-  }
-
   .token-input {
     width: 9rem;
-  }
-
-  .topbar[data-token] .token-toggle {
-    display: none;
-  }
-
-  .topbar[data-token='folded'] .token-form {
-    display: flex;
   }
 
   .toolbar {
