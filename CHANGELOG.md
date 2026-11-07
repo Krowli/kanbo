@@ -6,6 +6,8 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ### Added
 
+- An **Analytics** view on the board page (`?view=analytics`): a range of 4, 12 or 26 weeks or a sprint, figure cards, finished per week, cumulative flow and time in column drawn in SVG, aging work, agents and people tables. It reads the same numbers as `kanbo stats` and fetches nothing while another view or a hidden tab is showing.
+- `GET /issues/metrics` on `kanbo serve` (`from`, `to` in unix seconds, or `sprint=<id>`; the last 12 ISO weeks to now by default), the metrics `kanbo stats` prints. A read; additive.
 - The board page: a **List view** (Board / List switch, `?view=list`), **column badges** (a count, `n/limit` against a WIP limit in amber at the limit, and a lock whose tooltip lists a column's rules), **keys** (`j`/`k`, arrows, Enter, Space, `x`, `/`, Esc) and **selecting several cards** (a box, `x`, shift- and cmd-click) with a floating bar that sets their column or priority in one `PATCH /issues/bulk`.
 - The board page ships **Geist** (variable woff2 in latin, latin-ext and cyrillic, SIL OFL 1.1) under `/assets/fonts/`; the page's content security policy gains `font-src 'self'`.
 
