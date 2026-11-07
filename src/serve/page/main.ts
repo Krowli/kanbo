@@ -389,7 +389,7 @@ function renderColumn(column: BoardColumn): HTMLElement {
       cardElement.dataset.enter = enter
     }
     if (startsWaiting(lastPlacement, card)) {
-      cardElement.querySelector<HTMLElement>('.waiting-badge')?.setAttribute('data-enter', 'waiting')
+      cardElement.querySelector<HTMLElement>('.waiting-pill')?.setAttribute('data-enter', 'waiting')
     }
     cardElement.addEventListener('dragstart', (event) => {
       draggedCardId = card.id

@@ -839,241 +839,111 @@ select.field {
   box-shadow: inset 0 0 0 1px var(--color-border);
 }
 
-.waiting-badge {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  height: 1.25rem;
-  padding: 0 var(--space-8);
-  border-radius: var(--radius-4);
-  background: var(--color-warning-fg);
-  color: var(--color-foreground);
-  font-size: var(--text-12);
-  font-weight: 650;
-  white-space: nowrap;
-}
-
-.run-state {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-8);
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-info-fg);
-  font-size: var(--text-12);
-  font-weight: 600;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.run-dot {
-  position: relative;
-  flex: 0 0 auto;
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  background: var(--color-info-fg);
-}
-
-/* The ping ring; the dot stays solid. */
-.run-dot::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  background: var(--color-info-fg);
-  opacity: 0;
-}
-
-.attempt-chip {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-4);
-  box-shadow: inset 0 0 0 1px var(--color-border-strong);
-  color: var(--color-text-secondary);
-  font-size: var(--text-11);
-  line-height: 1.125rem;
-}
-
-/* Who works it: blue square an agent, ink circle you. */
-.worker {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-width: 0;
-  overflow: hidden;
-  color: var(--color-text-secondary);
-  font-size: var(--text-12);
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.worker::before {
-  content: '';
-  flex: 0 0 auto;
-  width: 0.4375rem;
-  height: 0.4375rem;
-}
-
-.worker[data-kind='agent']::before {
-  border-radius: 1px;
-  background: var(--color-info-fg);
-}
-
-.worker[data-kind='user']::before {
-  border-radius: 50%;
-  background: var(--color-foreground);
-}
-
-.priority,
-.label {
-  display: inline-block;
-  max-width: 100%;
-  height: 1.125rem;
-  padding: 0 var(--space-4);
-  overflow: hidden;
-  border-radius: var(--radius-4);
-  font-size: var(--text-11);
-  font-weight: 600;
-  line-height: 1.125rem;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-  vertical-align: middle;
-}
-
-.priority {
-  text-transform: capitalize;
-}
-
-.priority[data-priority='urgent'] {
-  background: var(--color-primary);
-  color: var(--color-on-primary);
-}
-
-.priority[data-priority='high'] {
-  box-shadow: inset 0 0 0 1px var(--color-foreground);
-  color: var(--color-foreground);
-}
-
-.priority[data-priority='medium'],
-.priority[data-priority='low'] {
-  box-shadow: inset 0 0 0 1px var(--color-border-strong);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-}
-
-.label {
-  background: var(--color-fill);
-  color: var(--color-text-secondary);
-  font-weight: 500;
-}
-
-.status-line {
-  display: -webkit-box;
-  margin: 0;
-  padding-left: var(--space-8);
-  overflow: hidden;
-  border-left: 2px solid var(--color-border);
-  color: var(--color-text-secondary);
-  font-size: var(--text-12);
-  line-height: var(--leading-title);
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-/* A card: a strip in its holder. The left edge says its state. */
+/* A card: white, a hairline ring, no shadow. */
 
 .card {
-  --card-edge: transparent;
-  --card-ring: var(--color-border);
   position: relative;
   display: flex;
-  flex: 0 0 auto;
   flex-direction: column;
-  gap: var(--space-8);
+  gap: var(--space-6);
   min-width: 0;
-  padding: var(--space-12) var(--space-12) var(--space-12) calc(var(--space-12) + var(--edge-width));
-  border-radius: var(--radius-6);
+  padding: var(--space-10) var(--space-12);
+  border-radius: var(--radius-10);
   background: var(--color-card);
-  box-shadow:
-    inset var(--edge-width) 0 0 var(--card-edge),
-    0 0 0 1px var(--card-ring),
-    var(--shadow-xs);
-  transition: box-shadow var(--duration-fast) var(--ease-out);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+  transition:
+    transform var(--duration-base) var(--ease-out),
+    box-shadow var(--duration-base) var(--ease-out),
+    background-color var(--duration-base) var(--ease-out);
 }
 
-/* Hover is colour only, never movement. */
 .card:hover {
-  --card-ring: var(--color-border-strong);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-foreground) 15%, transparent);
 }
 
-.card[data-state='waiting'] {
-  --card-edge: var(--color-warning-fg);
-  --card-ring: color-mix(in srgb, var(--color-warning-fg) 45%, transparent);
-  background: var(--color-warning-wash);
+.card:active {
+  transform: scale(var(--press-scale));
 }
 
-.card[data-state='running'] {
-  --card-edge: var(--color-info-fg);
-}
-
-.card[data-state='done'] {
-  --card-edge: var(--color-success-fg);
-  box-shadow:
-    inset var(--edge-width) 0 0 var(--card-edge),
-    0 0 0 1px var(--card-ring);
-}
-
-.card[data-state='quiet'] {
-  --card-edge: var(--color-text-secondary);
-}
-
-.card[data-state='quiet'] .card-title {
-  color: var(--color-text-secondary);
-  text-decoration: line-through;
-}
-
-/* Open: a flush ink ring and a lift, unlike the focus ring. */
-.card[data-open] {
-  box-shadow:
-    inset var(--edge-width) 0 0 var(--card-edge),
-    0 0 0 2px var(--color-foreground),
-    var(--shadow-md);
+/* Open (its dialog is showing) and selected: a primary ring and a faint primary wash. */
+.card[data-open],
+.card[data-selected] {
+  background: color-mix(in srgb, var(--color-primary) 4%, var(--color-card));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-primary) 60%, transparent);
 }
 
 .card.dragging {
-  opacity: 0.45;
+  opacity: 0.5;
 }
 
-.card-state {
+.card[data-dim] {
+  opacity: 0.5;
+}
+
+/* Done and canceled keep their meaning without a strike-through. */
+.card[data-state='done'] .card-title,
+.card[data-state='quiet'] .card-title {
+  color: var(--color-text-secondary);
+}
+
+.card-meta {
   display: flex;
   align-items: center;
-  gap: var(--space-8);
-  min-width: 0;
+  gap: var(--space-6);
+  min-height: 1.125rem;
 }
 
+.card-meta .spacer {
+  flex: 1 1 0;
+}
+
+/* Who works it: a circle with an initial for you, a blue square for an agent. */
+.avatar {
+  position: relative;
+  display: inline-grid;
+  flex: none;
+  width: 1.125rem;
+  height: 1.125rem;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-accent);
+  color: var(--color-foreground);
+  font-size: var(--text-10);
+  font-weight: 500;
+  line-height: 1;
+}
+
+.avatar[data-kind='agent'] {
+  border-radius: var(--radius-4);
+  background: var(--color-info-wash);
+  color: var(--color-info-fg);
+}
+
+.avatar .run-dot {
+  position: absolute;
+  right: -0.125rem;
+  bottom: -0.125rem;
+}
+
+/* The title is the card's one button, stretched over the whole card. */
 .card-title {
   all: unset;
-  display: -webkit-box;
-  overflow: hidden;
-  font-size: var(--text-14);
-  font-weight: 600;
+  display: block;
+  box-sizing: border-box;
+  min-width: 0;
+  font-size: var(--text-13);
+  font-weight: 500;
   line-height: var(--leading-title);
   overflow-wrap: anywhere;
   text-wrap: pretty;
   cursor: pointer;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
 }
 
-/* The title is the card's one button, stretched over the whole card. */
 .card-title::after {
   content: '';
   position: absolute;
   inset: 0;
-  border-radius: var(--radius-6);
+  border-radius: inherit;
 }
 
 .card-title:focus-visible {
@@ -1082,67 +952,284 @@ select.field {
 
 .card-title:focus-visible::after {
   outline: 2px solid var(--color-ring);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 
-.card-meta {
-  display: flex;
-  align-items: center;
-  gap: var(--space-12);
-  min-width: 0;
-}
-
-.card-tags {
+/* The status row */
+.card-status {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  align-items: center;
+  gap: var(--space-6);
   min-width: 0;
 }
 
-/* A sub-card names its parent; a parent says how far its parts are. */
+.status-line {
+  flex: 1 1 0;
+  min-width: 0;
+  margin: 0;
+  padding-left: var(--space-6);
+  border-left: 2px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-11);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
-.parent-link {
-  all: unset;
+.status-line[data-category='triage'] {
+  border-left-color: color-mix(in srgb, var(--color-info) 60%, transparent);
+}
+
+.status-line[data-category='started'] {
+  border-left-color: color-mix(in srgb, var(--color-warning) 60%, transparent);
+}
+
+.status-line[data-category='completed'] {
+  border-left-color: color-mix(in srgb, var(--color-success) 60%, transparent);
+}
+
+.card-status .waiting-pill {
+  flex: none;
+}
+
+.attempt-chip {
+  margin-left: auto;
+  color: var(--color-text-secondary);
+  font-size: var(--text-11);
+}
+
+/* "Waiting for you": an amber outline pill with a clock. */
+.waiting-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+  height: 1.25rem;
+  padding: 0 var(--space-6);
+  border-radius: 999px;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-warning) 50%, transparent);
+  color: var(--color-warning-fg);
+  font-size: var(--text-11);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.waiting-pill .icon {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.waiting-pill--compact {
+  height: 1.125rem;
+  font-size: var(--text-10-5);
+}
+
+/* The blue dot of a run that is going; its ring pings. */
+.run-dot {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 0.375rem;
+  height: 0.375rem;
+  border-radius: 50%;
+  background: var(--color-info);
+  box-shadow: 0 0 0 1.5px var(--color-card);
+}
+
+.run-dot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: var(--color-info);
+  opacity: 0;
+}
+
+/* The footer: priority, labels */
+.card-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  color: var(--color-text-secondary);
+  font-size: var(--text-11);
+}
+
+.priority {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.priority .icon {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.priority[data-priority='urgent'] .icon {
+  color: var(--color-priority-urgent);
+}
+
+.priority[data-priority='high'] .icon {
+  color: var(--color-priority-high);
+}
+
+.priority[data-priority='medium'] .icon {
+  color: var(--color-priority-medium);
+}
+
+.priority[data-priority='low'] .icon {
+  color: var(--color-priority-low);
+}
+
+.priority[data-priority='none'] .icon {
+  color: var(--color-priority-none);
+}
+
+/* Label chips: a tone picked by hash of the text. */
+.label {
+  --tone: var(--tone-slate);
+  --tone-text: var(--tone-slate-text);
+  display: inline-flex;
+  align-items: center;
+  height: 1.125rem;
+  padding: 0 var(--space-6);
+  border-radius: var(--radius-4);
+  background: color-mix(in srgb, var(--tone) 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone) 20%, transparent);
+  color: var(--tone-text);
+  font-size: var(--text-10-5);
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.label[data-tone='blue'] {
+  --tone: var(--tone-blue);
+  --tone-text: var(--tone-blue-text);
+}
+
+.label[data-tone='emerald'] {
+  --tone: var(--tone-emerald);
+  --tone-text: var(--tone-emerald-text);
+}
+
+.label[data-tone='amber'] {
+  --tone: var(--tone-amber);
+  --tone-text: var(--tone-amber-text);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--tone-amber) 25%, transparent);
+}
+
+.label[data-tone='rose'] {
+  --tone: var(--tone-rose);
+  --tone-text: var(--tone-rose-text);
+}
+
+.label[data-tone='violet'] {
+  --tone: var(--tone-violet);
+  --tone-text: var(--tone-violet-text);
+}
+
+.label[data-tone='cyan'] {
+  --tone: var(--tone-cyan);
+  --tone-text: var(--tone-cyan-text);
+}
+
+.label-more {
+  color: var(--color-text-secondary);
+  font-size: var(--text-11);
+}
+
+/* A sub-task card says what it belongs to; a parent says how far its parts are. */
+.subtask-strip {
   position: relative;
   z-index: var(--z-raised);
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  box-sizing: border-box;
+  gap: var(--space-6);
   min-width: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-12);
-}
-
-button.parent-link {
-  min-height: var(--control-height);
-  cursor: pointer;
-}
-
-button.parent-link:hover .parent-title {
-  color: var(--color-foreground);
-  text-decoration: underline;
-}
-
-.parent-title,
-.link-title,
-.subcard-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.subcard-chip {
-  flex: 0 0 auto;
-  margin-left: auto;
-  padding: 0 var(--space-4);
-  border-radius: var(--radius-4);
+  padding: var(--space-2) var(--space-6);
+  border: 0;
+  border-radius: var(--radius-6);
   background: var(--color-fill);
   color: var(--color-text-secondary);
   font-size: var(--text-11);
-  line-height: 1.125rem;
+  text-align: left;
+}
+
+button.subtask-strip {
+  cursor: pointer;
+}
+
+button.subtask-strip:hover {
+  background: var(--color-accent);
+  color: var(--color-foreground);
+}
+
+.subtask-strip .icon {
+  width: 0.75rem;
+  height: 0.75rem;
+}
+
+.subtask-strip .strip-label {
+  flex: none;
+}
+
+.subtask-strip .strip-title {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
   white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* In "cards" mode a sub-task card is set in from the column's edge, with a rule beside it. */
+.card[data-subtask] {
+  margin-left: var(--space-12);
+}
+
+.card[data-subtask]::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(-1 * var(--space-8));
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-border-strong);
+}
+
+.progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-8);
+  color: var(--color-text-secondary);
+  font-size: var(--text-11);
+  font-variant-numeric: tabular-nums;
+}
+
+.progress-bar {
+  appearance: none;
+  flex: 1 1 auto;
+  height: 0.25rem;
+  min-width: 0;
+  max-width: 6rem;
+  border: 0;
+  border-radius: 2px;
+  background: var(--color-accent);
+  overflow: hidden;
+}
+
+.progress-bar::-webkit-progress-bar {
+  background: var(--color-accent);
+}
+
+.progress-bar::-webkit-progress-value {
+  background: var(--color-success);
+  border-radius: 2px;
+}
+
+.progress-bar::-moz-progress-bar {
+  background: var(--color-success);
 }
 
 /* Side panel */
@@ -1900,7 +1987,7 @@ button.parent-link:hover .parent-title {
     animation: card-in var(--duration-base) var(--ease-out);
   }
 
-  .waiting-badge[data-enter='waiting'] {
+  .waiting-pill[data-enter='waiting'] {
     animation: waiting-call var(--duration-loop) var(--ease-out) 1;
   }
 
@@ -1925,11 +2012,11 @@ button.parent-link:hover .parent-title {
 
 @keyframes waiting-call {
   from {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-warning-fg) 70%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--color-warning) 70%, transparent);
   }
 
   to {
-    box-shadow: 0 0 0 var(--space-8) color-mix(in srgb, var(--color-warning-fg) 0%, transparent);
+    box-shadow: 0 0 0 var(--space-8) color-mix(in srgb, var(--color-warning) 0%, transparent);
   }
 }
 

@@ -1,17 +1,18 @@
 import { cardDisplayTitle } from '../../domain/card-display-title'
 import type { ServeCardView, ServeStatusView } from '../views'
 import { el } from './dom'
-import { cardWorker } from './filters'
+import { parentIcon } from './icons'
+import { avatar, isRunning, labelChips, priorityTag, progressBar, waitingPill } from './parts'
 import type { SubtaskSummary } from './subtasks'
 
-/** What a card's coloured edge says, the first match winning: it waits for you, an agent is running it, it is done, canceled, or none of these. */
+/** What a card's look says, the first match winning: it waits for you, an agent is running it, it is done, canceled, or none of these. */
 type CardState = 'waiting' | 'running' | 'done' | 'quiet' | 'idle'
 
 function cardState(card: ServeCardView, category: ServeStatusView['category'] | null): CardState {
   if (card.waitingFor === 'human') {
     return 'waiting'
   }
-  if (card.activeRun?.state === 'running') {
+  if (isRunning(card)) {
     return 'running'
   }
   if (category === 'completed') {
@@ -20,31 +21,50 @@ function cardState(card: ServeCardView, category: ServeStatusView['category'] | 
   return category === 'canceled' ? 'quiet' : 'idle'
 }
 
-/** What a card knows of the cards around it: its parent, its sub-cards' progress, and how to open another card. */
+/** What a card knows of the cards around it: its parent, its sub-tasks' progress, and how to open another card. */
 export interface CardContext {
   parent: ServeCardView | null
   summary: SubtaskSummary | null
   onOpenCard: (cardId: string) => void
 }
 
-/** `2/3 sub-cards`, or `All 3 sub-cards done`; and the same in words for a tooltip. */
-export function summaryText(summary: SubtaskSummary): { chip: string, words: string } {
-  const words = `${summary.done} of ${summary.total} sub-cards done`
-  return { chip: summary.done === summary.total ? `All ${summary.total} sub-cards done` : `${summary.done}/${summary.total} sub-cards`, words }
+/**
+ * The "Sub-task of KEY title" strip a sub-task card wears as its first row: a
+ * button that opens the parent, or, for a parent that is not on this board,
+ * its key alone.
+ */
+export function subtaskStrip(card: ServeCardView, context: CardContext): HTMLElement | null {
+  if (!card.parentIssueId) {
+    return null
+  }
+  const parent = context.parent
+  const strip = parent ? el('button', 'subtask-strip') : el('span', 'subtask-strip')
+  strip.append(parentIcon(), el('span', 'strip-label', 'Sub-task of'), el('span', 'card-key', card.parentIssueId))
+  if (parent) {
+    const title = cardDisplayTitle(parent)
+    const opener = strip as HTMLButtonElement
+    opener.type = 'button'
+    strip.append(el('span', 'strip-title', title))
+    strip.title = `Sub-task of ${parent.id} · ${title}`
+    strip.addEventListener('click', (event) => {
+      event.stopPropagation()
+      context.onOpenCard(parent.id)
+    })
+  }
+  return strip
 }
 
 /**
  * One card on the board, read top to bottom in the order a person needs it:
- * its state (the "Waiting for you" badge, or "Running · <agent>" beside a
- * pulsing dot, and the `×N` attempt chip once a card has been launched more
- * than once); the display title; the key and who works it; the status line;
- * the priority and labels. `data-state` gives the card its coloured edge.
- * A sub-card also carries a line naming its parent (a button that opens the
- * parent), and a parent a `2/3 sub-cards` chip. Everything the board holds is
- * set as text.
+ * the meta row (key, and who works it with a dot while a run is live); the
+ * display title; a status row (the status line, "Waiting for you", `×N`
+ * attempts); and the footer (priority, labels). A sub-task card opens with a
+ * "Sub-task of" strip; a parent closes with its progress bar. Everything the
+ * board holds is set as text.
  *
  * The title is a button stretched over the whole card, so the card opens from
- * the keyboard and is still one thing to drag.
+ * the keyboard and is still one thing to drag; the controls above it take
+ * their own clicks.
  */
 export function renderCard(
   card: ServeCardView,
@@ -57,85 +77,61 @@ export function renderCard(
   element.dataset.cardId = card.id
   element.dataset.state = cardState(card, category)
 
-  const waiting = card.waitingFor === 'human'
-  const run = card.activeRun?.state === 'running' ? card.activeRun : null
-  const attempts = card.attemptCount > 1
-  if (waiting || run || attempts) {
-    const state = el('div', 'card-state')
-    if (waiting) {
-      state.append(el('span', 'waiting-badge', 'Waiting for you'))
+  if (context) {
+    const strip = subtaskStrip(card, context)
+    if (strip) {
+      element.dataset.subtask = ''
+      element.append(strip)
     }
-    if (run) {
-      const running = el('span', 'run-state')
-      const dot = el('span', 'run-dot')
-      dot.setAttribute('aria-hidden', 'true')
-      running.append(dot, run.agentName ? `Running · ${run.agentName}` : 'Running')
-      state.append(running)
-    }
-    if (attempts) {
-      const chip = el('span', 'attempt-chip', `×${card.attemptCount}`)
-      chip.title = `Attempt ${card.attemptCount}`
-      state.append(chip)
-    }
-    element.append(state)
   }
 
-  if (context && card.parentIssueId) {
-    const parent = context.parent
-    const line = parent ? el('button', 'parent-link') : el('span', 'parent-link')
-    line.append(el('span', 'parent-arrow', '↳ '), el('span', 'card-key', card.parentIssueId))
-    if (parent) {
-      const button = line as HTMLButtonElement
-      button.type = 'button'
-      line.append(el('span', 'parent-title', cardDisplayTitle(parent)))
-      line.title = `Parent: ${cardDisplayTitle(parent)}`
-      line.addEventListener('click', (event) => {
-        event.stopPropagation()
-        context.onOpenCard(parent.id)
-      })
-    }
-    element.append(line)
+  const meta = el('div', 'card-meta')
+  meta.append(el('span', 'card-key', card.id), el('span', 'spacer'))
+  const worker = avatar(card, isRunning(card))
+  if (worker) {
+    meta.append(worker)
   }
+  element.append(meta)
 
   const title = el('button', 'card-title', cardDisplayTitle(card))
   title.type = 'button'
   title.addEventListener('click', () => onOpen(card))
   element.append(title)
 
-  const meta = el('div', 'card-meta')
-  meta.append(el('span', 'card-key', card.id))
-  const worker = cardWorker(card)
-  // While it runs, "Running · <agent>" above already says who works it.
-  if (worker && !run?.agentName) {
-    const chip = el('span', 'worker', worker.label)
-    chip.dataset.kind = worker.key === 'user' ? 'user' : 'agent'
-    meta.append(chip)
-  }
-  if (context?.summary) {
-    const { chip, words } = summaryText(context.summary)
-    const progress = el('span', 'subcard-chip', chip)
-    progress.title = words
-    meta.append(progress)
-  }
-  element.append(meta)
-
   const statusLine = card.statusLine?.trim() ?? ''
-  if (statusLine) {
-    const line = el('p', 'status-line', statusLine)
-    line.title = statusLine
-    line.dataset.category = category ?? 'unstarted'
-    element.append(line)
+  const waiting = card.waitingFor === 'human'
+  const attempts = card.attemptCount > 1
+  if (statusLine || waiting || attempts) {
+    const status = el('div', 'card-status')
+    if (statusLine) {
+      const line = el('p', 'status-line', statusLine)
+      line.title = statusLine
+      line.dataset.category = category ?? 'unstarted'
+      status.append(line)
+    }
+    if (waiting) {
+      status.append(waitingPill())
+    }
+    if (attempts) {
+      const chip = el('span', 'attempt-chip', `×${card.attemptCount}`)
+      chip.title = `Attempt ${card.attemptCount}`
+      status.append(chip)
+    }
+    element.append(status)
   }
 
-  if (card.priority !== 'none' || card.labels.length > 0) {
-    const tags = el('div', 'card-tags')
-    if (card.priority !== 'none') {
-      const priority = el('span', 'priority', card.priority)
-      priority.dataset.priority = card.priority
-      tags.append(priority)
+  const priority = priorityTag(card.priority)
+  if (priority || card.labels.length > 0) {
+    const footer = el('div', 'card-footer')
+    if (priority) {
+      footer.append(priority)
     }
-    tags.append(...card.labels.map(label => el('span', 'label', label)))
-    element.append(tags)
+    footer.append(...labelChips(card.labels))
+    element.append(footer)
+  }
+
+  if (context?.summary) {
+    element.append(progressBar(context.summary))
   }
   return element
 }
