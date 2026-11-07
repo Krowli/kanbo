@@ -183,7 +183,7 @@ The same as running `kanbo approve WST-001` yourself, or `kanbo return WST-001 -
 kanbo serve
 ```
 
-Opens the board in your browser at `http://127.0.0.1:4318` — columns, cards, status lines, a **Waiting for you** badge, and **Approve** / **Return** buttons on any card that needs you. It is loopback-only and token-guarded by default; see [HTTP API](http-api.md) for the security model and routes if you want to build on it.
+Opens the board in your browser at `http://127.0.0.1:4318` — columns, cards (a parent card holds its sub-tasks as rows), status lines, a **Waiting for you** pill, a List view, filters, keys (`j`/`k`, Enter, `/`, `x`) and a bar for changing several cards at once, and **Approve** / **Return** buttons on any card that needs you. It is loopback-only and token-guarded by default; see [HTTP API](http-api.md) for the security model and routes if you want to build on it.
 
 ## Two shortcuts
 

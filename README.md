@@ -26,7 +26,7 @@ Then tell your agent: **"take the next card from kanbo."** Watch the board and a
 - **A board in a file, or a shared Postgres database.** `.kanbo/board.db` next to your code for one project on one machine, or an external Postgres (Supabase works) for a team of people and agents. See [storage](docs/storage.md).
 - **Agents work it over MCP.** Seventeen `kanbo_*` tools, and the server explains the rules itself when the client connects — nothing is written into your project's `CLAUDE.md` or `AGENTS.md`. See [MCP reference](docs/mcp.md); the [CLI reference](docs/cli.md) covers the commands you run.
 - **You approve. kanbo enforces it, not just asks.** `approve`, `return` and column changes are a person's; an agent's shell is refused with exit code `4`, and on Postgres the database roles refuse it too. See [agents](docs/agents.md#agents-and-people).
-- **Watch it in a terminal, or in your browser.** `kanbo board` and the interactive home screen, or `kanbo serve` for a board page over HTTP. See [HTTP API](docs/http-api.md).
+- **Watch it in a terminal, or in your browser.** `kanbo board` and the interactive home screen, or `kanbo serve` for a board page over HTTP (sub-tasks inside their parent card, a List view, keys, bulk changes). See [HTTP API](docs/http-api.md).
 
 ## Works with
 

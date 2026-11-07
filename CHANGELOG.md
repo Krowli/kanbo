@@ -4,7 +4,15 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- The board page: a **List view** (Board / List switch, `?view=list`), **column badges** (a count, `n/limit` against a WIP limit in amber at the limit, and a lock whose tooltip lists a column's rules), **keys** (`j`/`k`, arrows, Enter, Space, `x`, `/`, Esc) and **selecting several cards** (a box, `x`, shift- and cmd-click) with a floating bar that sets their column or priority in one `PATCH /issues/bulk`.
+- The board page ships **Geist** (variable woff2 in latin, latin-ext and cyrillic, SIL OFL 1.1) under `/assets/fonts/`; the page's content security policy gains `font-src 'self'`.
+
 ### Changed
+
+- The board page takes Modular's look: Geist type, a near-white neutral palette in light and dark, white cards with a hairline ring on quiet column bays, a 28 px toolbar with **Filter** and **Display** menus, status-category and priority icons, and toned label chips. It replaces the strip-board design.
+- **Sub-tasks** (a card with a parent) now live inside the parent's card as rows with a progress bar (`1/3 done`), and a waiting or running sub-task is never hidden (the parent shows a **Sub-task waiting for you** pill). **Display → Show sub-tasks as cards** (`?subtasks=cards`) draws them as cards of their own, marked **Sub-task of …**. The card dialog gets a breadcrumb to the parent, a sibling switcher, a **Sub-tasks** section and a property grid. "Sub-card" is now "sub-task" on the page.
 
 - The `kanbo init` wizard no longer asks "Add a first card?" or "Write these changes?": it asks where the board lives, the card key, the columns and which agents to connect, then writes and prints what it did. `--first-card <title>` still adds a first card.
 - In a folder with no board of its own, when only `KANBO_DB_PATH` names an app's database that is older than this kanbo or has no project for the folder, kanbo answers "This folder has no kanbo board of its own … run kanbo init here" instead of blaming the app's database. A binding or `--db` naming that database keeps the old sentence.
