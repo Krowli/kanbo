@@ -4,6 +4,8 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-11-07
+
 kanbo 0.7 gives agents one way onto the board: the MCP server. The terminal keeps the person's commands. No board migration.
 
 ### Removed
@@ -245,6 +247,7 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
+[0.7.0]: https://github.com/Krowli/kanbo/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Krowli/kanbo/releases/tag/v0.6.0
 [0.5.0]: https://github.com/Krowli/kanbo/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Krowli/kanbo/releases/tag/v0.4.0
