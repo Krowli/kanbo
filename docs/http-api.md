@@ -112,6 +112,7 @@ All routes are under `/issues`. A card is addressed by its key (`API-001`). A `w
 | `PATCH /issues/milestones/:id` · `DELETE /issues/milestones/:id` | Update and delete a milestone. |
 | `POST /issues/milestones/:id/close` | Close a sprint (person only). |
 | `GET /issues/sprints` | Milestones read as sprints. |
+| `GET /issues/metrics` | How work flows on the board, the numbers `kanbo stats` prints: cycle and lead time (p50, p85), throughput per ISO week, work in progress, aging cards, time in column, cumulative flow, returns, agents and people. Query: `from` and `to` (unix seconds; the last 12 ISO weeks to now when left out) or `sprint=<id>` (its own dates and cards; `404 issue_milestone_not_found` for an unknown one). `from` after `to` is `400 board_metrics_range_invalid`. A read, so the token. One call reads the whole history, so do not poll it. |
 | `GET /issues/version` | The board's change counter, `{ "seq": n }`. Poll it; there is no push. |
 | `GET /issues/ready` | Cards ready to pick up. |
 | `GET /issues/prime` | The prime text. |

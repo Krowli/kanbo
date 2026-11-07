@@ -491,6 +491,65 @@ describe.each(BOARD_STORE_FACTORIES)('kanbo serve on $name', (factory) => {
     expect((await call(client, 'GET', '/issues')).json).toEqual([])
   })
 
+  describe('GET /issues/metrics', () => {
+    const WEEK = 7 * 86_400
+
+    it('reads the last 12 ISO weeks to now when no range is given, and is not taken for a card id', async () => {
+      const before = Math.floor(Date.now() / 1000)
+      const answer = await call(client, 'GET', '/issues/metrics')
+      expect(answer.status).toBe(200)
+      expect(answer.json).toMatchObject({ milestoneId: null })
+      expect(answer.json).toHaveProperty('cycleTime')
+      expect(answer.json).toHaveProperty('throughput')
+      expect(answer.json).toHaveProperty('cumulativeFlow')
+      expect(answer.json.range.to).toBeGreaterThanOrEqual(before)
+      expect(answer.json.throughput).toHaveLength(12)
+      expect(answer.json.range.to - answer.json.range.from).toBeGreaterThan(11 * WEEK)
+      expect(answer.json.range.to - answer.json.range.from).toBeLessThan(12 * WEEK)
+    })
+
+    it('honours from and to', async () => {
+      const to = Math.floor(Date.now() / 1000)
+      const from = to - 2 * 86_400
+      const answer = await call(client, 'GET', `/issues/metrics?from=${from}&to=${to}`)
+      expect(answer.status).toBe(200)
+      expect(answer.json.range).toEqual({ from, to })
+      expect(answer.json.cumulativeFlow.length).toBeLessThanOrEqual(4)
+    })
+
+    it('reads a sprint over its own dates and keeps its cards', async () => {
+      const now = Math.floor(Date.now() / 1000)
+      const made = await call(client, 'POST', '/issues/milestones', { body: { workspaceId: WORKSPACE.id, title: 'Sprint 1', startDate: now - 10 * 86_400, dueDate: now - 3 * 86_400 } })
+      expect(made.status).toBe(200)
+      const answer = await call(client, 'GET', `/issues/metrics?sprint=${made.json.id}`)
+      expect(answer.status).toBe(200)
+      expect(answer.json.milestoneId).toBe(made.json.id)
+      // The sprint's own days: from the start of its first day to the end of its last, UTC.
+      expect(answer.json.range).toEqual({ from: Math.floor((now - 10 * 86_400) / 86_400) * 86_400, to: Math.floor((now - 3 * 86_400) / 86_400) * 86_400 + 86_399 })
+    })
+
+    it('answers 404 for a sprint that does not exist', async () => {
+      const answer = await call(client, 'GET', '/issues/metrics?sprint=nope')
+      expect(answer.status).toBe(404)
+      expect(answer.json.code).toBe('issue_milestone_not_found')
+    })
+
+    it('answers 400 board_metrics_range_invalid when from is after to', async () => {
+      const answer = await call(client, 'GET', '/issues/metrics?from=2000&to=1000')
+      expect(answer.status).toBe(400)
+      expect(answer.json.code).toBe('board_metrics_range_invalid')
+    })
+
+    it('refuses a range that is not whole numbers', async () => {
+      expect((await call(client, 'GET', '/issues/metrics?from=yesterday')).status).toBe(400)
+    })
+
+    it('needs the token, as every read does', async () => {
+      const answer = await call({ server: client.server }, 'GET', '/issues/metrics')
+      expect(answer.status).toBe(401)
+    })
+  })
+
   it('answers no workspaces with no columns', async () => {
     const empty = await call(client, 'GET', '/issues/columns?workspaceIds=')
     expect(empty.status).toBe(200)

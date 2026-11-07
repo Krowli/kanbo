@@ -1,5 +1,9 @@
+import { z } from 'zod'
+
 import type { BoardSession } from '../cli/command'
+import { defaultStatsFrom } from '../cli/commands/stats'
 import { BoardError } from '../domain/errors'
+import { currentUnixSeconds } from '../domain/time'
 import { normalizeStatusName } from '../domain/status-name'
 import { readChangeSeq, runBoardWrite } from '../ops/change-seq'
 import type { BoardRunView } from '../ops/runs'
@@ -63,6 +67,12 @@ import {
  */
 
 const OK = { ok: true as const }
+
+/** Unix seconds in a query string, where everything arrives as text. */
+const unixSecondsQuery = z.string().regex(/^\d+$/).transform(Number)
+
+/** `GET /issues/metrics`: the range as `kanbo stats` takes it, `from` and `to` in unix seconds, or a sprint to read over its own dates. */
+const metricsQuery = z.object({ from: unixSecondsQuery.optional(), to: unixSecondsQuery.optional(), sprint: z.string().min(1).optional() })
 
 /** How many cards a search answers with when the caller names no limit. */
 const DEFAULT_SEARCH_LIMIT = 20
@@ -404,6 +414,27 @@ export function createIssueRoutes(session: BoardSession, options: { personWriter
           }
         }
         return updated
+      },
+    }),
+    // Before `/issues/:id`, which would take `metrics` for a card.
+    route({
+      method: 'GET',
+      path: '/issues/metrics',
+      query: metricsQuery,
+      handle: async ({ query }) => {
+        const now = currentUnixSeconds()
+        const sprint = query.sprint === undefined
+          ? null
+          : (await ops.listSprints(workspaceId, now)).find(candidate => candidate.id === query.sprint) ?? null
+        if (query.sprint !== undefined && sprint === null) {
+          throw new BoardError('issue_milestone_not_found', { milestoneId: query.sprint, workspaceId })
+        }
+        return await ops.boardMetrics({
+          workspaceIds: [workspaceId],
+          from: query.from ?? sprint?.startDate ?? defaultStatsFrom(now),
+          to: query.to ?? sprint?.dueDate ?? now,
+          milestoneId: sprint?.id ?? null,
+        }, now)
       },
     }),
     route({
