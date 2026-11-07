@@ -6,7 +6,7 @@ import type { BoardColumn } from './grouping'
 import { chevronIcon, lockIcon, parentIcon, priorityIcon, statusIcon } from './icons'
 import { avatar, isRunning, labelChips, runDot, selectBox, waitingPill } from './parts'
 import type { SubtaskMode } from './subtasks'
-import { childrenOf } from './subtasks'
+import { childrenOf, subtaskSummary } from './subtasks'
 
 /**
  * The List view: a group per column, a row per card. Sub-tasks sit under their
@@ -113,6 +113,11 @@ function renderRow(row: ListRow, options: ListOptions): HTMLElement {
   }
   if (isRunning(card)) {
     marks.append(runDot())
+  }
+  // A sub-task with sub-tasks of its own says how far they are, as its row in the parent's card does.
+  const own = row.depth === 1 && options.mode === 'inside' ? subtaskSummary(options.cards, options.statuses, card.id) : null
+  if (own) {
+    marks.append(el('span', 'row-count', `${own.done}/${own.total}`))
   }
   element.append(marks)
 

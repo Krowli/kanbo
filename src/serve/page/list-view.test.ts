@@ -158,4 +158,14 @@ describe('renderList', () => {
     expect(list.querySelector<HTMLElement>('[data-card-id="WOR-002"]')?.hasAttribute('data-dim')).toBe(true)
     expect(list.querySelector<HTMLElement>('[data-card-id="WOR-001"]')?.hasAttribute('data-dim')).toBe(false)
   })
+
+  it('shows n/m on a sub-task row that has sub-tasks of its own, as the card\'s row does, in inside mode only', () => {
+    const grand = cardFixture({ id: 'WOR-004', title: 'Deeper', statusId: 'doing', parentIssueId: 'WOR-002' })
+    const inside = renderList(options([parent, child, grand, lone]))
+    expect(inside.querySelector('[data-card-id="WOR-002"] .row-count')?.textContent).toBe('0/1')
+    expect(inside.querySelector('[data-card-id="WOR-001"] .row-count')).toBeNull()
+    expect(inside.querySelector('[data-card-id="WOR-003"] .row-count')).toBeNull()
+    const cards = renderList(options([parent, child, grand, lone], { mode: 'cards' }))
+    expect(cards.querySelector('.row-count')).toBeNull()
+  })
 })
