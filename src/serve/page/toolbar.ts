@@ -3,7 +3,7 @@ import { DEFAULT_DISPLAY } from './display'
 import { button, el } from './dom'
 import type { CardFilters, Priority } from './filters'
 import { isFiltering, NO_FILTERS, PRIORITIES } from './filters'
-import { boardIcon, closeIcon, displayIcon, filterIcon, listIcon, plusIcon, priorityIcon, searchIcon } from './icons'
+import { boardIcon, chartIcon, closeIcon, displayIcon, filterIcon, listIcon, plusIcon, priorityIcon, searchIcon } from './icons'
 import type { PopoverHandle } from './popover'
 import { attachPopover } from './popover'
 
@@ -127,13 +127,13 @@ export function createToolbar(actions: ToolbarActions): Toolbar {
   const viewSwitch = el('div', 'view-switch')
   viewSwitch.setAttribute('role', 'group')
   viewSwitch.setAttribute('aria-label', 'View')
-  const viewButtons = (['board', 'list'] as const).map((view) => {
+  const viewButtons = (['board', 'list', 'analytics'] as const).map((view) => {
     const viewButton = el('button')
     viewButton.type = 'button'
     viewButton.dataset.view = view
-    viewButton.title = view === 'board' ? 'Board' : 'List'
+    viewButton.title = view === 'board' ? 'Board' : view === 'list' ? 'List' : 'Analytics'
     viewButton.setAttribute('aria-label', viewButton.title)
-    viewButton.append(view === 'board' ? boardIcon() : listIcon())
+    viewButton.append(view === 'board' ? boardIcon() : view === 'list' ? listIcon() : chartIcon())
     viewButton.addEventListener('click', () => {
       if (state.display.view !== view) {
         actions.onDisplay({ ...state.display, view })
@@ -251,6 +251,16 @@ export function createToolbar(actions: ToolbarActions): Toolbar {
         viewButton.setAttribute('aria-pressed', String(viewButton.dataset.view === next.display.view))
       }
       renderChips()
+      // Analytics is about the whole board: no search, count or filters there, as in Modular.
+      const analytics = next.display.view === 'analytics'
+      for (const part of [searchBox, count, filterAnchor, displayAnchor]) {
+        part.hidden = analytics
+      }
+      chips.hidden = analytics || !filtering
+      if (analytics) {
+        filterPopover.close()
+        displayPopover.close()
+      }
       filterPopover.refresh()
       displayPopover.refresh()
     },

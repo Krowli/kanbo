@@ -155,3 +155,9 @@ export function listIcon(): SVGSVGElement {
   return icon('list-icon',
     node('path', { d: 'M5.5 4h8M5.5 8h8M5.5 12h8M2.5 4h.01M2.5 8h.01M2.5 12h.01', stroke: 'currentColor', 'stroke-width': 1.75, 'stroke-linecap': 'round' }))
 }
+
+/** Bars of three heights, for the Analytics view. */
+export function chartIcon(): SVGSVGElement {
+  return icon('chart-icon',
+    node('path', { d: 'M3.5 13V8.5M8 13V3.5M12.5 13V6', stroke: 'currentColor', 'stroke-width': 2, 'stroke-linecap': 'round' }))
+}

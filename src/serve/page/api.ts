@@ -1,6 +1,8 @@
 import type { IssueActivityItemView } from '../../domain/activity-types'
+import type { BoardMetrics } from '../../ops/board-metrics'
 import type { BulkUpdateCardsResult } from '../../ops/card-batch'
 import type { BoardRunView } from '../../ops/runs'
+import type { BoardSprint } from '../../ops/sprints'
 import type { IssueFieldChange } from '../../sqlite/schema'
 import type { ServeErrorBody } from '../errors'
 import type { ServeProjectView } from '../projects'
@@ -16,6 +18,13 @@ import type { ServeCardView, ServeCommentView, ServeStatusView } from '../views'
 export interface BulkChange {
   statusId?: string
   priority?: ServeCardView['priority']
+}
+
+/** What the Analytics view asks the metrics route for; nothing given is the last 12 weeks to now. */
+export interface MetricsQuery {
+  from?: number
+  to?: number
+  sprint?: string
 }
 
 export class ApiError extends Error {
@@ -36,6 +45,10 @@ export interface BoardApi {
   moveCard: (cardId: string, statusId: string) => Promise<ServeCardView>
   /** One write for all the cards: a person's, so a column's unmet rules come back as warnings. */
   bulkUpdate: (cardIds: readonly string[], change: BulkChange) => Promise<BulkUpdateCardsResult>
+  /** How work flows on the board, as `kanbo stats` reads it. One call reads the whole history: not for a poll. */
+  metrics: (query: MetricsQuery) => Promise<BoardMetrics>
+  /** The milestones read as sprints, for the sprint picker. */
+  sprints: (workspaceId: string) => Promise<BoardSprint[]>
   comments: (cardId: string) => Promise<ServeCommentView[]>
   addComment: (cardId: string, content: string) => Promise<ServeCommentView>
   activity: (cardId: string) => Promise<IssueActivityItemView[]>
@@ -93,6 +106,16 @@ export function createBoardApi(readToken: () => string | null, readBase: () => s
     createCard: async input => await request('POST', board('/issues'), input),
     moveCard: async (cardId, statusId) => await request('PATCH', `${card(cardId)}/status/${encodeURIComponent(statusId)}`),
     bulkUpdate: async (cardIds, change) => await request('PATCH', board('/issues/bulk'), { issueIds: cardIds, update: change }),
+    metrics: async (query) => {
+      const params = new URLSearchParams()
+      for (const [name, value] of Object.entries(query)) {
+        if (value !== undefined) {
+          params.set(name, String(value))
+        }
+      }
+      return await request('GET', board(`/issues/metrics${params.size > 0 ? `?${params}` : ''}`))
+    },
+    sprints: async workspaceId => await request('GET', board(`/issues/sprints?workspaceId=${encodeURIComponent(workspaceId)}`)),
     comments: async cardId => await request('GET', `${card(cardId)}/comments`),
     addComment: async (cardId, content) => await request('POST', `${card(cardId)}/comments`, { content }),
     activity: async cardId => await request('GET', `${card(cardId)}/activity`),

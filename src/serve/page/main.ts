@@ -1,5 +1,7 @@
 import type { ServeProjectView } from '../projects'
 import type { ServeCardView, ServeStatusView } from '../views'
+import type { AnalyticsView } from './analytics'
+import { createAnalyticsData, renderAnalytics } from './analytics'
 import type { BoardApi, BulkChange } from './api'
 import { ApiError, createBoardApi } from './api'
 import { applyBulk } from './bulk'
@@ -90,6 +92,18 @@ function toggleGroup(groupId: string): void {
 /** The cards picked for a change of several at once. */
 let selection: Selection = EMPTY_SELECTION
 
+/** The Analytics view's data: fetched only while that view is open. */
+const analyticsData = createAnalyticsData(api, () => workspaceInfo?.id ?? null, () => {
+  analyticsDirty = true
+  if (display.view === 'analytics') {
+    renderBoard()
+  }
+})
+let analyticsView: AnalyticsView | null = null
+let analyticsDirty = true
+/** Whether the view has told its data that it is open, so a render does not ask again. */
+let analyticsOpen = false
+
 let statuses: ServeStatusView[] = []
 let cards: ServeCardView[] = []
 let seq: number | null = null
@@ -136,6 +150,10 @@ const toolbar = createToolbar({
   onFilters: next => changeFilters(next),
   onDisplay: next => changeDisplay(next),
   onNew: () => {
+    // A new card is written on the board or the list: leave Analytics for the board.
+    if (display.view === 'analytics') {
+      changeDisplay({ ...display, view: 'board' })
+    }
     const status = newCardStatus(statuses)
     if (status) {
       openDraft(status)
@@ -263,6 +281,7 @@ async function refresh(): Promise<void> {
     selection = pruneSelection(selection, new Set(nextCards.map(card => card.id)))
     projects = nextProjects
     workspaceInfo = nextWorkspace
+    syncAnalytics(true)
     renderBoard()
     clearLoadFailure()
     if (openCardId) {
@@ -311,6 +330,9 @@ function chooseProject(id: string | null): void {
   filters = { ...filters, worker: null, labels: [] }
   collapsed = readStoredCollapsed()
   selection = EMPTY_SELECTION
+  analyticsData.reset()
+  analyticsOpen = false
+  analyticsDirty = true
   writeFiltersToAddress(url)
   seq = null
   draft = null
@@ -383,9 +405,57 @@ function changeFilters(next: CardFilters): void {
 }
 
 function changeDisplay(next: Display): void {
+  const before = display
   display = next
   writeFiltersToAddress()
+  if (next.view === 'analytics') {
+    selection = EMPTY_SELECTION
+  }
+  if (next.view === 'analytics' && before.view === 'analytics' && (before.range !== next.range || before.sprint !== next.sprint)) {
+    // A new range or sprint: read again (the last numbers stay up meanwhile).
+    analyticsData.show({ weeks: next.range, sprint: next.sprint })
+  }
+  else {
+    syncAnalytics(false)
+  }
   renderBoard()
+}
+
+/** Tell the Analytics data whether its view is open: it fetches while it is, and never otherwise. */
+function syncAnalytics(boardChanged: boolean): void {
+  if (display.view !== 'analytics') {
+    analyticsData.hide()
+    analyticsOpen = false
+    analyticsView?.dispose()
+    analyticsView = null
+    analyticsDirty = true
+    return
+  }
+  const query = { weeks: display.range, sprint: display.sprint }
+  if (!analyticsOpen) {
+    analyticsOpen = true
+    analyticsData.show(query)
+  }
+  else if (boardChanged) {
+    analyticsData.boardChanged()
+  }
+}
+
+/** Draw the Analytics view again, keeping where the person had scrolled to. */
+function renderAnalyticsView(): void {
+  if (!analyticsDirty && boardElement.querySelector('.analytics')) {
+    return
+  }
+  const scrolled = boardElement.scrollTop
+  analyticsView?.dispose()
+  analyticsView = renderAnalytics(analyticsData.state(), {
+    onQuery: query => changeDisplay({ ...display, range: query.weeks, sprint: query.sprint }),
+    onRetry: () => analyticsData.retry(),
+    onOpenCard: id => void openCard(id),
+  })
+  boardElement.replaceChildren(analyticsView.element)
+  boardElement.scrollTop = scrolled
+  analyticsDirty = false
 }
 
 function renderBoard(): void {
@@ -400,7 +470,10 @@ function renderBoard(): void {
   const tally = { shown: countByStatus(cards, card => matchesFilters(card, filters)), total: countByStatus(cards) }
   const groups = groupBoard(statuses, shown)
   boardElement.dataset.view = display.view
-  if (display.view === 'list') {
+  if (display.view === 'analytics') {
+    renderAnalyticsView()
+  }
+  else if (display.view === 'list') {
     const list = renderList({
       statuses,
       cards,

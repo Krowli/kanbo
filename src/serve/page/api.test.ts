@@ -30,4 +30,20 @@ describe('createBoardApi', () => {
     await createBoardApi(() => null, () => '/projects/p1').bulkUpdate(['WOR-001'], { priority: 'high' })
     expect((fetchMock.mock.calls[1] as unknown as [string])[0]).toBe('/projects/p1/issues/bulk')
   })
+
+  it('asks for metrics with only the range it was given, and for sprints by workspace', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}'))
+    vi.stubGlobal('fetch', fetchMock)
+    const api = createBoardApi(() => 'secret', () => '/projects/p1')
+    await api.metrics({})
+    await api.metrics({ from: 100, to: 200 })
+    await api.metrics({ sprint: 'm1' })
+    await api.sprints('ws 1')
+    expect(fetchMock.mock.calls.map(call => (call as unknown as [string])[0])).toEqual([
+      '/projects/p1/issues/metrics',
+      '/projects/p1/issues/metrics?from=100&to=200',
+      '/projects/p1/issues/metrics?sprint=m1',
+      '/projects/p1/issues/sprints?workspaceId=ws%201',
+    ])
+  })
 })
