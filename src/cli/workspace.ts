@@ -52,7 +52,7 @@ const LOCAL_NODE_ID = 'local'
  * person to run `init` while they were running `init` would be answering a
  * question they did not ask, so what to do comes first and the binding second.
  */
-const WORKSPACE_NOT_RESOLVED_MESSAGE
+export const WORKSPACE_NOT_RESOLVED_MESSAGE
   = 'Could not tell which project this is. Pass --workspace <name|id>, '
     + 'or run "kanbo init" in the project folder.'
 

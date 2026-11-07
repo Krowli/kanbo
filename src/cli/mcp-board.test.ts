@@ -147,14 +147,46 @@ describe('kanbo mcp when KANBO_DB_PATH names a database it cannot use', () => {
     const answer = await answerOf('kanbo_prime')
 
     expect(answer.isError).toBe(true)
-    expect(answer.text).toContain('The app\'s database is older than this kanbo')
+    expect(answer.text).toContain('This folder has no kanbo board of its own.')
+    expect(answer.text).toContain('which is older than this kanbo.')
+    expect(answer.text).not.toContain('Let the app it belongs to update it first')
+  })
+
+  it('finds the board a person sets up in the folder while it runs, on the next call', async () => {
+    host.connection.exec('alter table issue_statuses drop column wip_limit')
+    host.connection.exec('alter table issue_statuses drop column allowed_from')
+    const board = await openMcpBoard({ actor: { kind: 'external', id: 'tester' } })
+    const server = createKanboMcpServer(board, { includeRunTools: true })
+    const [clientChannel, serverChannel] = InMemoryTransport.createLinkedPair()
+    const client = new Client({ name: 'host-test', version: '0.0.0' })
+    await Promise.all([client.connect(clientChannel), server.connect(serverChannel)])
+    const textOf = (result: Awaited<ReturnType<Client['callTool']>>): string => (result.content as { text: string }[]).map(part => part.text).join('\n')
+    try {
+      const refused = await client.callTool({ name: 'kanbo_prime', arguments: {} })
+      expect(refused.isError).toBe(true)
+      expect(textOf(refused)).toContain('This folder has no kanbo board of its own.')
+
+      vi.spyOn(console, 'log').mockImplementation(() => {})
+      const program = new Command().exitOverride()
+      registerInitCommand(program)
+      await program.parseAsync(['init', '--yes'], { from: 'user' })
+
+      const primed = await client.callTool({ name: 'kanbo_prime', arguments: {} })
+      expect(primed.isError, textOf(primed)).toBeFalsy()
+      expect(textOf(primed)).toContain('Columns of this board')
+    }
+    finally {
+      await client.close()
+      await board.close()
+    }
   })
 
   it('starts, and each tool says which project it could not tell when the database knows none for the folder', async () => {
     const answer = await answerOf('kanbo_prime')
 
     expect(answer.isError).toBe(true)
-    expect(answer.text).toContain('Could not tell which project this is')
+    expect(answer.text).toContain('This folder has no kanbo board of its own.')
+    expect(answer.text).toContain('which has no project for this folder.')
   })
 })
 

@@ -13,11 +13,11 @@ import { findBinding } from './binding'
 import type { BoardTarget } from './db-target'
 import { resolveDbTarget } from './db-target'
 import type { CliOutputOptions, CliResult } from './output'
-import { CliError, EXIT_NOT_RESOLVED, printResult, readFormat } from './output'
+import { CliError, EXIT_NOT_RESOLVED, EXIT_SCHEMA_OUTDATED, printResult, readFormat } from './output'
 import { openPostgresBoard } from './postgres-board'
 import { rememberProjectQuietly } from './project-registry'
-import { assertInstalledBoard, assertReadableBoard, assertWritableBoard } from './schema-guard'
-import { resolveWorkspace } from './workspace'
+import { assertInstalledBoard, assertReadableBoard, assertWritableBoard, SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
+import { resolveWorkspace, WORKSPACE_NOT_RESOLVED_MESSAGE } from './workspace'
 
 /**
  * What every board command needs before it can do its one thing: the board
@@ -105,12 +105,49 @@ export async function openBoardSession(
   })
   const session = target.kind === 'postgres'
     ? await openExternalSession(target, options, cwd)
-    : await openFileSession(target, options, mode, cwd)
+    : await openFileSession(target, options, mode, cwd).catch((error: unknown) => {
+      throw describeEnvironmentOnlyFailure(error, target, options, cwd)
+    })
   const found = findBinding(cwd)
   if (found) {
     rememberProjectQuietly(found.projectDir)
   }
   return session
+}
+
+/**
+ * A folder with no board of its own that only `KANBO_DB_PATH` points at an
+ * app's database: when that database is older than this kanbo, or knows no
+ * project for the folder, the folder is told it has no board, not that "the
+ * app's database" needs updating — the person never chose that database. A
+ * flag or a binding that names the database keeps the app-centred sentence.
+ */
+function describeEnvironmentOnlyFailure(
+  error: unknown,
+  target: Extract<BoardTarget, { kind: 'sqlite' }>,
+  options: BoardCommandOptions,
+  cwd: string,
+): unknown {
+  const fromEnvironmentAlone = target.owner !== 'kanbo'
+    && !options.db?.trim()
+    && !options.databaseUrl?.trim()
+    && !process.env.KANBO_DATABASE_URL?.trim()
+    && findBinding(cwd) === null
+  if (!fromEnvironmentAlone || !(error instanceof CliError)) {
+    return error
+  }
+  let reason: string
+  if (error.exitCode === EXIT_SCHEMA_OUTDATED && error.message === SCHEMA_OUTDATED_MESSAGE) {
+    reason = 'is older than this kanbo'
+  }
+  else if (error.exitCode === EXIT_NOT_RESOLVED && error.message === WORKSPACE_NOT_RESOLVED_MESSAGE) {
+    reason = 'has no project for this folder'
+  }
+  else {
+    return error
+  }
+  return new CliError(error.exitCode, `This folder has no kanbo board of its own. KANBO_DB_PATH points at another app's database (${target.path}), `
+    + `which ${reason}. To give this folder its own board, run kanbo init here.`)
 }
 
 async function openFileSession(

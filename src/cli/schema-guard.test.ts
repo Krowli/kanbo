@@ -1,3 +1,7 @@
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { Command } from 'commander'
 import { sql } from 'drizzle-orm'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,6 +14,7 @@ import { createSqliteBoardStore } from '../sqlite/board-store.sqlite'
 import { markBoardFileOwnedByKanbo } from '../sqlite/open-database'
 import type { TestBoardDatabase } from '../testing/board-database'
 import { createTestBoardDatabase, seedHostWorkspace } from '../testing/board-database'
+import { writeBinding } from './binding'
 import { registerApproveCommand } from './commands/approve'
 import { registerBoardCommand } from './commands/board'
 import { FILE_SCHEMA_OUTDATED_MESSAGE, SCHEMA_OUTDATED_MESSAGE } from './schema-guard'
@@ -87,5 +92,72 @@ describe('a board file older than this build', () => {
     dropTheNewestColumns()
 
     await expect(run(['board'])).rejects.toThrowError(expect.objectContaining({ exitCode: 3, message: FILE_SCHEMA_OUTDATED_MESSAGE }))
+  })
+})
+
+/** A folder with no board of its own, and an app's database that only `KANBO_DB_PATH` names. */
+describe('a host database named by KANBO_DB_PATH alone', () => {
+  let board: TestBoardDatabase
+  let projectDir: string
+
+  beforeEach(async () => {
+    board = await createTestBoardDatabase()
+    seedHostWorkspace(board, 'other-workspace', 'OTH')
+    projectDir = mkdtempSync(join(tmpdir(), 'kanbo-env-only-'))
+    vi.spyOn(process, 'cwd').mockReturnValue(projectDir)
+    for (const name of ['KANBO_WORKSPACE_ID', 'KANBO_DATABASE_URL']) {
+      vi.stubEnv(name, undefined)
+    }
+    vi.stubEnv('KANBO_DB_PATH', board.path)
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+    vi.restoreAllMocks()
+    board.dispose()
+    rmSync(projectDir, { force: true, recursive: true })
+  })
+
+  function dropTheNewestColumns(): void {
+    board.connection.exec('alter table issue_statuses drop column wip_limit')
+    board.connection.exec('alter table issue_statuses drop column allowed_from')
+  }
+
+  async function runBoard(...extra: string[]): Promise<void> {
+    vi.spyOn(console, 'log').mockImplementation(() => {})
+    const program = new Command().exitOverride()
+    registerBoardCommand(program)
+    await program.parseAsync(['board', ...extra], { from: 'user' })
+  }
+
+  it('says the folder has no board of its own when the database is older than this kanbo', async () => {
+    dropTheNewestColumns()
+
+    await expect(runBoard()).rejects.toThrowError(expect.objectContaining({
+      exitCode: 3,
+      message: `This folder has no kanbo board of its own. KANBO_DB_PATH points at another app's database (${board.path}), `
+        + 'which is older than this kanbo. To give this folder its own board, run kanbo init here.',
+    }))
+  })
+
+  it('keeps the app\'s sentence when --db names that database', async () => {
+    dropTheNewestColumns()
+
+    await expect(runBoard('--db', board.path)).rejects.toThrowError(expect.objectContaining({ exitCode: 3, message: SCHEMA_OUTDATED_MESSAGE }))
+  })
+
+  it('keeps the app\'s sentence when the folder is bound to that database', async () => {
+    dropTheNewestColumns()
+    writeBinding(projectDir, { schemaVersion: 1, workspaceId: 'other-workspace' })
+
+    await expect(runBoard()).rejects.toThrowError(expect.objectContaining({ exitCode: 3, message: SCHEMA_OUTDATED_MESSAGE }))
+  })
+
+  it('says the folder has no board of its own when a current database has no project for it', async () => {
+    await expect(runBoard()).rejects.toThrowError(expect.objectContaining({
+      exitCode: 2,
+      message: `This folder has no kanbo board of its own. KANBO_DB_PATH points at another app's database (${board.path}), `
+        + 'which has no project for this folder. To give this folder its own board, run kanbo init here.',
+    }))
   })
 })
