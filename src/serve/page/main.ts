@@ -10,7 +10,8 @@ import type { Placement } from './enter'
 import { enterOf, placementsOf, startsWaiting } from './enter'
 import type { CardFilters } from './filters'
 import { filterOptions, matchesFilters, readFilters, writeFilters } from './filters'
-import { plusIcon, statusIcon } from './icons'
+import { columnBadge, columnRules, countByStatus } from './column-badges'
+import { lockIcon, plusIcon, statusIcon } from './icons'
 import type { BoardColumn } from './grouping'
 import { groupBoard, newCardStatus } from './grouping'
 import type { CardDetail, PanelTab } from './panel'
@@ -343,7 +344,9 @@ function renderBoard(): void {
   const family = familyView(cards, display.subtasks, card => matchesFilters(card, filters))
   const shown = drawnCards(cards, display.subtasks).filter(card => family.drawn.has(card.id))
   toolbar.update({ filters, display, options: filterOptions(cards), counts: { shown: family.count, total: cards.length } })
-  boardElement.replaceChildren(...groupBoard(statuses, shown).map(column => renderColumn(column, family.faded)))
+  // A column counts the cards that are in it, a sub-task drawn inside a parent elsewhere included.
+  const tally = { shown: countByStatus(cards, card => matchesFilters(card, filters)), total: countByStatus(cards) }
+  boardElement.replaceChildren(...groupBoard(statuses, shown).map(column => renderColumn(column, family.faded, tally)))
   // Every card, shown or not: a filter that brings a card into view does not make it new.
   lastPlacement = placementsOf(cards)
   markOpenCard()
@@ -371,12 +374,28 @@ function focusCard(cardId: string): void {
   }
 }
 
-function renderColumn(column: BoardColumn, faded: ReadonlySet<string>): HTMLElement {
+function renderColumn(column: BoardColumn, faded: ReadonlySet<string>, tally: { shown: ReadonlyMap<string, number>, total: ReadonlyMap<string, number> }): HTMLElement {
   const element = el('section', 'column')
   element.setAttribute('aria-label', column.name)
   const head = el('header', 'column-head')
   const status = column.status
-  head.append(statusIcon(status?.category ?? null), el('span', 'column-name', column.name), el('span', 'column-count', String(column.cards.length)), el('span', 'spacer'))
+  const badge = columnBadge(status, status ? tally.shown.get(status.id) ?? 0 : column.cards.length, status ? tally.total.get(status.id) ?? 0 : column.cards.length)
+  const count = el('span', 'column-count', badge.text)
+  count.toggleAttribute('data-full', badge.full)
+  if (status?.wipLimit != null) {
+    count.title = `${tally.total.get(status.id) ?? 0} of ${status.wipLimit} cards`
+  }
+  head.append(statusIcon(status?.category ?? null), el('span', 'column-name', column.name), count)
+  const rules = status ? columnRules(status, statuses) : null
+  if (rules) {
+    const lock = el('span', 'column-lock')
+    lock.append(lockIcon())
+    lock.title = rules
+    lock.setAttribute('role', 'img')
+    lock.setAttribute('aria-label', rules.replaceAll('\n', '. '))
+    head.append(lock)
+  }
+  head.append(el('span', 'spacer'))
   if (status) {
     const add = el('button', 'ghost column-add')
     add.type = 'button'
