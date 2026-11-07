@@ -2,7 +2,7 @@ import { cardDisplayTitle } from '../../domain/card-display-title'
 import type { ServeCardView, ServeStatusView } from '../views'
 import { el } from './dom'
 import { cardWorker } from './filters'
-import type { SubcardSummary } from './subcards'
+import type { SubtaskSummary } from './subtasks'
 
 /** What a card's coloured edge says, the first match winning: it waits for you, an agent is running it, it is done, canceled, or none of these. */
 type CardState = 'waiting' | 'running' | 'done' | 'quiet' | 'idle'
@@ -23,12 +23,12 @@ function cardState(card: ServeCardView, category: ServeStatusView['category'] | 
 /** What a card knows of the cards around it: its parent, its sub-cards' progress, and how to open another card. */
 export interface CardContext {
   parent: ServeCardView | null
-  summary: SubcardSummary | null
+  summary: SubtaskSummary | null
   onOpenCard: (cardId: string) => void
 }
 
 /** `2/3 sub-cards`, or `All 3 sub-cards done`; and the same in words for a tooltip. */
-export function summaryText(summary: SubcardSummary): { chip: string, words: string } {
+export function summaryText(summary: SubtaskSummary): { chip: string, words: string } {
   const words = `${summary.done} of ${summary.total} sub-cards done`
   return { chip: summary.done === summary.total ? `All ${summary.total} sub-cards done` : `${summary.done}/${summary.total} sub-cards`, words }
 }

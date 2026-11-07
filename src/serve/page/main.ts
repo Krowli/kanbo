@@ -13,7 +13,7 @@ import type { BoardColumn } from './grouping'
 import { groupBoard } from './grouping'
 import type { CardDetail, PanelTab } from './panel'
 import { readScroll, renderPanel } from './panel'
-import { childrenOf, parentOf, subcardSummary } from './subcards'
+import { childrenOf, parentOf, subtaskSummary } from './subtasks'
 import { startPresence } from './presence'
 import { renderProjectSwitcher, renderWhere } from './project-switcher'
 import { adoptTokenFromLocation, readStoredToken, storeToken } from './token'
@@ -388,7 +388,7 @@ function renderColumn(column: BoardColumn): HTMLElement {
   for (const card of column.cards) {
     const cardElement = renderCard(card, status?.category ?? null, opened => void openCard(opened.id), {
       parent: parentOf(cards, card),
-      summary: subcardSummary(cards, statuses, card.id),
+      summary: subtaskSummary(cards, statuses, card.id),
       onOpenCard: id => void openCard(id),
     })
     const enter = enterOf(lastPlacement, card)
