@@ -204,9 +204,14 @@ describe('kanbo init with nothing naming a board', () => {
         ['Where should the board live?', ['enter']],
         ['Card numbers start with', ['enter']],
         ['Which columns should the board start with?', ['enter']],
-        ['Which coding agents do you use here?', ['space', 'enter']],
+        ['Which coding agents do you use here?', ['enter']],
       ] as [string, PromptKey[]][]) {
         await driver.waitFor(question)
+        if (question === 'Which coding agents do you use here?') {
+          // The project's CLAUDE.md found, nothing registered under this home: Claude Code is ticked already, so Enter keeps it.
+          // Other agents this machine happens to have (an installed Cursor app, say) may be ticked too; that changes nothing here.
+          expect(driver.transcript()).toMatch(/◼ Claude Code \(found/)
+        }
         driver.press(...keys)
       }
       await driver.waitFor('Connect them now?')
