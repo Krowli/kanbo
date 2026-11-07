@@ -210,7 +210,8 @@ describe('kanbo init with nothing naming a board', () => {
         if (question === 'Which coding agents do you use here?') {
           // The project's CLAUDE.md found, nothing registered under this home: Claude Code is ticked already, so Enter keeps it.
           // Other agents this machine happens to have (an installed Cursor app, say) may be ticked too; that changes nothing here.
-          expect(driver.transcript()).toMatch(/◼ Claude Code \(found/)
+          // The ticked box is ◼, or [+] where the terminal cannot draw it (Windows without Windows Terminal).
+          expect(driver.transcript()).toMatch(/(?:◼|\[\+\]) Claude Code \(found/)
         }
         driver.press(...keys)
       }
