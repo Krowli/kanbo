@@ -163,6 +163,21 @@ export interface SubtaskBlock {
   summary: SubtaskSummary | null
 }
 
+function toRow(cards: readonly ServeCardView[], statuses: readonly ServeStatusView[], card: ServeCardView, faded: ReadonlySet<string>): SubtaskRow {
+  return {
+    card,
+    category: statuses.find(status => status.id === card.statusId)?.category ?? null,
+    own: subtaskSummary(cards, statuses, card.id),
+    faded: faded.has(card.id),
+    attention: card.waitingFor === 'human' || waitsBelow(cards, card.id),
+  }
+}
+
+/** A row for every direct sub-task of `cardId`, in board order: the dialog lists all of them. */
+export function subtaskRowsOf(cards: readonly ServeCardView[], statuses: readonly ServeStatusView[], cardId: string): SubtaskRow[] {
+  return childrenOf(cards, statuses, cardId).map(card => toRow(cards, statuses, card, new Set()))
+}
+
 /** What a parent's card draws inside itself, or `null` for a card with no sub-tasks. */
 export function subtaskBlock(
   cards: readonly ServeCardView[],
@@ -174,15 +189,5 @@ export function subtaskBlock(
   if (rows.length === 0) {
     return null
   }
-  return {
-    rows: rows.map(card => ({
-      card,
-      category: statuses.find(status => status.id === card.statusId)?.category ?? null,
-      own: subtaskSummary(cards, statuses, card.id),
-      faded: faded.has(card.id),
-      attention: card.waitingFor === 'human' || waitsBelow(cards, card.id),
-    })),
-    more,
-    summary: subtaskSummary(cards, statuses, cardId),
-  }
+  return { rows: rows.map(card => toRow(cards, statuses, card, faded)), more, summary: subtaskSummary(cards, statuses, cardId) }
 }

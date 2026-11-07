@@ -15,7 +15,7 @@ import type { BoardColumn } from './grouping'
 import { groupBoard, newCardStatus } from './grouping'
 import type { CardDetail, PanelTab } from './panel'
 import { readScroll, renderPanel } from './panel'
-import { childrenOf, drawnCards, familyView, parentOf, runsBelow, subtaskBlock, subtaskSummary, waitsBelow } from './subtasks'
+import { childrenOf, drawnCards, familyView, parentOf, runsBelow, subtaskBlock, subtaskRowsOf, subtaskSummary, waitsBelow } from './subtasks'
 import { startPresence } from './presence'
 import { renderProjectSwitcher, renderWhere } from './project-switcher'
 import { createToolbar } from './toolbar'
@@ -532,7 +532,7 @@ async function loadDetail(): Promise<void> {
   }
   try {
     const [comments, activity, runs, fieldChanges] = await Promise.all([api.comments(cardId), api.activity(cardId), api.runs(cardId), api.fieldChanges(cardId)])
-    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs, fieldChanges, parent: parentOf(cards, card), children: childrenOf(cards, statuses, cardId), statuses, tab: panelTab }
+    detail = { card, status: statuses.find(status => status.id === card.statusId) ?? null, comments, activity, runs, fieldChanges, parent: parentOf(cards, card), subtasks: subtaskRowsOf(cards, statuses, cardId), summary: subtaskSummary(cards, statuses, cardId), siblings: card.parentIssueId && card.parentIssueId !== cardId ? childrenOf(cards, statuses, card.parentIssueId) : [], statuses, tab: panelTab }
   }
   catch (error) {
     panelNotice = describeFailure(error)
@@ -581,7 +581,9 @@ function renderPanelHost(): void {
     setBackgroundInert(true)
     // Fades in this once; the rebuilds on later polls stay still.
     panel.classList.add('panel--opening')
-    panel.querySelector<HTMLElement>('button')?.focus()
+    // The dialog itself takes the focus, so no control shows a ring before the person has used the keyboard.
+    panel.tabIndex = -1
+    panel.focus()
   }
 }
 

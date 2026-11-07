@@ -1,9 +1,9 @@
 import { cardDisplayTitle } from '../../domain/card-display-title'
 import type { ServeCardView, ServeStatusView } from '../views'
 import { el } from './dom'
-import { parentIcon, statusIcon } from './icons'
-import { avatar, isRunning, labelChips, priorityTag, progressBar, runDot, waitingPill } from './parts'
-import type { SubtaskBlock, SubtaskRow, SubtaskSummary } from './subtasks'
+import { parentIcon } from './icons'
+import { avatar, isRunning, labelChips, priorityTag, progressBar, subtaskRow, waitingPill } from './parts'
+import type { SubtaskBlock, SubtaskSummary } from './subtasks'
 
 /** What a card's look says, the first match winning: it waits for you, an agent is running it, it is done, canceled, or none of these. */
 type CardState = 'waiting' | 'running' | 'done' | 'quiet' | 'idle'
@@ -60,40 +60,11 @@ export function subtaskStrip(card: ServeCardView, context: CardContext): HTMLEle
   return strip
 }
 
-function subtaskRow(row: SubtaskRow, context: CardContext): HTMLElement {
-  const item = el('li')
-  const button = el('button', 'subtask-row')
-  button.type = 'button'
-  button.dataset.subtaskId = row.card.id
-  button.toggleAttribute('data-dim', row.faded)
-  const title = cardDisplayTitle(row.card)
-  button.title = `${row.card.id} · ${title}`
-  button.append(statusIcon(row.category), el('span', 'card-key', row.card.id), el('span', 'row-title', title))
-  const end = el('span', 'row-end')
-  if (row.attention) {
-    end.append(waitingPill('Waiting', true))
-  }
-  if (isRunning(row.card)) {
-    end.append(runDot())
-  }
-  if (row.own) {
-    end.append(el('span', 'row-count', `${row.own.done}/${row.own.total}`))
-  }
-  button.append(end)
-  // The row opens its sub-task alone, not the parent whose card it sits in.
-  button.addEventListener('click', (event) => {
-    event.stopPropagation()
-    context.onOpenCard(row.card.id)
-  })
-  item.append(button)
-  return item
-}
-
 /** The sub-task block under a parent's footer: a row each, "+N more", then the bar. */
 function subtaskBlock(block: SubtaskBlock, context: CardContext, open: () => void): HTMLElement {
   const wrap = el('div', 'subtask-block')
   const list = el('ul', 'subtask-list')
-  list.append(...block.rows.map(row => subtaskRow(row, context)))
+  list.append(...block.rows.map(row => subtaskRow(row, context.onOpenCard)))
   wrap.append(list)
   if (block.more > 0) {
     const more = el('button', 'subtask-more', `+${block.more} more`)

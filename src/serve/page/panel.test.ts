@@ -7,6 +7,7 @@ import type { ServeCommentView } from '../views'
 import { activityFixture, cardFixture, statusFixture } from './fixtures'
 import type { CardDetail } from './panel'
 import { readScroll, renderPanel } from './panel'
+import { subtaskRowsOf, subtaskSummary } from './subtasks'
 
 const actions = { close: () => {}, addComment: () => {}, approve: () => {}, returnCard: () => {}, openCard: () => {}, selectTab: () => {} }
 const text = (value: string) => ({ kind: 'text' as const, text: value })
@@ -21,7 +22,9 @@ function detailFixture(fields: Partial<CardDetail> = {}): CardDetail {
     fieldChanges: [],
     runs: [],
     parent: null,
-    children: [],
+    subtasks: [],
+    summary: null,
+    siblings: [],
     statuses: [statusFixture({ id: 'todo', name: 'To Do' })],
     tab: 'comments',
     ...fields,
@@ -39,15 +42,16 @@ describe('renderPanel', () => {
     const panel = renderPanel(detailFixture({ card }), actions, null)
     const facts = [...panel.querySelectorAll('.facts dt')].map(term => [term.textContent, term.nextElementSibling?.textContent])
     expect(facts).toContainEqual(['Worked by', 'claude · running'])
-    expect(panel.querySelector('.state-row .column-pill')?.textContent).toBe('To Do')
-    expect(facts).toContainEqual(['Priority', 'high'])
+    expect(panel.querySelector('.panel-head .column-pill')?.textContent).toBe('To Do')
+    expect(facts).toContainEqual(['Priority', 'High'])
     expect(facts).toContainEqual(['Labels', 'email'])
   })
 
-  it('says Nobody when nobody works the card, and omits priority none and empty labels', () => {
+  it('says Nobody when nobody works the card, None for priority, and omits empty labels', () => {
     const panel = renderPanel(detailFixture(), actions, null)
     const terms = [...panel.querySelectorAll('.facts dt')].map(term => term.textContent)
-    expect(terms).toEqual(['Created by', 'Worked by'])
+    expect(terms).toEqual(['Column', 'Created by', 'Worked by', 'Priority'])
+    expect(panel.querySelector('.facts')?.textContent).toContain('None')
     expect(panel.querySelector('.facts')?.textContent).toContain('Nobody')
   })
 
@@ -112,7 +116,7 @@ describe('renderPanel', () => {
     expect(panel.textContent).not.toContain('only a comment')
   })
 
-  describe('sub-cards', () => {
+  describe('sub-tasks', () => {
     const parent = cardFixture({ id: 'WOR-000', title: 'The whole job' })
     const statuses = [
       statusFixture({ id: 'todo', name: 'To Do' }),
@@ -121,41 +125,100 @@ describe('renderPanel', () => {
     const children = [
       cardFixture({ id: 'WOR-002', statusId: 'todo', parentIssueId: 'WOR-001', waitingFor: 'human' }),
       cardFixture({ id: 'WOR-003', statusId: 'done', parentIssueId: 'WOR-001', title: '<img src=x onerror=alert(1)>' }),
+      cardFixture({ id: 'WOR-004', statusId: 'todo', parentIssueId: 'WOR-002' }),
     ]
+    const asParent = (extra: Partial<CardDetail> = {}) => {
+      const cards = [cardFixture({ id: 'WOR-001' }), ...children]
+      return detailFixture({ subtasks: subtaskRowsOf(cards, statuses, 'WOR-001'), summary: subtaskSummary(cards, statuses, 'WOR-001'), statuses, ...extra })
+    }
 
-    it('shows a Parent row that opens the parent', () => {
+    it('shows a Parent row and a breadcrumb that open the parent', () => {
       const openCard = vi.fn()
       const card = cardFixture({ id: 'WOR-001', parentIssueId: 'WOR-000' })
       const panel = renderPanel(detailFixture({ card, parent }), { ...actions, openCard }, null)
       const link = panel.querySelector<HTMLButtonElement>('.facts button.link')
       expect(link?.textContent).toContain('The whole job')
       link?.click()
-      expect(openCard).toHaveBeenCalledWith('WOR-000')
+      expect(openCard).toHaveBeenLastCalledWith('WOR-000')
+      const crumb = panel.querySelector<HTMLButtonElement>('.panel-head button.breadcrumb')
+      expect(crumb?.textContent).toBe('Sub-task ofThe whole job')
+      crumb?.click()
+      expect(openCard).toHaveBeenLastCalledWith('WOR-000')
     })
 
-    it('lists the sub-cards with their columns, a waiting badge, and opens one on click', () => {
+    it('has a breadcrumb only for a sub-task, and names a parent that is not on the board by its key', () => {
+      expect(renderPanel(detailFixture(), actions, null).querySelector('.breadcrumb')).toBeNull()
+      const orphan = renderPanel(detailFixture({ card: cardFixture({ id: 'WOR-001', parentIssueId: 'WOR-404' }) }), actions, null)
+      expect(orphan.querySelector('button.breadcrumb')).toBeNull()
+      expect(orphan.querySelector('.breadcrumb')?.textContent).toBe('Sub-task ofWOR-404')
+    })
+
+    it('lists only the direct sub-tasks as rows: icon, key, title, waiting, n/m; the title written as HTML is text', () => {
       const openCard = vi.fn()
-      const panel = renderPanel(detailFixture({ children, statuses }), { ...actions, openCard }, null)
-      const section = panel.querySelector('.subcards')?.closest('section')
-      expect(section?.querySelector('h3')?.textContent).toBe('Sub-cards · 1 of 2 done')
-      const rows = [...panel.querySelectorAll<HTMLButtonElement>('.subcards button.subcard')]
-      expect(rows.map(row => row.querySelector('.subcard-column')?.textContent)).toEqual(['To Do', 'Done'])
-      expect(rows[0]?.querySelector('.waiting-badge')?.textContent).toBe('Waiting for you')
-      expect(rows[1]?.querySelector('.waiting-badge')).toBeNull()
+      const panel = renderPanel(asParent(), { ...actions, openCard }, null)
+      const section = panel.querySelector('.subtasks-section')
+      expect(section?.querySelector('h3')?.textContent).toBe('Sub-tasks')
+      expect(section?.querySelector('.subtasks-count')?.textContent).toBe('1/2')
+      const rows = [...panel.querySelectorAll<HTMLButtonElement>('.subtask-list button.subtask-row')]
+      expect(rows.map(row => row.querySelector('.card-key')?.textContent)).toEqual(['WOR-002', 'WOR-003'])
+      expect(rows.map(row => row.querySelector<HTMLElement>('.status-icon')?.dataset.category)).toEqual(['unstarted', 'completed'])
+      expect(rows[0]?.querySelector('.waiting-pill')?.textContent).toBe('Waiting')
+      expect(rows[0]?.querySelector('.row-count')?.textContent).toBe('0/1')
+      expect(rows[1]?.querySelector('.waiting-pill')).toBeNull()
+      expect(panel.querySelector('img')).toBeNull()
+      expect(rows[1]?.querySelector('.row-title')?.textContent).toBe('<img src=x onerror=alert(1)>')
       rows[1]?.click()
       expect(openCard).toHaveBeenCalledWith('WOR-003')
     })
 
-    it('shows a sub-card title written as HTML as its characters', () => {
-      const panel = renderPanel(detailFixture({ children, statuses }), actions, null)
-      expect(panel.querySelector('img')).toBeNull()
-      expect(panel.querySelectorAll('.subcard-title')[1]?.textContent).toBe('<img src=x onerror=alert(1)>')
+    it('folds the list from its chevron, and says "x/y done" in the head of a parent', () => {
+      const panel = renderPanel(asParent(), actions, null)
+      expect(panel.querySelector('.panel-head .done-pill')?.textContent).toBe('1/2 done')
+      const fold = panel.querySelector<HTMLButtonElement>('.subtasks-fold')!
+      expect(fold.getAttribute('aria-expanded')).toBe('true')
+      fold.click()
+      expect(panel.querySelector<HTMLElement>('.subtask-list')?.hidden).toBe(true)
+      expect(fold.getAttribute('aria-expanded')).toBe('false')
+      fold.click()
+      expect(panel.querySelector<HTMLElement>('.subtask-list')?.hidden).toBe(false)
     })
 
-    it('has no Sub-cards section and no Parent row without them', () => {
+    it('has no Sub-tasks section, no done pill and no Parent row without them', () => {
       const panel = renderPanel(detailFixture(), actions, null)
-      expect(panel.querySelector('.subcards')).toBeNull()
+      expect(panel.querySelector('.subtasks-section')).toBeNull()
+      expect(panel.querySelector('.done-pill')).toBeNull()
       expect([...panel.querySelectorAll('dt')].map(term => term.textContent)).not.toContain('Parent')
+    })
+
+    describe('the sibling switcher', () => {
+      const siblings = ['WOR-010', 'WOR-011', 'WOR-012'].map(id => cardFixture({ id, parentIssueId: 'WOR-000' }))
+      const at = (id: string, openCard = vi.fn()) => ({
+        panel: renderPanel(detailFixture({ card: siblings.find(card => card.id === id)!, parent, siblings }), { ...actions, openCard }, null),
+        openCard,
+      })
+      const steps = (panel: HTMLElement) => [...panel.querySelectorAll<HTMLButtonElement>('.sibling-step')]
+
+      it('shows the position among the siblings and steps to the previous and the next', () => {
+        const { panel, openCard } = at('WOR-011')
+        expect(panel.querySelector('.sibling-position')?.textContent).toBe('2/3')
+        steps(panel)[0]?.click()
+        expect(openCard).toHaveBeenLastCalledWith('WOR-010')
+        steps(panel)[1]?.click()
+        expect(openCard).toHaveBeenLastCalledWith('WOR-012')
+      })
+
+      it('is off at the ends and does not wrap around', () => {
+        const first = at('WOR-010')
+        expect(steps(first.panel).map(step => step.disabled)).toEqual([true, false])
+        steps(first.panel)[0]?.click()
+        expect(first.openCard).not.toHaveBeenCalled()
+        const last = at('WOR-012')
+        expect(steps(last.panel).map(step => step.disabled)).toEqual([false, true])
+      })
+
+      it('is not there for a card with no siblings', () => {
+        expect(renderPanel(detailFixture({ card: siblings[0]!, parent, siblings: [siblings[0]!] }), actions, null).querySelector('.sibling-switch')).toBeNull()
+      })
     })
   })
 })
@@ -176,12 +239,13 @@ describe('the dialog', () => {
     expect(panel.getAttribute('aria-labelledby')).toBe(title?.id)
   })
 
-  it('shows the column and the waiting badge in the state row, and no Column fact', () => {
+  it('shows the column with its icon and the waiting pill in the head, and the column again in Details', () => {
     const card = cardFixture({ id: 'WOR-001', waitingFor: 'human' })
     const panel = renderPanel(detailFixture({ card }), actions, null)
-    expect(panel.querySelector('.state-row .column-pill')?.textContent).toBe('To Do')
-    expect(panel.querySelector('.state-row .waiting-badge')?.textContent).toBe('Waiting for you')
-    expect([...panel.querySelectorAll('.facts dt')].map(term => term.textContent)).not.toContain('Column')
+    expect(panel.querySelector('.panel-head .column-pill')?.textContent).toBe('To Do')
+    expect(panel.querySelector('.panel-head .column-pill .status-icon')).not.toBeNull()
+    expect(panel.querySelector('.panel-head .waiting-pill')?.textContent).toBe('Waiting for you')
+    expect([...panel.querySelectorAll('.facts dt')].map(term => term.textContent)).toContain('Column')
   })
 
   it('counts the tabs and shows only the selected panel', () => {
@@ -215,7 +279,7 @@ describe('the dialog', () => {
 
   it('closes from the labelled cross', () => {
     const close = vi.fn()
-    const cross = renderPanel(detailFixture(), { ...actions, close }, null).querySelector<HTMLButtonElement>('.panel-head button')
+    const cross = renderPanel(detailFixture(), { ...actions, close }, null).querySelector<HTMLButtonElement>('.panel-head .panel-close')
     expect(cross?.getAttribute('aria-label')).toBe('Close')
     cross?.click()
     expect(close).toHaveBeenCalled()

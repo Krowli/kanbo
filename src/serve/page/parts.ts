@@ -1,9 +1,10 @@
 import type { ServeCardView } from '../views'
+import { cardDisplayTitle } from '../../domain/card-display-title'
 import { el } from './dom'
 import { cardWorker } from './filters'
-import { clockIcon, priorityIcon } from './icons'
+import { clockIcon, priorityIcon, statusIcon } from './icons'
 import { labelTone } from './labels'
-import type { SubtaskSummary } from './subtasks'
+import type { SubtaskRow, SubtaskSummary } from './subtasks'
 
 /**
  * The small pieces a card, a list row and the dialog share: the amber pill,
@@ -101,4 +102,37 @@ export function progressBar(summary: SubtaskSummary): HTMLElement {
   text.title = words
   wrap.append(bar, text)
   return wrap
+}
+
+/**
+ * One sub-task as a 28 px row: its column's status icon, key, title, and on
+ * the right a "Waiting" pill, a run dot, and "n/m" for sub-tasks of its own.
+ * The click opens that sub-task alone, not the card the row sits in.
+ */
+export function subtaskRow(row: SubtaskRow, onOpen: (cardId: string) => void): HTMLElement {
+  const item = el('li')
+  const button = el('button', 'subtask-row')
+  button.type = 'button'
+  button.dataset.subtaskId = row.card.id
+  button.toggleAttribute('data-dim', row.faded)
+  const title = cardDisplayTitle(row.card)
+  button.title = `${row.card.id} · ${title}`
+  button.append(statusIcon(row.category), el('span', 'card-key', row.card.id), el('span', 'row-title', title))
+  const end = el('span', 'row-end')
+  if (row.attention) {
+    end.append(waitingPill('Waiting', true))
+  }
+  if (isRunning(row.card)) {
+    end.append(runDot())
+  }
+  if (row.own) {
+    end.append(el('span', 'row-count', `${row.own.done}/${row.own.total}`))
+  }
+  button.append(end)
+  button.addEventListener('click', (event) => {
+    event.stopPropagation()
+    onOpen(row.card.id)
+  })
+  item.append(button)
+  return item
 }

@@ -7,6 +7,9 @@ import { button, el } from './dom'
 import { cardWorker } from './filters'
 import type { HistoryEntry } from './history'
 import { groupByDay, relativeDay, relativeTime, toHistory } from './history'
+import { chevronIcon, closeIcon, parentIcon, statusIcon } from './icons'
+import { doneText, isRunning, labelChips, priorityTag, runDot, subtaskRow, waitingPill } from './parts'
+import type { SubtaskRow, SubtaskSummary } from './subtasks'
 
 /**
  * The dialog a card opens into: everything the board holds about it, read
@@ -30,7 +33,12 @@ export interface CardDetail {
   fieldChanges: IssueFieldChange[]
   runs: BoardRunView[]
   parent: ServeCardView | null
-  children: ServeCardView[]
+  /** The direct sub-tasks, in board order, a row each. */
+  subtasks: SubtaskRow[]
+  /** How far they are: done of all, canceled ones left out; `null` when there are none. */
+  summary: SubtaskSummary | null
+  /** The parent's sub-tasks in board order, this card among them; empty for a card that is not a sub-task. */
+  siblings: ServeCardView[]
   statuses: ServeStatusView[]
   tab: PanelTab
 }
@@ -58,17 +66,13 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
   const titleId = 'panel-title'
   panel.setAttribute('aria-labelledby', titleId)
 
-  const head = el('div', 'panel-head')
-  const close = button('✕', 'icon-button', actions.close)
-  close.setAttribute('aria-label', 'Close')
-  close.title = 'Close (Esc)'
-  head.append(el('span', 'card-key', card.id), el('span', 'spacer'), close)
+  const head = renderHead(detail, actions)
 
   const scroll = el('div', 'panel-scroll')
   const top = el('div', 'panel-top')
   const title = el('h2', 'panel-title', cardDisplayTitle(card))
   title.id = titleId
-  top.append(title, renderStateRow(card, status))
+  top.append(title)
   const history = toHistory(detail.activity, detail.fieldChanges)
   const now = new Date()
   if (card.statusLine?.trim()) {
@@ -87,8 +91,8 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
   main.append(section('Description', card.description?.trim()
     ? el('div', 'description', card.description)
     : el('p', 'empty', 'No description.')))
-  if (detail.children.length > 0) {
-    main.append(renderSubcards(detail, actions))
+  if (detail.subtasks.length > 0) {
+    main.append(renderSubtasks(detail, actions))
   }
   const commentsPanel = [...renderCommentsTab(detail.comments, actions, now)]
   const historyPanel = [renderHistory(history, now)]
@@ -98,7 +102,7 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
   main.append(renderTabs(detail.tab, counts, bodies, actions))
 
   const side = el('div', 'panel-side')
-  side.append(renderDecision(card, actions), section('Details', renderFacts(card, detail.parent, detail.runs, actions, history, now)))
+  side.append(renderDecision(card, actions), section('Details', renderFacts(card, status, detail.parent, detail.runs, actions, history, now)))
 
   const body = el('div', 'panel-body')
   body.append(main, side)
@@ -107,20 +111,86 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
   return panel
 }
 
-function renderStateRow(card: ServeCardView, status: ServeStatusView | null): HTMLElement {
-  const row = el('div', 'state-row')
-  row.append(el('span', 'column-pill', status ? status.name : 'No column'))
+/**
+ * The dialog's 44 px head: the key; for a sub-task, a breadcrumb to its parent;
+ * the column and "Waiting for you" (and a run, while one goes); then, at the
+ * right, a parent's "x/y done", a sub-task's sibling switcher, and the cross.
+ */
+function renderHead(detail: CardDetail, actions: PanelActions): HTMLElement {
+  const { card, status } = detail
+  const head = el('div', 'panel-head')
+  head.append(el('span', 'card-key', card.id))
+
+  if (card.parentIssueId && card.parentIssueId !== card.id) {
+    const parent = detail.parent
+    const crumb = parent ? el('button', 'breadcrumb') : el('span', 'breadcrumb')
+    crumb.append(el('span', 'crumb-label', 'Sub-task of'), parentIcon())
+    if (parent) {
+      const name = cardDisplayTitle(parent)
+      crumb.append(el('span', 'crumb-title', name))
+      crumb.title = `Sub-task of ${parent.id} · ${name}`
+      const opener = crumb as HTMLButtonElement
+      opener.type = 'button'
+      crumb.addEventListener('click', () => actions.openCard(parent.id))
+    }
+    else {
+      crumb.append(el('span', 'card-key', card.parentIssueId))
+    }
+    head.append(crumb)
+  }
+
+  const column = el('span', 'column-pill')
+  column.append(statusIcon(status?.category ?? null), status ? status.name : 'No column')
+  head.append(column)
   if (card.waitingFor === 'human') {
-    row.append(el('span', 'waiting-badge', 'Waiting for you'))
+    head.append(waitingPill())
   }
-  if (card.activeRun?.state === 'running') {
+  if (isRunning(card)) {
     const running = el('span', 'run-state')
-    const dot = el('span', 'run-dot')
-    dot.setAttribute('aria-hidden', 'true')
-    running.append(dot, card.activeRun.agentName ? `Running · ${card.activeRun.agentName}` : 'Running')
-    row.append(running)
+    running.append(runDot(), card.activeRun?.agentName ? `Running · ${card.activeRun.agentName}` : 'Running')
+    head.append(running)
   }
-  return row
+  head.append(el('span', 'spacer'))
+
+  if (detail.summary) {
+    const pill = el('span', 'done-pill', doneText(detail.summary).short)
+    pill.title = doneText(detail.summary).words
+    head.append(pill)
+  }
+  if (detail.siblings.length > 1) {
+    head.append(renderSiblingSwitch(detail, actions))
+  }
+
+  const close = el('button', 'icon-button panel-close')
+  close.type = 'button'
+  close.append(closeIcon())
+  close.setAttribute('aria-label', 'Close')
+  close.title = 'Close (Esc)'
+  close.addEventListener('click', actions.close)
+  head.append(close)
+  return head
+}
+
+/** "‹ 2/5 ›": the previous and next sub-task of the same parent, in board order; each is off at its end. */
+function renderSiblingSwitch(detail: CardDetail, actions: PanelActions): HTMLElement {
+  const wrap = el('div', 'sibling-switch')
+  wrap.setAttribute('role', 'group')
+  wrap.setAttribute('aria-label', 'Sub-tasks of the same card')
+  const index = detail.siblings.findIndex(sibling => sibling.id === detail.card.id)
+  const step = (label: string, glyph: string, target: ServeCardView | undefined): HTMLButtonElement => {
+    const stepButton = el('button', 'icon-button sibling-step', glyph)
+    stepButton.type = 'button'
+    stepButton.setAttribute('aria-label', label)
+    stepButton.disabled = target === undefined
+    if (target) {
+      stepButton.title = `${label}: ${target.id}`
+      stepButton.addEventListener('click', () => actions.openCard(target.id))
+    }
+    return stepButton
+  }
+  const position = el('span', 'sibling-position', `${index + 1}/${detail.siblings.length}`)
+  wrap.append(step('Previous sub-task', '‹', detail.siblings[index - 1]), position, step('Next sub-task', '›', detail.siblings[index + 1]))
+  return wrap
 }
 
 function renderTabs(selected: PanelTab, counts: Record<PanelTab, number>, bodies: Record<PanelTab, HTMLElement[]>, actions: PanelActions): HTMLElement {
@@ -183,7 +253,7 @@ function timeElement(seconds: number, text: string): HTMLElement {
 }
 
 /** Who made the card, who works it, priority and labels: the answers a person opens a card for. */
-function renderFacts(card: ServeCardView, parent: ServeCardView | null, runs: BoardRunView[], actions: PanelActions, history: HistoryEntry[], now: Date): HTMLElement {
+function renderFacts(card: ServeCardView, status: ServeStatusView | null, parent: ServeCardView | null, runs: BoardRunView[], actions: PanelActions, history: HistoryEntry[], now: Date): HTMLElement {
   const facts = el('dl', 'facts')
   const row = (term: string, ...value: (HTMLElement | string)[]): void => {
     const detail = el('dd')
@@ -204,6 +274,10 @@ function renderFacts(card: ServeCardView, parent: ServeCardView | null, runs: Bo
     }
   }
 
+  const columnValue = el('span', 'fact-column')
+  columnValue.append(statusIcon(status?.category ?? null), status ? status.name : 'No column')
+  row('Column', columnValue)
+
   const created = history.find(entry => entry.verb === 'created the card')
   const creator = created
     ? { kind: created.actor.kind, name: created.actor.name, label: created.actor.label }
@@ -220,48 +294,45 @@ function renderFacts(card: ServeCardView, parent: ServeCardView | null, runs: Bo
     row('Worked by', workerChip, ...(card.activeRun?.state === 'running' ? [' ', el('span', 'muted', '· running')] : []))
   }
 
-  if (card.priority !== 'none') {
-    const priority = el('span', 'priority', card.priority)
-    priority.dataset.priority = card.priority
-    row('Priority', priority)
-  }
+  row('Priority', priorityTag(card.priority) ?? el('span', 'muted', 'None'))
   if (card.labels.length > 0) {
-    row('Labels', ...card.labels.map(label => el('span', 'label', label)))
+    row('Labels', ...labelChips(card.labels, card.labels.length))
   }
   return facts
 }
 
-/** The parts of this card, each a row that opens it: its column, whether it waits for you or runs, and who works it. */
-function renderSubcards(detail: CardDetail, actions: PanelActions): HTMLElement {
-  const isDone = (child: ServeCardView): boolean => detail.statuses.find(status => status.id === child.statusId)?.category === 'completed'
-  const done = detail.children.filter(isDone).length
-  const wrapper = section(`Sub-cards · ${done} of ${detail.children.length} done`)
-  const list = el('ul', 'subcards')
-  for (const child of detail.children) {
-    const item = el('li')
-    const row = el('button', 'subcard')
-    row.type = 'button'
-    row.dataset.done = String(isDone(child))
-    row.addEventListener('click', () => actions.openCard(child.id))
-    const head = el('span', 'subcard-head')
-    head.append(el('span', 'card-key', child.id), el('span', 'subcard-title', cardDisplayTitle(child)))
-    const meta = el('span', 'subcard-meta')
-    meta.append(el('span', 'subcard-column', detail.statuses.find(status => status.id === child.statusId)?.name ?? 'No column'))
-    if (child.waitingFor === 'human') {
-      meta.append(el('span', 'waiting-badge', 'Waiting for you'))
-    }
-    if (child.activeRun?.state === 'running') {
-      meta.append(el('span', 'muted', child.activeRun.agentName ? `Running · ${child.activeRun.agentName}` : 'Running'))
-    }
-    const worker = cardWorker(child)
-    if (worker) {
-      meta.append(actorChip({ kind: worker.key === 'user' ? 'user' : 'agent', name: worker.label, label: null }))
-    }
-    row.append(head, meta)
-    item.append(row)
-    list.append(item)
+/** Whether the Sub-tasks section is folded; kept across the rebuilds a poll causes. */
+let subtasksFolded = false
+
+/** The direct sub-tasks of this card, each a row that opens it; a chevron folds the list. */
+function renderSubtasks(detail: CardDetail, actions: PanelActions): HTMLElement {
+  const wrapper = el('section', 'panel-section subtasks-section')
+  const head = el('div', 'subtasks-head')
+  const fold = el('button', 'subtasks-fold')
+  fold.type = 'button'
+  fold.setAttribute('aria-expanded', String(!subtasksFolded))
+  fold.setAttribute('aria-label', 'Sub-tasks')
+  fold.append(chevronIcon(), el('h3', undefined, 'Sub-tasks'))
+  head.append(fold)
+  if (detail.summary) {
+    const { short, words } = doneText(detail.summary)
+    const count = el('span', 'subtasks-count', `${detail.summary.done}/${detail.summary.total}`)
+    count.title = words
+    const bar = el('progress', 'progress-bar')
+    bar.max = detail.summary.total
+    bar.value = detail.summary.done
+    bar.setAttribute('aria-label', short)
+    head.append(count, bar)
   }
-  wrapper.append(list)
+  const list = el('ul', 'subtask-list')
+  list.hidden = subtasksFolded
+  list.append(...detail.subtasks.map(row => subtaskRow(row, actions.openCard)))
+  fold.addEventListener('click', () => {
+    subtasksFolded = !subtasksFolded
+    list.hidden = subtasksFolded
+    fold.setAttribute('aria-expanded', String(!subtasksFolded))
+  })
+  wrapper.append(head, list)
   return wrapper
 }
 
@@ -351,7 +422,7 @@ function renderDecision(card: ServeCardView, actions: PanelActions): HTMLElement
   if (card.waitingFor === 'human') {
     row.append(button('Approve', 'primary', () => actions.approve(note.value.trim() || null)))
   }
-  row.append(button('Return', 'secondary', () => {
+  row.append(button('Return', 'ghost', () => {
     const comment = note.value.trim()
     if (!comment) {
       hint.textContent = 'Say why in the note to return the card.'
