@@ -2,21 +2,23 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import type { CardFilters } from './filters'
+import { DEFAULT_DISPLAY } from './display'
 import { NO_FILTERS } from './filters'
 import { closeOpenPopover } from './popover'
 import type { ToolbarState } from './toolbar'
 import { countText, createToolbar } from './toolbar'
 
-const base: ToolbarState = { filters: NO_FILTERS, options: { workers: [], labels: [] }, counts: { shown: 1, total: 2 } }
+const base: ToolbarState = { filters: NO_FILTERS, display: DEFAULT_DISPLAY, options: { workers: [], labels: [] }, counts: { shown: 1, total: 2 } }
 
 function setup(state: Partial<ToolbarState> = {}) {
   const onFilters = vi.fn()
   const onNew = vi.fn()
-  const toolbar = createToolbar({ onFilters, onNew })
+  const onDisplay = vi.fn()
+  const toolbar = createToolbar({ onFilters, onDisplay, onNew })
   document.body.append(toolbar.element)
   toolbar.update({ ...base, ...state })
   const find = (text: string) => [...toolbar.element.querySelectorAll('button')].find(item => item.textContent?.trim().startsWith(text))!
-  return { toolbar, onFilters, onNew, find }
+  return { toolbar, onFilters, onDisplay, onNew, find }
 }
 
 afterEach(() => {
@@ -113,5 +115,18 @@ describe('createToolbar', () => {
     expect(find('Filter').querySelector('.badge')?.textContent).toBe('3')
     find('New').click()
     expect(onNew).toHaveBeenCalled()
+  })
+
+  it('has a Display popover whose switch shows sub-tasks as cards, off by default', () => {
+    const { toolbar, onDisplay, find } = setup()
+    find('Display').click()
+    const box = toolbar.element.querySelector<HTMLInputElement>('.popover [data-key="subtasks"]')!
+    expect(box.getAttribute('role')).toBe('switch')
+    expect(box.parentElement?.textContent).toContain('Show sub-tasks as cards')
+    expect(box.checked).toBe(false)
+    box.click()
+    expect(onDisplay).toHaveBeenCalledWith({ subtasks: 'cards' })
+    toolbar.update({ ...base, display: { subtasks: 'cards' } })
+    expect(toolbar.element.querySelector<HTMLInputElement>('.popover [data-key="subtasks"]')?.checked).toBe(true)
   })
 })

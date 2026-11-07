@@ -1,9 +1,9 @@
 import { cardDisplayTitle } from '../../domain/card-display-title'
 import type { ServeCardView, ServeStatusView } from '../views'
 import { el } from './dom'
-import { parentIcon } from './icons'
-import { avatar, isRunning, labelChips, priorityTag, progressBar, waitingPill } from './parts'
-import type { SubtaskSummary } from './subtasks'
+import { parentIcon, statusIcon } from './icons'
+import { avatar, isRunning, labelChips, priorityTag, progressBar, runDot, waitingPill } from './parts'
+import type { SubtaskBlock, SubtaskRow, SubtaskSummary } from './subtasks'
 
 /** What a card's look says, the first match winning: it waits for you, an agent is running it, it is done, canceled, or none of these. */
 type CardState = 'waiting' | 'running' | 'done' | 'quiet' | 'idle'
@@ -26,6 +26,12 @@ export interface CardContext {
   parent: ServeCardView | null
   summary: SubtaskSummary | null
   onOpenCard: (cardId: string) => void
+  /** Inside mode: the sub-task rows this parent draws in itself. Absent in cards mode. */
+  block?: SubtaskBlock
+  /** A card under this one, at any depth, waits for a person. */
+  waitsBelow?: boolean
+  /** A card under this one, at any depth, has a run going. */
+  runsBelow?: boolean
 }
 
 /**
@@ -34,7 +40,7 @@ export interface CardContext {
  * its key alone.
  */
 export function subtaskStrip(card: ServeCardView, context: CardContext): HTMLElement | null {
-  if (!card.parentIssueId) {
+  if (!card.parentIssueId || card.parentIssueId === card.id) {
     return null
   }
   const parent = context.parent
@@ -54,12 +60,60 @@ export function subtaskStrip(card: ServeCardView, context: CardContext): HTMLEle
   return strip
 }
 
+function subtaskRow(row: SubtaskRow, context: CardContext): HTMLElement {
+  const item = el('li')
+  const button = el('button', 'subtask-row')
+  button.type = 'button'
+  button.dataset.subtaskId = row.card.id
+  button.toggleAttribute('data-dim', row.faded)
+  const title = cardDisplayTitle(row.card)
+  button.title = `${row.card.id} · ${title}`
+  button.append(statusIcon(row.category), el('span', 'card-key', row.card.id), el('span', 'row-title', title))
+  const end = el('span', 'row-end')
+  if (row.attention) {
+    end.append(waitingPill('Waiting', true))
+  }
+  if (isRunning(row.card)) {
+    end.append(runDot())
+  }
+  if (row.own) {
+    end.append(el('span', 'row-count', `${row.own.done}/${row.own.total}`))
+  }
+  button.append(end)
+  // The row opens its sub-task alone, not the parent whose card it sits in.
+  button.addEventListener('click', (event) => {
+    event.stopPropagation()
+    context.onOpenCard(row.card.id)
+  })
+  item.append(button)
+  return item
+}
+
+/** The sub-task block under a parent's footer: a row each, "+N more", then the bar. */
+function subtaskBlock(block: SubtaskBlock, context: CardContext, open: () => void): HTMLElement {
+  const wrap = el('div', 'subtask-block')
+  const list = el('ul', 'subtask-list')
+  list.append(...block.rows.map(row => subtaskRow(row, context)))
+  wrap.append(list)
+  if (block.more > 0) {
+    const more = el('button', 'subtask-more', `+${block.more} more`)
+    more.type = 'button'
+    more.addEventListener('click', open)
+    wrap.append(more)
+  }
+  if (block.summary) {
+    wrap.append(progressBar(block.summary))
+  }
+  return wrap
+}
+
 /**
  * One card on the board, read top to bottom in the order a person needs it:
  * the meta row (key, and who works it with a dot while a run is live); the
  * display title; a status row (the status line, "Waiting for you", `×N`
  * attempts); and the footer (priority, labels). A sub-task card opens with a
- * "Sub-task of" strip; a parent closes with its progress bar. Everything the
+ * "Sub-task of" strip; a parent closes with its sub-task block (rows and a
+ * progress bar), or, when its sub-tasks are cards of their own, the bar alone. Everything the
  * board holds is set as text.
  *
  * The title is a button stretched over the whole card, so the card opens from
@@ -87,7 +141,7 @@ export function renderCard(
 
   const meta = el('div', 'card-meta')
   meta.append(el('span', 'card-key', card.id), el('span', 'spacer'))
-  const worker = avatar(card, isRunning(card))
+  const worker = avatar(card, isRunning(card) || context?.runsBelow === true)
   if (worker) {
     meta.append(worker)
   }
@@ -101,7 +155,8 @@ export function renderCard(
   const statusLine = card.statusLine?.trim() ?? ''
   const waiting = card.waitingFor === 'human'
   const attempts = card.attemptCount > 1
-  if (statusLine || waiting || attempts) {
+  const waitsBelow = context?.waitsBelow === true
+  if (statusLine || waiting || waitsBelow || attempts) {
     const status = el('div', 'card-status')
     if (statusLine) {
       const line = el('p', 'status-line', statusLine)
@@ -111,6 +166,9 @@ export function renderCard(
     }
     if (waiting) {
       status.append(waitingPill())
+    }
+    if (waitsBelow) {
+      status.append(waitingPill('Sub-task waiting for you'))
     }
     if (attempts) {
       const chip = el('span', 'attempt-chip', `×${card.attemptCount}`)
@@ -130,7 +188,10 @@ export function renderCard(
     element.append(footer)
   }
 
-  if (context?.summary) {
+  if (context?.block) {
+    element.append(subtaskBlock(context.block, context, () => onOpen(card)))
+  }
+  else if (context?.summary) {
     element.append(progressBar(context.summary))
   }
   return element

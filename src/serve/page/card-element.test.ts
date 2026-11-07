@@ -3,7 +3,8 @@ import { describe, expect, it, vi } from 'vitest'
 
 import type { ServeCardView } from '../views'
 import { renderCard } from './card-element'
-import { cardFixture } from './fixtures'
+import { cardFixture, statusFixture } from './fixtures'
+import { subtaskBlock } from './subtasks'
 
 const running: ServeCardView['activeRun'] = { id: 'run', agentId: null, agentName: 'claude', state: 'running', branch: null, executionMode: 'main', chatSessionId: null, startedAt: 0 }
 
@@ -160,6 +161,83 @@ describe('renderCard', () => {
       const card = renderCard(child, null, () => {})
       expect(card.querySelector('.subtask-strip')).toBeNull()
       expect(card.querySelector('.progress')).toBeNull()
+    })
+  })
+
+  describe('with its sub-tasks inside it', () => {
+    const statuses = [statusFixture({ id: 'todo', name: 'To Do' }), statusFixture({ id: 'doing', name: 'Doing', category: 'started' }), statusFixture({ id: 'done', name: 'Done', category: 'completed' })]
+    const parent = cardFixture({ id: 'WOR-001', title: 'Ship the thing' })
+    const part = (id: string, statusId: string, fields: Partial<ServeCardView> = {}) => cardFixture({ id, statusId, parentIssueId: 'WOR-001', ...fields })
+    const build = (children: ServeCardView[], faded: string[] = [], extra: Partial<NonNullable<Parameters<typeof renderCard>[3]>> = {}) => {
+      const cards = [parent, ...children]
+      const block = subtaskBlock(cards, statuses, 'WOR-001', new Set(faded))
+      const onOpen = vi.fn()
+      const onOpenCard = vi.fn()
+      const element = renderCard(parent, 'started', onOpen, { parent: null, summary: block?.summary ?? null, onOpenCard, block: block ?? undefined, ...extra })
+      return { element, onOpen, onOpenCard }
+    }
+
+    it('draws a row per sub-task under the footer: its column icon, key, title, and a bar with "x/y done"', () => {
+      const { element } = build([part('WOR-002', 'todo', { title: 'Design' }), part('WOR-003', 'done', { title: 'Build' })])
+      expect([...element.children].map(row => row.className)).toEqual(['card-meta', 'card-title', 'subtask-block'])
+      const rows = [...element.querySelectorAll('.subtask-row')]
+      expect(rows.map(row => row.querySelector('.card-key')?.textContent)).toEqual(['WOR-002', 'WOR-003'])
+      expect(rows.map(row => row.querySelector('.row-title')?.textContent)).toEqual(['Design', 'Build'])
+      expect(rows.map(row => row.querySelector<HTMLElement>('.status-icon')?.dataset.category)).toEqual(['unstarted', 'completed'])
+      expect(element.querySelector('.subtask-block .progress-text')?.textContent).toBe('1/2 done')
+      expect(element.querySelectorAll('.subtask-block .progress')).toHaveLength(1)
+    })
+
+    it('opens a sub-task from its row, and not the parent', () => {
+      const { element, onOpen, onOpenCard } = build([part('WOR-002', 'todo')])
+      element.querySelector<HTMLButtonElement>('button.subtask-row')?.click()
+      expect(onOpenCard).toHaveBeenCalledWith('WOR-002')
+      expect(onOpen).not.toHaveBeenCalled()
+    })
+
+    it('marks a waiting sub-task, a running one, and one with sub-tasks of its own', () => {
+      const run = { id: 'run', agentId: null, agentName: 'claude', state: 'running' as const, branch: null, executionMode: 'main' as const, chatSessionId: null, startedAt: 0 }
+      const cards = [parent, part('WOR-002', 'todo', { waitingFor: 'human' }), part('WOR-003', 'doing', { activeRun: run }), part('WOR-004', 'doing'), cardFixture({ id: 'WOR-005', parentIssueId: 'WOR-004' })]
+      const block = subtaskBlock(cards, statuses, 'WOR-001', new Set())!
+      const element = renderCard(parent, 'started', () => {}, { parent: null, summary: block.summary, onOpenCard: () => {}, block })
+      const row = (id: string) => [...element.querySelectorAll('.subtask-row')].find(item => item.querySelector('.card-key')?.textContent === id)!
+      expect(row('WOR-002').querySelector('.waiting-pill')?.textContent).toBe('Waiting')
+      expect(row('WOR-003').querySelector('.run-dot')).not.toBeNull()
+      expect(row('WOR-003').querySelector('.waiting-pill')).toBeNull()
+      expect(row('WOR-004').querySelector('.row-count')?.textContent).toBe('0/1')
+    })
+
+    it('draws at most five rows and a "+N more" that opens the parent', () => {
+      const many = [1, 2, 3, 4, 5, 6, 7].map(n => part(`WOR-10${n}`, 'todo', { order: n }))
+      const { element, onOpen } = build(many)
+      expect(element.querySelectorAll('.subtask-row')).toHaveLength(5)
+      const more = element.querySelector<HTMLButtonElement>('button.subtask-more')
+      expect(more?.textContent).toBe('+2 more')
+      more?.click()
+      expect(onOpen).toHaveBeenCalledWith(parent)
+    })
+
+    it('fades the rows that do not match a filter, and shows a long title as text', () => {
+      const title = '<img src=x onerror=alert(1)>'
+      const { element } = build([part('WOR-002', 'todo', { title }), part('WOR-003', 'todo')], ['WOR-003'])
+      expect(element.querySelector('img')).toBeNull()
+      expect(element.querySelector('.row-title')?.textContent).toBe(title)
+      expect([...element.querySelectorAll<HTMLElement>('.subtask-row')].map(row => row.hasAttribute('data-dim'))).toEqual([false, true])
+    })
+
+    it('never hides a sub-task that waits or runs: a pill in the status row and a dot on the avatar', () => {
+      const { element } = build([part('WOR-002', 'todo')], [], { waitsBelow: true, runsBelow: true })
+      expect(element.querySelector('.card-status .waiting-pill')?.textContent).toBe('Sub-task waiting for you')
+      expect(element.querySelector('.card-meta .avatar .run-dot')).not.toBeNull()
+      const quiet = build([part('WOR-002', 'todo')]).element
+      expect(quiet.querySelector('.card-status')).toBeNull()
+      expect(quiet.querySelector('.run-dot')).toBeNull()
+    })
+
+    it('has no block in cards mode: only the bar, and the sub-task card wears the strip', () => {
+      const element = renderCard(parent, 'started', () => {}, { parent: null, summary: { total: 2, done: 1 }, onOpenCard: () => {} })
+      expect(element.querySelector('.subtask-block')).toBeNull()
+      expect(element.querySelector('.progress-text')?.textContent).toBe('1/2 done')
     })
   })
 })

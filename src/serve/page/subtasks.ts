@@ -145,3 +145,44 @@ export function familyView(cards: readonly ServeCardView[], mode: SubtaskMode, m
   }
   return { drawn, faded, count }
 }
+
+export interface SubtaskRow {
+  card: ServeCardView
+  /** The category of the column the sub-task is in. */
+  category: ServeStatusView['category'] | null
+  /** Its own sub-tasks' progress, for "n/m". */
+  own: SubtaskSummary | null
+  faded: boolean
+  /** It waits for a person, or a card under it does. */
+  attention: boolean
+}
+
+export interface SubtaskBlock {
+  rows: SubtaskRow[]
+  more: number
+  summary: SubtaskSummary | null
+}
+
+/** What a parent's card draws inside itself, or `null` for a card with no sub-tasks. */
+export function subtaskBlock(
+  cards: readonly ServeCardView[],
+  statuses: readonly ServeStatusView[],
+  cardId: string,
+  faded: ReadonlySet<string>,
+): SubtaskBlock | null {
+  const { rows, more } = subtaskRows(cards, statuses, cardId)
+  if (rows.length === 0) {
+    return null
+  }
+  return {
+    rows: rows.map(card => ({
+      card,
+      category: statuses.find(status => status.id === card.statusId)?.category ?? null,
+      own: subtaskSummary(cards, statuses, card.id),
+      faded: faded.has(card.id),
+      attention: card.waitingFor === 'human' || waitsBelow(cards, card.id),
+    })),
+    more,
+    summary: subtaskSummary(cards, statuses, cardId),
+  }
+}

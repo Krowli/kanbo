@@ -1,7 +1,9 @@
+import type { Display } from './display'
+import { DEFAULT_DISPLAY } from './display'
 import { button, el } from './dom'
 import type { CardFilters, Priority } from './filters'
 import { isFiltering, NO_FILTERS, PRIORITIES } from './filters'
-import { closeIcon, filterIcon, plusIcon, priorityIcon, searchIcon } from './icons'
+import { closeIcon, displayIcon, filterIcon, plusIcon, priorityIcon, searchIcon } from './icons'
 import type { PopoverHandle } from './popover'
 import { attachPopover } from './popover'
 
@@ -21,12 +23,14 @@ export interface ToolbarOptions { workers: { key: string, label: string }[], lab
 
 export interface ToolbarState {
   filters: CardFilters
+  display: Display
   options: ToolbarOptions
   counts: { shown: number, total: number }
 }
 
 export interface ToolbarActions {
   onFilters: (next: CardFilters) => void
+  onDisplay: (next: Display) => void
   onNew: () => void
 }
 
@@ -73,7 +77,7 @@ export function activeFilterCount(filters: CardFilters): number {
 }
 
 export function createToolbar(actions: ToolbarActions): Toolbar {
-  let state: ToolbarState = { filters: NO_FILTERS, options: { workers: [], labels: [] }, counts: { shown: 0, total: 0 } }
+  let state: ToolbarState = { filters: NO_FILTERS, display: DEFAULT_DISPLAY, options: { workers: [], labels: [] }, counts: { shown: 0, total: 0 } }
   const set = (next: CardFilters): void => actions.onFilters(next)
 
   const wrap = el('div', 'toolbar-wrap')
@@ -114,12 +118,18 @@ export function createToolbar(actions: ToolbarActions): Toolbar {
   filterButton.append(filterIcon(), 'Filter', filterBadge)
   filterAnchor.append(filterButton)
 
+  const displayAnchor = el('span', 'anchor')
+  const displayButton = el('button', 'tool-button display-button')
+  displayButton.type = 'button'
+  displayButton.append(displayIcon(), 'Display')
+  displayAnchor.append(displayButton)
+
   const addButton = el('button', 'primary')
   addButton.type = 'button'
   addButton.append(plusIcon(), 'New')
   addButton.addEventListener('click', actions.onNew)
 
-  bar.append(searchBox, count, el('span', 'spacer'), filterAnchor, addButton)
+  bar.append(searchBox, count, el('span', 'spacer'), filterAnchor, displayAnchor, addButton)
 
   const chips = el('div', 'filter-chips')
   chips.hidden = true
@@ -163,6 +173,22 @@ export function createToolbar(actions: ToolbarActions): Toolbar {
   }
   const filterPopover: PopoverHandle = attachPopover(filterAnchor, filterButton, 'Filter cards', buildFilterPopover, 'start')
 
+  const buildDisplayPopover = (): HTMLElement => {
+    const content = el('div')
+    const asCards = state.display.subtasks === 'cards'
+    const row = el('label', 'option')
+    const input = el('input')
+    input.type = 'checkbox'
+    input.setAttribute('role', 'switch')
+    input.checked = asCards
+    input.dataset.key = 'subtasks'
+    input.addEventListener('change', () => actions.onDisplay({ ...state.display, subtasks: asCards ? 'inside' : 'cards' }))
+    row.append(input, 'Show sub-tasks as cards')
+    content.append(popoverSection('Sub-tasks', row, el('p', 'option-hint', 'Off: a sub-task is a row inside its parent card. On: each is a card of its own, marked "Sub-task of".')))
+    return content
+  }
+  const displayPopover: PopoverHandle = attachPopover(displayAnchor, displayButton, 'Display options', buildDisplayPopover, 'end')
+
   const chip = (text: string, remove: () => void): HTMLButtonElement => {
     const item = el('button', 'filter-chip')
     item.type = 'button'
@@ -204,6 +230,7 @@ export function createToolbar(actions: ToolbarActions): Toolbar {
       filterBadge.hidden = active === 0
       renderChips()
       filterPopover.refresh()
+      displayPopover.refresh()
     },
   }
 }

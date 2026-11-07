@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { ServeCardView } from '../views'
 import { cardFixture, statusFixture } from './fixtures'
-import { childrenOf, descendantsOf, drawnCards, familyView, isChild, parentOf, subtaskRows, subtaskSummary, waitsBelow } from './subtasks'
+import { childrenOf, descendantsOf, drawnCards, familyView, isChild, parentOf, subtaskBlock, subtaskRows, subtaskSummary, waitsBelow } from './subtasks'
 
 const statuses = [
   statusFixture({ id: 'todo', name: 'To Do', order: 0 }),
@@ -142,5 +142,40 @@ describe('familyView', () => {
     expect([...view.drawn]).toEqual(['WOR-004'])
     expect(view.faded.size).toBe(0)
     expect(view.count).toBe(1)
+  })
+})
+
+describe('subtaskBlock', () => {
+  const cards = [
+    parent,
+    part('WOR-002', 'todo'),
+    { ...part('WOR-003', 'doing'), waitingFor: 'human' as const },
+    part('WOR-004', 'done'),
+    part('WOR-005', 'no'),
+    part('WOR-006', 'todo', 0, 'WOR-002'),
+    { ...part('WOR-007', 'doing', 0, 'WOR-006'), waitingFor: 'human' as const },
+  ]
+
+  it('is null for a card with no sub-tasks', () => {
+    expect(subtaskBlock(cards, statuses, 'WOR-004', new Set())).toBeNull()
+  })
+
+  it('holds a row per direct child with its column category, and the parent progress without canceled ones', () => {
+    const block = subtaskBlock(cards, statuses, 'WOR-001', new Set())!
+    expect(block.rows.map(row => [row.card.id, row.category])).toEqual([['WOR-002', 'unstarted'], ['WOR-003', 'started'], ['WOR-004', 'completed'], ['WOR-005', 'canceled']])
+    expect(block.summary).toEqual({ total: 3, done: 1 })
+    expect(block.more).toBe(0)
+  })
+
+  it('gives a row its own n/m, marks a waiting sub-task and one with a waiting card below it, and fades what it is told to', () => {
+    const block = subtaskBlock(cards, statuses, 'WOR-001', new Set(['WOR-004']))!
+    const row = (id: string) => block.rows.find(item => item.card.id === id)!
+    expect(row('WOR-002').own).toEqual({ total: 1, done: 0 })
+    expect(row('WOR-003').own).toBeNull()
+    expect(row('WOR-003').attention).toBe(true)
+    expect(row('WOR-002').attention).toBe(true)
+    expect(row('WOR-004').attention).toBe(false)
+    expect(row('WOR-004').faded).toBe(true)
+    expect(row('WOR-003').faded).toBe(false)
   })
 })

@@ -3,6 +3,8 @@ import type { ServeCardView, ServeStatusView } from '../views'
 import type { BoardApi } from './api'
 import { ApiError, createBoardApi } from './api'
 import { renderCard } from './card-element'
+import type { Display } from './display'
+import { readDisplay, writeDisplay } from './display'
 import { button, el } from './dom'
 import type { Placement } from './enter'
 import { enterOf, placementsOf, startsWaiting } from './enter'
@@ -13,7 +15,7 @@ import type { BoardColumn } from './grouping'
 import { groupBoard, newCardStatus } from './grouping'
 import type { CardDetail, PanelTab } from './panel'
 import { readScroll, renderPanel } from './panel'
-import { childrenOf, parentOf, subtaskSummary } from './subtasks'
+import { childrenOf, drawnCards, familyView, parentOf, runsBelow, subtaskBlock, subtaskSummary, waitsBelow } from './subtasks'
 import { startPresence } from './presence'
 import { renderProjectSwitcher, renderWhere } from './project-switcher'
 import { createToolbar } from './toolbar'
@@ -44,6 +46,8 @@ const api: BoardApi = createBoardApi(() => token, () => projectId === null ? '' 
 
 /** What the bar above the board narrows the cards to; kept in the address so a reload shows the same. */
 let filters: CardFilters = readFilters(location.search)
+/** How sub-tasks are shown; kept in the address too. */
+let display: Display = readDisplay(location.search)
 
 let statuses: ServeStatusView[] = []
 let cards: ServeCardView[] = []
@@ -81,6 +85,7 @@ const projectSlot = el('span', 'project-slot')
 const filterSlot = el('div', 'filter-slot')
 const toolbar = createToolbar({
   onFilters: next => changeFilters(next),
+  onDisplay: next => changeDisplay(next),
   onNew: () => {
     const status = newCardStatus(statuses)
     if (status) {
@@ -315,7 +320,7 @@ function renderIdentity(): void {
 
 /** Put the filters into the address (keeping `project` and whatever else is there) without adding a history entry. */
 function writeFiltersToAddress(url: URL = new URL(location.href)): void {
-  history.replaceState(null, '', `${url.pathname}${writeFilters(filters, url.search)}${url.hash}`)
+  history.replaceState(null, '', `${url.pathname}${writeDisplay(display, writeFilters(filters, url.search))}${url.hash}`)
 }
 
 function changeFilters(next: CardFilters): void {
@@ -324,14 +329,21 @@ function changeFilters(next: CardFilters): void {
   renderBoard()
 }
 
+function changeDisplay(next: Display): void {
+  display = next
+  writeFiltersToAddress()
+  renderBoard()
+}
+
 function renderBoard(): void {
   renderIdentity()
   const draftHadFocus = draft !== null && document.activeElement === draft.input
   const focusedCardId = document.activeElement?.closest<HTMLElement>('.card')?.dataset.cardId ?? null
-  const shown = cards.filter(card => matchesFilters(card, filters))
-  const counts = { shown: shown.length, total: cards.length }
-  toolbar.update({ filters, options: filterOptions(cards), counts })
-  boardElement.replaceChildren(...groupBoard(statuses, shown).map(renderColumn))
+  // A family goes together: a parent shows when it or a sub-task matches.
+  const family = familyView(cards, display.subtasks, card => matchesFilters(card, filters))
+  const shown = drawnCards(cards, display.subtasks).filter(card => family.drawn.has(card.id))
+  toolbar.update({ filters, display, options: filterOptions(cards), counts: { shown: family.count, total: cards.length } })
+  boardElement.replaceChildren(...groupBoard(statuses, shown).map(column => renderColumn(column, family.faded)))
   // Every card, shown or not: a filter that brings a card into view does not make it new.
   lastPlacement = placementsOf(cards)
   markOpenCard()
@@ -359,7 +371,7 @@ function focusCard(cardId: string): void {
   }
 }
 
-function renderColumn(column: BoardColumn): HTMLElement {
+function renderColumn(column: BoardColumn, faded: ReadonlySet<string>): HTMLElement {
   const element = el('section', 'column')
   element.setAttribute('aria-label', column.name)
   const head = el('header', 'column-head')
@@ -379,10 +391,14 @@ function renderColumn(column: BoardColumn): HTMLElement {
     list.append(draft.form)
   }
   for (const card of column.cards) {
+    const inside = display.subtasks === 'inside'
     const cardElement = renderCard(card, status?.category ?? null, opened => void openCard(opened.id), {
       parent: parentOf(cards, card),
       summary: subtaskSummary(cards, statuses, card.id),
       onOpenCard: id => void openCard(id),
+      block: inside ? subtaskBlock(cards, statuses, card.id, faded) ?? undefined : undefined,
+      waitsBelow: inside && waitsBelow(cards, card.id),
+      runsBelow: inside && runsBelow(cards, card.id),
     })
     const enter = enterOf(lastPlacement, card)
     if (enter) {
