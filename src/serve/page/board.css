@@ -129,6 +129,7 @@
   /* sizes: touch first, tightened from 40rem */
   --control-height: 2.5rem;
   --topbar-height: 3rem;
+  --column-min: 17rem;
   --column-width: 20rem;
   --dialog-width: 78rem;
   --dialog-side-width: 21.5rem;
@@ -748,7 +749,8 @@ select.field {
 
 .column {
   display: flex;
-  flex: 0 0 var(--column-width);
+  flex: 1 0 var(--column-min);
+  max-width: var(--column-width);
   flex-direction: column;
   gap: var(--space-10);
   min-width: 0;
@@ -2406,7 +2408,7 @@ button.breadcrumb:focus-visible,
   grid-row: 4;
   grid-column: 1;
   align-items: stretch;
-  gap: var(--space-8);
+  gap: var(--space-10);
   min-height: 0;
   padding: var(--space-4) var(--space-12) var(--space-12);
   overflow-x: auto;
