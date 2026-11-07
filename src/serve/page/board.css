@@ -1185,6 +1185,11 @@ button.subtask-strip {
   cursor: pointer;
 }
 
+/* The strip of a parent that is not on the board has nothing to click: the card opens instead. */
+span.subtask-strip {
+  pointer-events: none;
+}
+
 button.subtask-strip:hover {
   background: var(--color-accent);
   color: var(--color-foreground);
@@ -1267,6 +1272,12 @@ button.subtask-strip:hover {
   margin-top: var(--space-2);
   padding-top: var(--space-6);
   border-top: 1px solid var(--color-border);
+  /* Above the title's overlay so its rows can be clicked; everything else in it lets the click through to the card. */
+  pointer-events: none;
+}
+
+.subtask-block button {
+  pointer-events: auto;
 }
 
 .subtask-list {
@@ -1568,6 +1579,8 @@ button.subtask-strip:hover {
   flex: none;
   align-items: center;
   gap: var(--space-6);
+  /* Raised above the title's overlay, but with nothing to click: a click on them opens the row. */
+  pointer-events: none;
 }
 
 .row-meta {
