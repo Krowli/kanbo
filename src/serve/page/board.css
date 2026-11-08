@@ -2534,6 +2534,136 @@ button.breadcrumb:focus-visible,
   white-space: pre-wrap;
 }
 
+/* Markdown in the dialog (`markdown.ts`): the description and a comment's text. */
+.markdown {
+  white-space: normal;
+}
+
+.markdown-plain {
+  white-space: pre-wrap;
+}
+
+.markdown :where(p, ul, ol, pre, blockquote, hr, .md-table, h4, h5, h6) {
+  margin: 0 0 var(--space-8);
+}
+
+.markdown :last-child {
+  margin-bottom: 0;
+}
+
+.markdown .md-h1,
+.markdown .md-h2,
+.markdown .md-h3 {
+  margin-top: var(--space-16);
+  font-weight: 600;
+  line-height: var(--leading-title);
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown .md-h1 {
+  font-size: var(--text-16);
+}
+
+.markdown .md-h2 {
+  font-size: var(--text-14);
+}
+
+.markdown .md-h3 {
+  font-size: var(--text-13);
+}
+
+.markdown ul,
+.markdown ol {
+  padding-left: var(--space-24);
+}
+
+.markdown li + li {
+  margin-top: var(--space-2);
+}
+
+.markdown li > ul,
+.markdown li > ol {
+  margin: 0;
+}
+
+.markdown li.md-task {
+  list-style: none;
+}
+
+.markdown li.md-task > input {
+  margin: 0 var(--space-6) 0 calc(-1 * var(--space-16));
+  vertical-align: middle;
+}
+
+.markdown code {
+  padding: 0 var(--space-4);
+  border-radius: var(--radius-4);
+  background: var(--color-fill);
+  font-family: var(--font-mono);
+  font-size: var(--text-12);
+}
+
+.markdown pre {
+  padding: var(--space-8) var(--space-12);
+  border-radius: var(--radius-6);
+  background: var(--color-fill);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.markdown pre code {
+  padding: 0;
+  background: none;
+}
+
+.markdown blockquote {
+  padding-left: var(--space-12);
+  border-left: 2px solid var(--color-border-strong);
+  color: var(--color-text-secondary);
+}
+
+.markdown hr {
+  height: 0;
+  border: 0;
+  border-top: 1px solid var(--color-border);
+}
+
+.markdown .md-table {
+  overflow-x: auto;
+}
+
+.markdown table {
+  border-collapse: collapse;
+}
+
+.markdown th,
+.markdown td {
+  padding: var(--space-4) var(--space-8);
+  border: 1px solid var(--color-border);
+  text-align: left;
+}
+
+.markdown th {
+  background: var(--color-fill);
+  font-weight: 600;
+}
+
+.markdown [data-align='center'] {
+  text-align: center;
+}
+
+.markdown [data-align='right'] {
+  text-align: right;
+}
+
+.markdown a {
+  color: var(--color-info-fg);
+  text-decoration: underline;
+}
+
 /* A run's end as a dot, beside the word. */
 [data-run-state] > .entry-text::before {
   content: '';

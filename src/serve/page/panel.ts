@@ -8,14 +8,15 @@ import { cardWorker } from './filters'
 import type { HistoryEntry } from './history'
 import { groupByDay, relativeDay, relativeTime, toHistory } from './history'
 import { chevronIcon, closeIcon, parentIcon, statusIcon } from './icons'
+import { renderMarkdown } from './markdown'
 import { doneText, isRunning, labelChips, priorityTag, runDot, subtaskRow, waitingPill } from './parts'
 import type { SubtaskRow, SubtaskSummary } from './subtasks'
 
 /**
  * The dialog a card opens into: everything the board holds about it, read
  * only, and the three things a person does from here — comment, approve,
- * return. The description is plain text as it was written; nothing in it is
- * rendered as Markdown or HTML.
+ * return. The description and the comments are shown as Markdown, a safe
+ * subset (`markdown.ts`); nothing in them is parsed as HTML.
  */
 
 export type PanelTab = 'comments' | 'history' | 'runs'
@@ -89,7 +90,7 @@ export function renderPanel(detail: CardDetail, actions: PanelActions, notice: s
 
   const main = el('div', 'panel-main')
   main.append(section('Description', card.description?.trim()
-    ? el('div', 'description', card.description)
+    ? renderMarkdown(card.description, 'description')
     : el('p', 'empty', 'No description.')))
   if (detail.subtasks.length > 0) {
     main.append(renderSubtasks(detail, actions))
@@ -451,7 +452,7 @@ function renderCommentsTab(comments: ServeCommentView[], actions: PanelActions, 
       actorChip({ kind: comment.author.kind, name: comment.author.displayName, label: comment.author.label }),
       timeElement(comment.createdAt, relativeDay(comment.createdAt, now, { withClock: true })),
     )
-    item.append(meta, el('div', 'entry-text', comment.content))
+    item.append(meta, renderMarkdown(comment.content, 'entry-text'))
     list.append(item)
   }
   return [renderCommentForm(actions), list]
