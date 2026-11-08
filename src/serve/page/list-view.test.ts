@@ -67,13 +67,22 @@ describe('collapsed groups', () => {
 })
 
 describe('listRows', () => {
-  it('puts a sub-task under its parent, indented, even when it is in another column', () => {
-    const cards = [parent, child, lone]
+  it('puts a sub-task under its parent when it is in the parent column, and in its own group otherwise', () => {
+    const together = cardFixture({ id: 'WOR-004', title: 'Same column', statusId: 'doing', parentIssueId: 'WOR-001' })
+    const cards = [parent, child, together, lone]
     const groups = groupBoard(statuses, drawnCards(cards, 'inside'))
     const doing = groups.find(group => group.id === 'doing')!
-    expect(listRows(doing.cards, cards, statuses, 'inside').map(row => [row.card.id, row.depth])).toEqual([['WOR-001', 0], ['WOR-002', 1]])
+    expect(listRows(doing.cards, cards, statuses, 'inside').map(row => [row.card.id, row.depth])).toEqual([['WOR-001', 0], ['WOR-004', 1]])
     const todo = groups.find(group => group.id === 'todo')!
-    expect(listRows(todo.cards, cards, statuses, 'inside').map(row => row.card.id)).toEqual(['WOR-003'])
+    expect(listRows(todo.cards, cards, statuses, 'inside').map(row => [row.card.id, row.depth])).toEqual([['WOR-002', 0], ['WOR-003', 0]])
+  })
+
+  it('lists a grandchild folded into a sub-task one level deeper, depth first', () => {
+    const b = cardFixture({ id: 'B', statusId: 'doing', parentIssueId: 'WOR-001', order: 0 })
+    const c = cardFixture({ id: 'C', statusId: 'doing', parentIssueId: 'B' })
+    const d = cardFixture({ id: 'D', statusId: 'doing', parentIssueId: 'WOR-001', order: 1 })
+    const cards = [parent, d, c, b]
+    expect(listRows([parent], cards, statuses, 'inside').map(row => [row.card.id, row.depth])).toEqual([['WOR-001', 0], ['B', 1], ['C', 2], ['D', 1]])
   })
 
   it('keeps every row flat in cards mode', () => {
@@ -135,13 +144,23 @@ describe('renderList', () => {
   })
 
   it('indents a sub-task row under its parent in inside mode, with its own column icon', () => {
-    const list = renderList(options([parent, child, lone]))
+    const together = cardFixture({ id: 'WOR-004', title: 'Same column', statusId: 'doing', parentIssueId: 'WOR-001' })
+    const list = renderList(options([parent, together, lone]))
     const rows = [...list.querySelectorAll<HTMLElement>('.list-row')]
-    const sub = rows.find(row => row.dataset.cardId === 'WOR-002')!
+    const sub = rows.find(row => row.dataset.cardId === 'WOR-004')!
     expect(sub.dataset.depth).toBe('1')
-    expect(sub.querySelector<HTMLElement>('.status-icon')?.dataset.category).toBe('unstarted')
+    expect(sub.querySelector<HTMLElement>('.status-icon')?.dataset.category).toBe('started')
     expect(sub.previousElementSibling).toBe(rows.find(row => row.dataset.cardId === 'WOR-001'))
     expect(sub.querySelector('.row-parent')).toBeNull()
+  })
+
+  it('shows a sub-task in another column as a row of that group, marked with its parent', () => {
+    const list = renderList(options([parent, child, lone]))
+    const sub = list.querySelector<HTMLElement>('[data-card-id="WOR-002"]')!
+    expect(sub.dataset.depth).toBe('0')
+    expect(sub.closest('section')?.getAttribute('aria-label')).toBe('To Do')
+    expect(sub.querySelector('.row-parent')?.textContent).toBe('WOR-001')
+    expect(sub.querySelector<HTMLElement>('.row-parent')?.title).toBe('Sub-task of WOR-001 · Ship it')
   })
 
   it('keeps sub-task rows flat in cards mode, each with a short "↰ KEY" before its title', () => {
@@ -160,12 +179,14 @@ describe('renderList', () => {
   })
 
   it('shows n/m on a sub-task row that has sub-tasks of its own, as the card\'s row does, in inside mode only', () => {
-    const grand = cardFixture({ id: 'WOR-004', title: 'Deeper', statusId: 'doing', parentIssueId: 'WOR-002' })
-    const inside = renderList(options([parent, child, grand, lone]))
-    expect(inside.querySelector('[data-card-id="WOR-002"] .row-count')?.textContent).toBe('0/1')
+    const together = cardFixture({ id: 'WOR-004', title: 'Same column', statusId: 'doing', parentIssueId: 'WOR-001' })
+    const grand = cardFixture({ id: 'WOR-005', title: 'Deeper', statusId: 'doing', parentIssueId: 'WOR-004' })
+    const inside = renderList(options([parent, together, grand, lone]))
+    expect(inside.querySelector('[data-card-id="WOR-004"] .row-count')?.textContent).toBe('0/1')
+    expect(inside.querySelector('[data-card-id="WOR-005"]')?.getAttribute('data-depth')).toBe('2')
     expect(inside.querySelector('[data-card-id="WOR-001"] .row-count')).toBeNull()
     expect(inside.querySelector('[data-card-id="WOR-003"] .row-count')).toBeNull()
-    const cards = renderList(options([parent, child, grand, lone], { mode: 'cards' }))
+    const cards = renderList(options([parent, together, grand, lone], { mode: 'cards' }))
     expect(cards.querySelector('.row-count')).toBeNull()
   })
 })

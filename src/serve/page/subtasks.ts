@@ -6,8 +6,12 @@ import type { ServeCardView, ServeStatusView } from '../views'
  * **orphan** and is drawn like any top-level card. Everything here is a pure
  * function of the loaded cards and columns, so it is tested with no DOM.
  *
- * Two modes: `inside` draws a child only as a row in its parent's card;
- * `cards` draws every card in its own column, children marked as such.
+ * Two modes. `cards` draws every card in its own column, children marked as
+ * such. `inside` folds a child into its parent's card as a row while it sits
+ * in the parent's column (and a grandchild folded into that row shows as a row
+ * one level deeper); in any other column a child is drawn as a card of its
+ * own, marked as a sub-task. A card is therefore drawn exactly once: as a card,
+ * or as a row in the card it is folded under.
  */
 
 export type SubtaskMode = 'inside' | 'cards'
@@ -66,14 +70,60 @@ export function isChild(cards: readonly ServeCardView[], card: ServeCardView): b
   return true
 }
 
-/** The cards drawn in the columns: every card in `cards` mode, those that are not children in `inside` mode. */
-export function drawnCards(cards: readonly ServeCardView[], mode: SubtaskMode): ServeCardView[] {
-  return mode === 'cards' ? [...cards] : cards.filter(card => !isChild(cards, card))
+/** Whether `card` is folded into its parent in `inside` mode: it is a child and sits in its parent's column. */
+export function isFolded(cards: readonly ServeCardView[], card: ServeCardView): boolean {
+  return isChild(cards, card) && parentOf(cards, card)?.statusId === card.statusId
 }
 
-/** The direct children a parent's card lists as rows, at most `MAX_SUBTASK_ROWS`, and how many more there are. */
-export function subtaskRows(cards: readonly ServeCardView[], statuses: readonly ServeStatusView[], cardId: string): { rows: ServeCardView[], more: number } {
-  const all = childrenOf(cards, statuses, cardId)
+/** The cards drawn in the columns: every card in `cards` mode, those that are not folded in `inside` mode. */
+export function drawnCards(cards: readonly ServeCardView[], mode: SubtaskMode): ServeCardView[] {
+  return mode === 'cards' ? [...cards] : cards.filter(card => !isFolded(cards, card))
+}
+
+export interface FoldedCard {
+  card: ServeCardView
+  /** 1 for a direct child of the card, 2 for a grandchild folded into it, and so on. */
+  depth: number
+}
+
+/** Every card folded under `cardId`, depth first: each folded child in board order, then at once its own folded cards. */
+export function foldedUnder(cards: readonly ServeCardView[], statuses: readonly ServeStatusView[], cardId: string): FoldedCard[] {
+  const found: FoldedCard[] = []
+  const seen = new Set([cardId])
+  const walk = (id: string, depth: number): void => {
+    for (const child of childrenOf(cards, statuses, id)) {
+      if (!seen.has(child.id) && isFolded(cards, child)) {
+        seen.add(child.id)
+        found.push({ card: child, depth })
+        walk(child.id, depth + 1)
+      }
+    }
+  }
+  walk(cardId, 1)
+  return found
+}
+
+/** The cards folded under `cardId` through folded links, at any depth, each once. */
+export function foldedBelow(cards: readonly ServeCardView[], cardId: string): ServeCardView[] {
+  const found: ServeCardView[] = []
+  const seen = new Set([cardId])
+  const queue = [cardId]
+  while (queue.length > 0) {
+    const id = queue.shift()!
+    for (const card of cards) {
+      if (card.parentIssueId === id && !seen.has(card.id) && isFolded(cards, card)) {
+        seen.add(card.id)
+        found.push(card)
+        queue.push(card.id)
+      }
+    }
+  }
+  return found
+}
+
+/** The rows a card lists for the cards folded under it, at most `MAX_SUBTASK_ROWS` counting grandchildren, and how many more there are. */
+export function subtaskRows(cards: readonly ServeCardView[], statuses: readonly ServeStatusView[], cardId: string): { rows: FoldedCard[], more: number } {
+  const all = foldedUnder(cards, statuses, cardId)
   return { rows: all.slice(0, MAX_SUBTASK_ROWS), more: Math.max(0, all.length - MAX_SUBTASK_ROWS) }
 }
 
@@ -95,20 +145,20 @@ export function descendantsOf(cards: readonly ServeCardView[], cardId: string): 
   return found
 }
 
-/** Whether any card under `cardId`, at any depth, waits for a person. */
+/** Whether any card folded under `cardId` waits for a person; a card drawn on its own shows its own pill. */
 export function waitsBelow(cards: readonly ServeCardView[], cardId: string): boolean {
-  return descendantsOf(cards, cardId).some(card => card.waitingFor === 'human')
+  return foldedBelow(cards, cardId).some(card => card.waitingFor === 'human')
 }
 
-/** Whether any card under `cardId`, at any depth, has a run going. */
+/** Whether any card folded under `cardId` has a run going; a card drawn on its own shows its own dot. */
 export function runsBelow(cards: readonly ServeCardView[], cardId: string): boolean {
-  return descendantsOf(cards, cardId).some(card => card.activeRun?.state === 'running')
+  return foldedBelow(cards, cardId).some(card => card.activeRun?.state === 'running')
 }
 
 export interface FamilyView {
   /** The ids of the cards drawn in columns. */
   drawn: Set<string>
-  /** Direct sub-task rows inside a drawn parent that do not match: drawn at half opacity. */
+  /** Rows folded into a drawn card, at any depth, that do not match: drawn at half opacity. */
   faded: Set<string>
   /** The toolbar's count: the cards drawn plus the sub-tasks under them that match. */
   count: number
@@ -116,9 +166,10 @@ export interface FamilyView {
 
 /**
  * What a filter shows. In `cards` mode, each card on its own. In `inside` mode a
- * family goes together: a top-level card is drawn when it, or any card under it
- * at any depth, matches, and the sub-task rows that do not match (nor hold a
- * match) are faded rather than hidden.
+ * card goes together with the rows folded into it: it is drawn when it, or any
+ * card folded under it at any depth, matches, and the rows that do not match
+ * (nor hold a match) are faded rather than hidden. A sub-task drawn as a card
+ * of its own is filtered as any other card.
  */
 export function familyView(cards: readonly ServeCardView[], mode: SubtaskMode, matches: (card: ServeCardView) => boolean): FamilyView {
   if (mode === 'cards') {
@@ -129,17 +180,17 @@ export function familyView(cards: readonly ServeCardView[], mode: SubtaskMode, m
   const faded = new Set<string>()
   let count = 0
   for (const top of drawnCards(cards, 'inside')) {
-    const below = descendantsOf(cards, top.id)
+    const below = foldedBelow(cards, top.id)
     const matching = new Set(below.filter(matches).map(card => card.id))
     if (!matches(top) && matching.size === 0) {
       continue
     }
     drawn.add(top.id)
     count += 1 + matching.size
-    for (const child of cards.filter(card => card.parentIssueId === top.id && card.id !== top.id)) {
-      const holdsMatch = matching.has(child.id) || descendantsOf(cards, child.id).some(card => matching.has(card.id))
+    for (const row of below) {
+      const holdsMatch = matching.has(row.id) || foldedBelow(cards, row.id).some(card => matching.has(card.id))
       if (!holdsMatch) {
-        faded.add(child.id)
+        faded.add(row.id)
       }
     }
   }
@@ -150,6 +201,8 @@ export interface SubtaskRow {
   card: ServeCardView
   /** The category of the column the sub-task is in. */
   category: ServeStatusView['category'] | null
+  /** 1 for a direct sub-task, 2 for one folded into that row, and so on. */
+  depth: number
   /** Its own sub-tasks' progress, for "n/m". */
   own: SubtaskSummary | null
   faded: boolean
@@ -163,9 +216,10 @@ export interface SubtaskBlock {
   summary: SubtaskSummary | null
 }
 
-function toRow(cards: readonly ServeCardView[], statuses: readonly ServeStatusView[], card: ServeCardView, faded: ReadonlySet<string>): SubtaskRow {
+function toRow(cards: readonly ServeCardView[], statuses: readonly ServeStatusView[], card: ServeCardView, depth: number, faded: ReadonlySet<string>): SubtaskRow {
   return {
     card,
+    depth,
     category: statuses.find(status => status.id === card.statusId)?.category ?? null,
     own: subtaskSummary(cards, statuses, card.id),
     faded: faded.has(card.id),
@@ -175,10 +229,10 @@ function toRow(cards: readonly ServeCardView[], statuses: readonly ServeStatusVi
 
 /** A row for every direct sub-task of `cardId`, in board order: the dialog lists all of them. */
 export function subtaskRowsOf(cards: readonly ServeCardView[], statuses: readonly ServeStatusView[], cardId: string): SubtaskRow[] {
-  return childrenOf(cards, statuses, cardId).map(card => toRow(cards, statuses, card, new Set()))
+  return childrenOf(cards, statuses, cardId).map(card => toRow(cards, statuses, card, 1, new Set()))
 }
 
-/** What a parent's card draws inside itself, or `null` for a card with no sub-tasks. */
+/** What a card draws inside itself for the cards folded under it, or `null` when none is. */
 export function subtaskBlock(
   cards: readonly ServeCardView[],
   statuses: readonly ServeStatusView[],
@@ -189,5 +243,5 @@ export function subtaskBlock(
   if (rows.length === 0) {
     return null
   }
-  return { rows: rows.map(card => toRow(cards, statuses, card, faded)), more, summary: subtaskSummary(cards, statuses, cardId) }
+  return { rows: rows.map(row => toRow(cards, statuses, row.card, row.depth, faded)), more, summary: subtaskSummary(cards, statuses, cardId) }
 }

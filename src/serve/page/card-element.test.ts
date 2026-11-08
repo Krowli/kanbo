@@ -2,7 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { ServeCardView } from '../views'
-import { renderCard } from './card-element'
+import { dragSource, renderCard } from './card-element'
 import { cardFixture, statusFixture } from './fixtures'
 import { subtaskBlock } from './subtasks'
 
@@ -185,13 +185,14 @@ describe('renderCard', () => {
     }
 
     it('draws a row per sub-task under the footer: its column icon, key, title, and a bar with "x/y done"', () => {
-      const { element } = build([part('WOR-002', 'todo', { title: 'Design' }), part('WOR-003', 'done', { title: 'Build' })])
+      const { element } = build([part('WOR-002', 'todo', { title: 'Design' }), part('WOR-004', 'todo', { title: 'Test' }), part('WOR-003', 'done', { title: 'Build' })])
       expect([...element.children].map(row => row.className)).toEqual(['card-meta', 'card-title', 'subtask-block'])
       const rows = [...element.querySelectorAll('.subtask-row')]
-      expect(rows.map(row => row.querySelector('.card-key')?.textContent)).toEqual(['WOR-002', 'WOR-003'])
-      expect(rows.map(row => row.querySelector('.row-title')?.textContent)).toEqual(['Design', 'Build'])
-      expect(rows.map(row => row.querySelector<HTMLElement>('.status-icon')?.dataset.category)).toEqual(['unstarted', 'completed'])
-      expect(element.querySelector('.subtask-block .progress-text')?.textContent).toBe('1/2 done')
+      expect(rows.map(row => row.querySelector('.card-key')?.textContent)).toEqual(['WOR-002', 'WOR-004'])
+      expect(rows.map(row => row.querySelector('.row-title')?.textContent)).toEqual(['Design', 'Test'])
+      expect(rows.map(row => row.querySelector<HTMLElement>('.status-icon')?.dataset.category)).toEqual(['unstarted', 'unstarted'])
+      // The sub-task in another column is a card of its own, but the bar counts it.
+      expect(element.querySelector('.subtask-block .progress-text')?.textContent).toBe('1/3 done')
       expect(element.querySelectorAll('.subtask-block .progress')).toHaveLength(1)
     })
 
@@ -204,7 +205,7 @@ describe('renderCard', () => {
 
     it('marks a waiting sub-task, a running one, and one with sub-tasks of its own', () => {
       const run = { id: 'run', agentId: null, agentName: 'claude', state: 'running' as const, branch: null, executionMode: 'main' as const, chatSessionId: null, startedAt: 0 }
-      const cards = [parent, part('WOR-002', 'todo', { waitingFor: 'human' }), part('WOR-003', 'doing', { activeRun: run }), part('WOR-004', 'doing'), cardFixture({ id: 'WOR-005', parentIssueId: 'WOR-004' })]
+      const cards = [parent, part('WOR-002', 'todo', { waitingFor: 'human' }), part('WOR-003', 'todo', { activeRun: run }), part('WOR-004', 'todo'), cardFixture({ id: 'WOR-005', parentIssueId: 'WOR-004' })]
       const block = subtaskBlock(cards, statuses, 'WOR-001', new Set())!
       const element = renderCard(parent, 'started', () => {}, { parent: null, summary: block.summary, onOpenCard: () => {}, block })
       const row = (id: string) => [...element.querySelectorAll('.subtask-row')].find(item => item.querySelector('.card-key')?.textContent === id)!
@@ -246,5 +247,31 @@ describe('renderCard', () => {
       expect(element.querySelector('.subtask-block')).toBeNull()
       expect(element.querySelector('.progress-text')?.textContent).toBe('1/2 done')
     })
+  })
+})
+
+describe('dragging a sub-task row', () => {
+  const statuses = [statusFixture({ id: 'todo', name: 'To Do' })]
+  const parent = cardFixture({ id: 'WOR-001' })
+  const cards = [parent, cardFixture({ id: 'WOR-002', parentIssueId: 'WOR-001' }), cardFixture({ id: 'WOR-003', parentIssueId: 'WOR-002' })]
+  const block = subtaskBlock(cards, statuses, 'WOR-001', new Set())!
+  const element = renderCard(parent, null, () => {}, { parent: null, summary: block.summary, onOpenCard: () => {}, block })
+  const rows = [...element.querySelectorAll<HTMLElement>('.subtask-row')]
+
+  it('makes each row draggable, with its depth', () => {
+    expect(rows.map(row => [row.dataset.subtaskId, row.draggable, row.dataset.depth])).toEqual([['WOR-002', true, '1'], ['WOR-003', true, '2']])
+  })
+
+  it('carries the row when the drag starts on it or inside it, and the card otherwise', () => {
+    expect(dragSource(rows[0]!, element, 'WOR-001')).toEqual({ id: 'WOR-002', element: rows[0] })
+    expect(dragSource(rows[1]!.querySelector('.row-title'), element, 'WOR-001')).toEqual({ id: 'WOR-003', element: rows[1] })
+    expect(dragSource(element.querySelector('.card-title'), element, 'WOR-001')).toEqual({ id: 'WOR-001', element })
+    expect(dragSource(element, element, 'WOR-001')).toEqual({ id: 'WOR-001', element })
+    expect(dragSource(null, element, 'WOR-001')).toEqual({ id: 'WOR-001', element })
+  })
+
+  it('ignores a row that belongs to another card', () => {
+    const other = document.createElement('div')
+    expect(dragSource(rows[0]!, other, 'WOR-009')).toEqual({ id: 'WOR-009', element: other })
   })
 })

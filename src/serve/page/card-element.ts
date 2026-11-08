@@ -26,12 +26,23 @@ export interface CardContext {
   parent: ServeCardView | null
   summary: SubtaskSummary | null
   onOpenCard: (cardId: string) => void
-  /** Inside mode: the sub-task rows this parent draws in itself. Absent in cards mode. */
+  /** Inside mode: the rows this card draws for the cards folded under it. Absent in cards mode. */
   block?: SubtaskBlock
-  /** A card under this one, at any depth, waits for a person. */
+  /** A card folded under this one, at any depth, waits for a person. */
   waitsBelow?: boolean
-  /** A card under this one, at any depth, has a run going. */
+  /** A card folded under this one, at any depth, has a run going. */
   runsBelow?: boolean
+}
+
+/**
+ * What a drag that starts inside `card` carries: the sub-task row when it began
+ * on one, else the card itself. The element is the one that gets the
+ * `dragging` look.
+ */
+export function dragSource(target: EventTarget | null, card: HTMLElement, cardId: string): { id: string, element: HTMLElement } {
+  const row = target instanceof Element ? target.closest<HTMLElement>('.subtask-row') : null
+  const id = row?.dataset.subtaskId
+  return row && id && card.contains(row) ? { id, element: row } : { id: cardId, element: card }
 }
 
 /**

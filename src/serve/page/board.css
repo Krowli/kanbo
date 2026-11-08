@@ -1306,6 +1306,24 @@ button.subtask-strip:hover {
   background: var(--color-fill);
 }
 
+/* A card folded one level deeper is a row stepped in under its parent's row. */
+.subtask-row[data-depth='2'] {
+  padding-left: calc(var(--space-6) + var(--space-16));
+}
+
+.subtask-row[data-depth='3'],
+.subtask-row[data-depth='4'],
+.subtask-row[data-depth='5'],
+.subtask-row[data-depth='6'],
+.subtask-row[data-depth='7'],
+.subtask-row[data-depth='8'] {
+  padding-left: calc(var(--space-6) + var(--space-24));
+}
+
+.subtask-row.dragging {
+  opacity: 0.5;
+}
+
 .subtask-row:focus-visible {
   outline: 2px solid var(--color-ring);
   outline-offset: -2px;
@@ -1606,12 +1624,25 @@ button.subtask-strip:hover {
   text-align: right;
 }
 
-/* A sub-task row hangs under its parent, set in 20 px with a rule. */
-.list-row[data-depth='1'] {
+/* A sub-task row hangs under its parent, set in 20 px with a rule; each level below that steps in a little more. */
+.list-row:not([data-depth='0']) {
   margin-left: 1.25rem;
 }
 
-.list-row[data-depth='1']::before {
+.list-row[data-depth='2'] {
+  margin-left: calc(1.25rem + var(--space-16));
+}
+
+.list-row[data-depth='3'],
+.list-row[data-depth='4'],
+.list-row[data-depth='5'],
+.list-row[data-depth='6'],
+.list-row[data-depth='7'],
+.list-row[data-depth='8'] {
+  margin-left: calc(1.25rem + var(--space-24));
+}
+
+.list-row:not([data-depth='0'])::before {
   content: '';
   position: absolute;
   top: 0;

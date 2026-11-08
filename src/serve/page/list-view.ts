@@ -6,23 +6,24 @@ import type { BoardColumn } from './grouping'
 import { chevronIcon, lockIcon, parentIcon, priorityIcon, statusIcon } from './icons'
 import { avatar, isRunning, labelChips, runDot, selectBox, waitingPill } from './parts'
 import type { SubtaskMode } from './subtasks'
-import { childrenOf, subtaskSummary } from './subtasks'
+import { foldedUnder, subtaskSummary } from './subtasks'
 
 /**
- * The List view: a group per column, a row per card. Sub-tasks sit under their
- * parent in `inside` mode (indented, with their own column's icon, even when
- * that column is another group), and are flat rows marked "↰ KEY" in `cards`
- * mode. It builds from the same answers as the board and holds no state: which
- * groups are folded comes in, and a fold goes out.
+ * The List view: a group per column, a row per card. In `inside` mode a
+ * sub-task in its parent's column sits under the parent (indented a level for
+ * each step down); one in another column is a row of that column's group. Such
+ * a row, and every sub-task in `cards` mode, is marked "↰ KEY" with its parent.
+ * It builds from the same answers as the board and holds no state: which groups
+ * are folded comes in, and a fold goes out.
  */
 
 export interface ListRow {
   card: ServeCardView
-  /** 0 for a row in its own column, 1 for a sub-task under its parent. */
-  depth: 0 | 1
+  /** 0 for a row in its own column, 1 for a sub-task under its parent, 2 for one under that, and so on. */
+  depth: number
 }
 
-/** The rows of one group: each card, and in `inside` mode its sub-tasks right under it. */
+/** The rows of one group: each card, and in `inside` mode every card folded under it, depth first, right under it. */
 export function listRows(
   groupCards: readonly ServeCardView[],
   cards: readonly ServeCardView[],
@@ -31,7 +32,7 @@ export function listRows(
 ): ListRow[] {
   return groupCards.flatMap((card): ListRow[] => [
     { card, depth: 0 },
-    ...(mode === 'inside' ? childrenOf(cards, statuses, card.id).map((child): ListRow => ({ card: child, depth: 1 })) : []),
+    ...(mode === 'inside' ? foldedUnder(cards, statuses, card.id) : []),
   ])
 }
 
@@ -94,7 +95,7 @@ function renderRow(row: ListRow, options: ListOptions): HTMLElement {
   icons.append(statusIcon(category), priorityIcon(card.priority))
   element.append(selectBox(card.id), icons, el('span', 'card-key', card.id))
 
-  if (row.depth === 0 && options.mode === 'cards' && card.parentIssueId && card.parentIssueId !== card.id) {
+  if (row.depth === 0 && card.parentIssueId && card.parentIssueId !== card.id) {
     const parent = options.cards.find(candidate => candidate.id === card.parentIssueId)
     const mark = el('span', 'row-parent')
     mark.append(parentIcon(), card.parentIssueId)
@@ -115,7 +116,7 @@ function renderRow(row: ListRow, options: ListOptions): HTMLElement {
     marks.append(runDot())
   }
   // A sub-task with sub-tasks of its own says how far they are, as its row in the parent's card does.
-  const own = row.depth === 1 && options.mode === 'inside' ? subtaskSummary(options.cards, options.statuses, card.id) : null
+  const own = row.depth >= 1 && options.mode === 'inside' ? subtaskSummary(options.cards, options.statuses, card.id) : null
   if (own) {
     marks.append(el('span', 'row-count', `${own.done}/${own.total}`))
   }

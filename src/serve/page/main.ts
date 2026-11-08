@@ -5,7 +5,7 @@ import { createAnalyticsData, renderAnalytics } from './analytics'
 import type { BoardApi, BulkChange } from './api'
 import { ApiError, createBoardApi } from './api'
 import { applyBulk } from './bulk'
-import { renderCard } from './card-element'
+import { dragSource, renderCard } from './card-element'
 import type { Display } from './display'
 import { readDisplay, writeDisplay } from './display'
 import { button, el } from './dom'
@@ -637,14 +637,18 @@ function renderColumn(column: BoardColumn, faded: ReadonlySet<string>, tally: { 
     if (startsWaiting(lastPlacement, card)) {
       cardElement.querySelector<HTMLElement>('.waiting-pill')?.setAttribute('data-enter', 'waiting')
     }
+    // A drag that starts on a sub-task row carries that sub-task, not the card around it.
+    let dragged: HTMLElement = cardElement
     cardElement.addEventListener('dragstart', (event) => {
-      draggedCardId = card.id
-      event.dataTransfer?.setData('text/plain', card.id)
-      cardElement.classList.add('dragging')
+      const source = dragSource(event.target, cardElement, card.id)
+      dragged = source.element
+      draggedCardId = source.id
+      event.dataTransfer?.setData('text/plain', source.id)
+      dragged.classList.add('dragging')
     })
     cardElement.addEventListener('dragend', () => {
       draggedCardId = null
-      cardElement.classList.remove('dragging')
+      dragged.classList.remove('dragging')
     })
     list.append(cardElement)
   }
