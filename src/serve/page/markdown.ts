@@ -297,13 +297,23 @@ const PUNCTUATION = /[!-/:-@[-`{-~]/
 const BARE_URL = /https?:\/\/[^\s<]+/iy
 
 function trimUrl(url: string): string {
+  let opens = 0
+  let closes = 0
+  for (const char of url) {
+    if (char === '(') {
+      opens++
+    } else if (char === ')') {
+      closes++
+    }
+  }
   let end = url.length
   while (end > 0 && '.,;:!?)'.includes(url[end - 1]!)) {
     if (url[end - 1] === ')') {
-      const kept = url.slice(0, end)
-      if (kept.split('(').length >= kept.split(')').length) {
+      // A closing parenthesis stays when the address has an opening one to match it.
+      if (opens >= closes) {
         break
       }
+      closes--
     }
     end--
   }

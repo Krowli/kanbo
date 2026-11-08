@@ -40,7 +40,7 @@ export interface CardContext {
  * `dragging` look.
  */
 export function dragSource(target: EventTarget | null, card: HTMLElement, cardId: string): { id: string, element: HTMLElement } {
-  const row = target instanceof Element ? target.closest<HTMLElement>('.subtask-row') : null
+  const row = target instanceof Element ? target.closest<HTMLElement>('.subtask-item') : null
   const id = row?.dataset.subtaskId
   return row && id && card.contains(row) ? { id, element: row } : { id: cardId, element: card }
 }
@@ -75,7 +75,7 @@ export function subtaskStrip(card: ServeCardView, context: CardContext): HTMLEle
 function subtaskBlock(block: SubtaskBlock, context: CardContext, open: () => void): HTMLElement {
   const wrap = el('div', 'subtask-block')
   const list = el('ul', 'subtask-list')
-  list.append(...block.rows.map(row => subtaskRow(row, context.onOpenCard)))
+  list.append(...block.rows.map(row => subtaskRow(row, context.onOpenCard, { draggable: true })))
   wrap.append(list)
   if (block.more > 0) {
     const more = el('button', 'subtask-more', `+${block.more} more`)

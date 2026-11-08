@@ -327,7 +327,7 @@ function renderSubtasks(detail: CardDetail, actions: PanelActions): HTMLElement 
   }
   const list = el('ul', 'subtask-list')
   list.hidden = subtasksFolded
-  list.append(...detail.subtasks.map(row => subtaskRow(row, actions.openCard)))
+  list.append(...detail.subtasks.map(row => subtaskRow(row, actions.openCard, { draggable: false })))
   fold.addEventListener('click', () => {
     subtasksFolded = !subtasksFolded
     list.hidden = subtasksFolded

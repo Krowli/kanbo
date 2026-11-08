@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ServeCardView } from '../views'
 import { dragSource, renderCard } from './card-element'
 import { cardFixture, statusFixture } from './fixtures'
+import { subtaskRow } from './parts'
 import { subtaskBlock } from './subtasks'
 
 const running: ServeCardView['activeRun'] = { id: 'run', agentId: null, agentName: 'claude', state: 'running', branch: null, executionMode: 'main', chatSessionId: null, startedAt: 0 }
@@ -256,15 +257,27 @@ describe('dragging a sub-task row', () => {
   const cards = [parent, cardFixture({ id: 'WOR-002', parentIssueId: 'WOR-001' }), cardFixture({ id: 'WOR-003', parentIssueId: 'WOR-002' })]
   const block = subtaskBlock(cards, statuses, 'WOR-001', new Set())!
   const element = renderCard(parent, null, () => {}, { parent: null, summary: block.summary, onOpenCard: () => {}, block })
-  const rows = [...element.querySelectorAll<HTMLElement>('.subtask-row')]
+  const rows = [...element.querySelectorAll<HTMLElement>('.subtask-item')]
+  const buttons = [...element.querySelectorAll<HTMLElement>('.subtask-row')]
 
-  it('makes each row draggable, with its depth', () => {
-    expect(rows.map(row => [row.dataset.subtaskId, row.draggable, row.dataset.depth])).toEqual([['WOR-002', true, '1'], ['WOR-003', true, '2']])
+  it('makes the li of each row draggable, not its button, with its depth', () => {
+    expect(rows.map(row => [row.dataset.subtaskId, row.draggable])).toEqual([['WOR-002', true], ['WOR-003', true]])
+    expect(buttons.map(button => [button.draggable, button.dataset.depth])).toEqual([[false, '1'], [false, '2']])
+  })
+
+  it('carries the sub-task when the drag starts on the title inside the button', () => {
+    expect(dragSource(buttons[1]!.querySelector('.row-title'), element, 'WOR-001')).toEqual({ id: 'WOR-003', element: rows[1] })
+  })
+
+  it('leaves a row in the dialog undraggable', () => {
+    const dialogRow = subtaskRow(block.rows[0]!, () => {})
+    expect((dialogRow as HTMLElement).draggable).toBe(false)
+    expect(dialogRow.querySelector<HTMLElement>('.subtask-row')?.draggable).toBe(false)
   })
 
   it('carries the row when the drag starts on it or inside it, and the card otherwise', () => {
-    expect(dragSource(rows[0]!, element, 'WOR-001')).toEqual({ id: 'WOR-002', element: rows[0] })
-    expect(dragSource(rows[1]!.querySelector('.row-title'), element, 'WOR-001')).toEqual({ id: 'WOR-003', element: rows[1] })
+    expect(dragSource(buttons[0]!, element, 'WOR-001')).toEqual({ id: 'WOR-002', element: rows[0] })
+    expect(dragSource(buttons[1]!.querySelector('.row-title'), element, 'WOR-001')).toEqual({ id: 'WOR-003', element: rows[1] })
     expect(dragSource(element.querySelector('.card-title'), element, 'WOR-001')).toEqual({ id: 'WOR-001', element })
     expect(dragSource(element, element, 'WOR-001')).toEqual({ id: 'WOR-001', element })
     expect(dragSource(null, element, 'WOR-001')).toEqual({ id: 'WOR-001', element })
@@ -272,6 +285,6 @@ describe('dragging a sub-task row', () => {
 
   it('ignores a row that belongs to another card', () => {
     const other = document.createElement('div')
-    expect(dragSource(rows[0]!, other, 'WOR-009')).toEqual({ id: 'WOR-009', element: other })
+    expect(dragSource(buttons[0]!, other, 'WOR-009')).toEqual({ id: 'WOR-009', element: other })
   })
 })

@@ -107,17 +107,21 @@ export function progressBar(summary: SubtaskSummary): HTMLElement {
 /**
  * One sub-task as a 28 px row: its column's status icon, key, title, and on
  * the right a "Waiting" pill, a run dot, and "n/m" for sub-tasks of its own.
- * The click opens that sub-task alone, not the card the row sits in. A row
- * drags onto another column, and a card folded one level deeper is a row with
+ * The click opens that sub-task alone, not the card the row sits in. On the
+ * board a row (its `li`) drags onto another column, and a card folded one level deeper is a row with
  * a `data-depth` of 2 or more.
  */
-export function subtaskRow(row: SubtaskRow, onOpen: (cardId: string) => void): HTMLElement {
-  const item = el('li')
+export function subtaskRow(row: SubtaskRow, onOpen: (cardId: string) => void, options: { draggable: boolean } = { draggable: false }): HTMLElement {
+  const item = el('li', 'subtask-item')
   const button = el('button', 'subtask-row')
   button.type = 'button'
   button.dataset.subtaskId = row.card.id
   button.dataset.depth = String(row.depth)
-  button.draggable = true
+  // Chrome never starts a drag from a button; the `li` around it is the drag source.
+  if (options.draggable) {
+    item.draggable = true
+    item.dataset.subtaskId = row.card.id
+  }
   button.toggleAttribute('data-dim', row.faded)
   const title = cardDisplayTitle(row.card)
   button.title = `${row.card.id} · ${title}`

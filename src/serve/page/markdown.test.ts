@@ -88,6 +88,12 @@ describe('renderMarkdown', () => {
     expect(render('<https://example.com/z>').querySelector('a')?.getAttribute('href')).toBe('https://example.com/z')
   })
 
+  it('trims a long run of closing parentheses from a bare link in linear time', () => {
+    const links = render(`https://x${')'.repeat(40000)}`).querySelectorAll('a')
+    expect(links).toHaveLength(1)
+    expect(links[0]!.getAttribute('href')).toBe('https://x')
+  })
+
   it('keeps a fence verbatim', () => {
     const root = render('```ts\n**not bold** <b>\n```')
     expect(root.querySelector('pre > code')?.textContent).toBe('**not bold** <b>')

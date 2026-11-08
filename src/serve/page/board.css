@@ -1200,7 +1200,8 @@ button.subtask-strip:hover {
   height: 0.75rem;
 }
 
-.subtask-strip .strip-label {
+.subtask-strip .strip-label,
+.subtask-strip .card-key {
   flex: none;
 }
 
@@ -1320,7 +1321,7 @@ button.subtask-strip:hover {
   padding-left: calc(var(--space-6) + var(--space-24));
 }
 
-.subtask-row.dragging {
+.subtask-item.dragging {
   opacity: 0.5;
 }
 
