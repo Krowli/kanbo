@@ -4,6 +4,14 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+### Added
+
+- The card dialog shows the description and comments as Markdown (headings, bold, italic, code, lists, task lists, tables, quotes, links). Nothing in them is parsed as HTML, and only http, https and mailto links are made.
+
+### Changed
+
+- A sub-task row drags onto any column. A sub-task sits inside its parent's card only while it is in the parent's column; in any other column it is its own card marked "Sub-task of KEY". The parent's bar still counts all its sub-tasks. A card folded into a row shows one level deeper under it.
+
 ## [0.8.0] — 2026-11-07
 
 kanbo 0.8 gives the board page Modular's look, puts sub-tasks inside their parent card, and adds an Analytics view and a List view. No board migration.
