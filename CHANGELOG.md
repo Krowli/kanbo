@@ -4,6 +4,10 @@ All notable changes to kanbo are documented here. The format follows [Keep a Cha
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-11-08
+
+kanbo 0.9 shows Markdown in the card dialog and lets a sub-task row drag onto any column. No board migration.
+
 ### Added
 
 - The card dialog shows the description and comments as Markdown (headings, bold, italic, code, lists, task lists, tables, quotes, links). Nothing in them is parsed as HTML, and only http, https and mailto links are made.
@@ -273,6 +277,7 @@ First public release.
 - `kanbo serve`: the `/issues` HTTP API and a board page, loopback by default, bearer token, CORS allow-list, 1 MB body limit.
 - Library entry points `kanbo`, `kanbo/sqlite`, `kanbo/sqlite/schema`, `kanbo/postgres` and `kanbo/mcp` (ESM and CJS with types).
 
+[0.9.0]: https://github.com/Krowli/kanbo/releases/tag/v0.9.0
 [0.8.0]: https://github.com/Krowli/kanbo/releases/tag/v0.8.0
 [0.7.0]: https://github.com/Krowli/kanbo/releases/tag/v0.7.0
 [0.6.0]: https://github.com/Krowli/kanbo/releases/tag/v0.6.0
